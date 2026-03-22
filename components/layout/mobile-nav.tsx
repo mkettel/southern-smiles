@@ -15,6 +15,7 @@ import {
   FileText,
   BarChart3,
   MessageSquarePlus,
+  Shield,
 } from "lucide-react";
 
 interface MobileNavProps {
@@ -22,14 +23,18 @@ interface MobileNavProps {
   openRequestCount?: number;
 }
 
-const employeeLinks = [
+interface NavLink {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+}
+
+const sharedLinks: NavLink[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/enter", label: "Enter Stats", icon: ClipboardEdit },
 ];
 
-const adminLinks = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/enter", label: "Enter Stats", icon: ClipboardEdit },
+const adminOnlyLinks: NavLink[] = [
   { href: "/team", label: "Team", icon: Users },
   { href: "/oic-log", label: "OIC Log", icon: FileText },
   { href: "/admin/stats", label: "Manage Stats", icon: BarChart3 },
@@ -40,7 +45,33 @@ const adminLinks = [
 export function MobileNav({ role, openRequestCount = 0 }: MobileNavProps) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const links = role === "admin" ? adminLinks : employeeLinks;
+  const isAdmin = role === "admin";
+
+  function renderLink(link: NavLink, badge?: number) {
+    const Icon = link.icon;
+    const active = pathname === link.href || pathname.startsWith(link.href + "/");
+    return (
+      <Link
+        key={link.href}
+        href={link.href}
+        onClick={() => setOpen(false)}
+        className={cn(
+          "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+          active
+            ? "bg-primary/10 text-primary"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+        )}
+      >
+        <Icon className="h-4 w-4" />
+        <span className="flex-1">{link.label}</span>
+        {badge !== undefined && badge > 0 && (
+          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+            {badge}
+          </span>
+        )}
+      </Link>
+    );
+  }
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -51,33 +82,25 @@ export function MobileNav({ role, openRequestCount = 0 }: MobileNavProps) {
         <SheetTitle className="flex h-14 items-center border-b px-4 font-semibold text-lg">
           Southern Smiles
         </SheetTitle>
-        <nav className="space-y-1 p-3">
-          {links.map((link) => {
-            const Icon = link.icon;
-            const active = pathname === link.href || pathname.startsWith(link.href + "/");
-            const showBadge = link.href === "/requests" && openRequestCount > 0;
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                onClick={() => setOpen(false)}
-                className={cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                  active
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                )}
-              >
-                <Icon className="h-4 w-4" />
-                <span className="flex-1">{link.label}</span>
-                {showBadge && (
-                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
-                    {openRequestCount}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
+        <nav className="p-3 space-y-1">
+          {sharedLinks.map((link) => renderLink(link))}
+
+          {isAdmin && (
+            <>
+              <div className="pt-4 pb-1 px-3">
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                  <Shield className="h-3 w-3" />
+                  Admin
+                </div>
+              </div>
+              {adminOnlyLinks.map((link) =>
+                renderLink(
+                  link,
+                  link.href === "/requests" ? openRequestCount : undefined
+                )
+              )}
+            </>
+          )}
         </nav>
       </SheetContent>
     </Sheet>

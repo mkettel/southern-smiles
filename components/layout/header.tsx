@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { Profile } from "@/lib/types";
 import { MobileNav } from "./mobile-nav";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 interface HeaderProps {
   profile: Profile;
@@ -26,8 +27,10 @@ export function Header({ profile, openRequestCount = 0 }: HeaderProps) {
     .slice(0, 2) || "?";
 
   return (
-    <header className="flex h-14 items-center justify-between border-b px-4 md:justify-end">
+    <header className="flex h-14 items-center justify-between border-b px-4 md:justify-end gap-2">
       <MobileNav role={profile.role} openRequestCount={openRequestCount} />
+      <div className="flex items-center gap-1">
+        <ThemeToggle />
       <DropdownMenu>
         <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-muted transition-colors outline-none">
           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-xs font-medium">
@@ -54,6 +57,7 @@ export function Header({ profile, openRequestCount = 0 }: HeaderProps) {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      </div>
     </header>
   );
 }

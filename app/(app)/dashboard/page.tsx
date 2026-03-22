@@ -8,7 +8,6 @@ import { getCurrentWeekStart, formatWeekLabel } from "@/lib/constants";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { MissingSubmissions } from "@/components/dashboard/missing-submissions";
 import { WeekSelector } from "@/components/dashboard/week-selector";
-import { buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
 import type { Profile } from "@/lib/types";
 
@@ -41,7 +40,7 @@ export default async function DashboardPage({
           {!isAdmin && (
             <Link
               href={`/enter?week=${weekStart}`}
-              className={buttonVariants()}
+              className="inline-flex items-center justify-center rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/80 transition-colors"
             >
               Enter Stats
             </Link>

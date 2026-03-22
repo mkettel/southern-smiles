@@ -89,7 +89,7 @@ create table stat_entries (
   playbook_response     text,
   submitted_at          timestamptz default now(),
   updated_at            timestamptz default now(),
-  unique(stat_id, week_start)
+  unique(stat_id, profile_id, week_start)
 );
 
 -- ============================================================

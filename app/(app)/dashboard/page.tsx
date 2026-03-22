@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { getProfile } from "@/actions/auth";
 import {
   getAdminDashboard,
@@ -9,7 +10,6 @@ import { StatCard } from "@/components/dashboard/stat-card";
 import { MissingSubmissions } from "@/components/dashboard/missing-submissions";
 import { WeekSelector } from "@/components/dashboard/week-selector";
 import Link from "next/link";
-import type { Profile } from "@/lib/types";
 
 export default async function DashboardPage({
   searchParams,
@@ -17,7 +17,8 @@ export default async function DashboardPage({
   searchParams: Promise<{ week?: string }>;
 }) {
   const params = await searchParams;
-  const profile = (await getProfile()) as Profile;
+  const profile = await getProfile();
+  if (!profile) redirect("/login");
   const weekStart = params.week ?? getCurrentWeekStart();
   const isAdmin = profile.role === "admin";
 

@@ -59,10 +59,11 @@ export default async function EmployeeDetailPage({
 
   const statIds = stats?.map((s) => s.id) ?? [];
 
-  // Get recent entries
+  // Get recent entries for THIS employee only
   const { data: entries } = await supabase
     .from("stat_entries")
     .select("*, stat:stats(*)")
+    .eq("profile_id", profileId)
     .in("stat_id", statIds)
     .order("week_start", { ascending: false })
     .limit(50);

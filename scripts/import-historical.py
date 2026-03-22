@@ -415,7 +415,7 @@ def main():
         lines.append(
             f"  INSERT INTO stat_entries (stat_id, profile_id, week_start, value, previous_value, percent_change, auto_condition, self_condition, playbook_response)"
             f" VALUES ('{stat_id}', {profile_var}, '{week_start}', {value}, {prev_sql}, {pct_change}, '{auto_cond}', {self_cond_sql}, {pb_sql})"
-            f" ON CONFLICT (stat_id, week_start) DO UPDATE SET value = EXCLUDED.value, previous_value = EXCLUDED.previous_value, percent_change = EXCLUDED.percent_change, auto_condition = EXCLUDED.auto_condition, self_condition = EXCLUDED.self_condition, playbook_response = EXCLUDED.playbook_response;"
+            f" ON CONFLICT (stat_id, profile_id, week_start) DO UPDATE SET value = EXCLUDED.value, previous_value = EXCLUDED.previous_value, percent_change = EXCLUDED.percent_change, auto_condition = EXCLUDED.auto_condition, self_condition = EXCLUDED.self_condition, playbook_response = EXCLUDED.playbook_response;"
         )
 
     lines.append("")

@@ -45,18 +45,20 @@ export async function getMyStatsForWeek(
 
   const statIds = stats.map((s) => s.id);
 
-  // Get existing entries for this week
+  // Get existing entries for this week for THIS user
   const { data: currentEntries } = await supabase
     .from("stat_entries")
     .select("*")
     .in("stat_id", statIds)
+    .eq("profile_id", user.id)
     .eq("week_start", week);
 
-  // Get previous week entries for condition calculation
+  // Get previous week entries for THIS user for condition calculation
   const { data: prevEntries } = await supabase
     .from("stat_entries")
     .select("*")
     .in("stat_id", statIds)
+    .eq("profile_id", user.id)
     .eq("week_start", prevWeek);
 
   return stats.map((stat) => ({
@@ -103,11 +105,12 @@ export async function submitWeeklyStats(input: {
     .select("id, good_direction")
     .in("id", statIds);
 
-  // Get previous values
+  // Get previous values for THIS user
   const { data: prevEntries } = await supabase
     .from("stat_entries")
     .select("stat_id, value")
     .in("stat_id", statIds)
+    .eq("profile_id", user.id)
     .eq("week_start", prevWeek);
 
   const prevMap = new Map(prevEntries?.map((e) => [e.stat_id, e.value]) ?? []);
@@ -140,7 +143,7 @@ export async function submitWeeklyStats(input: {
   });
 
   const { error } = await supabase.from("stat_entries").upsert(rows, {
-    onConflict: "stat_id,week_start",
+    onConflict: "stat_id,profile_id,week_start",
   });
 
   if (error) {
@@ -160,6 +163,12 @@ export async function getStatHistory(
   limit: number = 52
 ): Promise<StatEntry[]> {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  // RLS handles scoping: employees see own entries, admins see all
   const { data } = await supabase
     .from("stat_entries")
     .select("*, stat:stats(*, post:posts(*, division:divisions(*))), profile:profiles(*)")

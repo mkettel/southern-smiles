@@ -42,36 +42,73 @@ export async function getAdminDashboard(
     .select("*, profile:profiles(*)")
     .in("post_id", postIds);
 
-  // Build a map: post_id → employee profile
-  const postEmployeeMap = new Map<string, Profile>();
+  // Build a map: post_id → employee profiles (multiple possible)
+  const postEmployeesMap = new Map<string, Profile[]>();
   assignments?.forEach((a) => {
-    if (a.profile) postEmployeeMap.set(a.post_id, a.profile as Profile);
+    if (a.profile) {
+      const list = postEmployeesMap.get(a.post_id) ?? [];
+      list.push(a.profile as unknown as Profile);
+      postEmployeesMap.set(a.post_id, list);
+    }
   });
 
+  const unassignedProfile: Profile = {
+    id: "",
+    full_name: "Unassigned",
+    email: "",
+    role: "employee" as const,
+    is_active: true,
+    created_at: "",
+    updated_at: "",
+  };
+
+  // One card per stat. If multiple employees contribute, aggregate:
+  // - Show the most recent submitter as the employee
+  // - Sum/average values across employees for sparkline (or pick latest)
+  // - The stat detail page handles per-employee filtering
   return stats.map((stat) => {
     const statEntries = entries?.filter((e) => e.stat_id === stat.id) ?? [];
-    const currentEntry = statEntries.find((e) => e.week_start === week) ?? null;
-    const previousEntry =
-      statEntries.find((e) => e.week_start === prevWeek) ?? null;
+    const employees = postEmployeesMap.get(stat.post_id) ?? [unassignedProfile];
 
-    const sparklineData = sparklineWeeks.map((w) => ({
-      week: w,
-      value: statEntries.find((e) => e.week_start === w)?.value ?? 0,
-    }));
+    // For current/previous entries: if multiple employees submitted,
+    // sum their values (for counts/dollars) to show the aggregate.
+    // For single employee (current norm), this just returns their entry.
+    const currentWeekEntries = statEntries.filter((e) => e.week_start === week);
+    const prevWeekEntries = statEntries.filter((e) => e.week_start === prevWeek);
+
+    let currentEntry = currentWeekEntries[0] ?? null;
+    let previousEntry = prevWeekEntries[0] ?? null;
+
+    // If multiple entries for same week, aggregate into the first entry object
+    if (currentWeekEntries.length > 1) {
+      const totalValue = currentWeekEntries.reduce((sum, e) => sum + Number(e.value), 0);
+      currentEntry = { ...currentWeekEntries[0], value: totalValue };
+    }
+    if (prevWeekEntries.length > 1) {
+      const totalValue = prevWeekEntries.reduce((sum, e) => sum + Number(e.value), 0);
+      previousEntry = { ...prevWeekEntries[0], value: totalValue };
+    }
+
+    // Sparkline: aggregate per week
+    const sparklineData = sparklineWeeks.map((w) => {
+      const weekEntries = statEntries.filter((e) => e.week_start === w);
+      const total = weekEntries.reduce((sum, e) => sum + Number(e.value), 0);
+      return { week: w, value: total };
+    });
+
+    // Show employee name(s) — single name or "2 contributors"
+    const primaryEmployee = employees.length === 1
+      ? employees[0]
+      : {
+          ...employees[0],
+          full_name: employees.map((e) => e.full_name).join(", "),
+        };
 
     return {
       stat,
       post: stat.post,
       division: stat.post?.division,
-      employee: postEmployeeMap.get(stat.post_id) ?? {
-        id: "",
-        full_name: "Unassigned",
-        email: "",
-        role: "employee" as const,
-        is_active: true,
-        created_at: "",
-        updated_at: "",
-      },
+      employee: primaryEmployee,
       currentEntry,
       previousEntry,
       sparklineData,
@@ -159,15 +196,33 @@ export async function getEmployeeDashboard(
  */
 export async function getMissingSubmissions(weekStart?: string) {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  // Verify admin
+  const { data: callerProfile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (callerProfile?.role !== "admin") return [];
+
   const week = weekStart ?? getCurrentWeekStart();
 
-  // Get all active employees with their assigned stats
+  // Get all employees with their assigned posts
   const { data: assignments } = await supabase
     .from("employee_posts")
-    .select("profile_id, post_id, profile:profiles(*), post:posts(*)")
-    .eq("profile:profiles.is_active" as string, true);
+    .select("profile_id, post_id, profile:profiles(*), post:posts(*)");
 
   if (!assignments?.length) return [];
+
+  // Filter to only active employees (can't filter on joined table in Supabase)
+  const activeAssignments = assignments.filter((a) => {
+    const profile = a.profile as unknown as Profile | null;
+    return profile?.is_active === true;
+  });
 
   // Get all active stats
   const { data: stats } = await supabase
@@ -191,7 +246,7 @@ export async function getMissingSubmissions(weekStart?: string) {
   const missing: { profile: Profile; missingStats: string[] }[] = [];
   const profileMap = new Map<string, { profile: Profile; missingStats: string[] }>();
 
-  for (const assignment of assignments) {
+  for (const assignment of activeAssignments) {
     if (!assignment.profile) continue;
     const profile = assignment.profile as unknown as Profile;
     const assignedStats = stats.filter(

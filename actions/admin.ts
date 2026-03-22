@@ -165,6 +165,27 @@ export async function getEmployees() {
   };
 }
 
+export async function updateProfile(
+  id: string,
+  input: {
+    full_name?: string;
+    role?: "admin" | "employee";
+    is_active?: boolean;
+  }
+) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("profiles")
+    .update({ ...input, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/employees");
+  revalidatePath("/team");
+  revalidatePath("/dashboard");
+  return { success: true };
+}
+
 export async function assignPost(profileId: string, postId: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("employee_posts").insert({

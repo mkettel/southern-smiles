@@ -10,7 +10,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import {
   Table,
@@ -21,8 +20,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import type { StatEntry, StatType } from "@/lib/types";
+import { ChevronRight, MessageSquareText } from "lucide-react";
 
 interface StatDetailViewProps {
   statName: string;
@@ -39,7 +38,6 @@ export function StatDetailView({
   postTitle,
   entries,
 }: StatDetailViewProps) {
-  // Find unique employees who have entries
   const employees = useMemo(() => {
     const map = new Map<string, string>();
     for (const entry of entries) {
@@ -52,13 +50,13 @@ export function StatDetailView({
 
   const hasMultipleEmployees = employees.length > 1;
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("all");
+  const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
 
   const filteredEntries = useMemo(() => {
     if (selectedEmployeeId === "all") return entries;
     return entries.filter((e) => e.profile_id === selectedEmployeeId);
   }, [entries, selectedEmployeeId]);
 
-  // Current employee label for subtitle
   const currentEmployeeName =
     employees.length === 1
       ? employees[0].name
@@ -66,27 +64,45 @@ export function StatDetailView({
         ? employees.find((e) => e.id === selectedEmployeeId)?.name
         : null;
 
+  function toggleExpand(entryId: string) {
+    setExpandedEntries((prev) => {
+      const next = new Set(prev);
+      if (next.has(entryId)) {
+        next.delete(entryId);
+      } else {
+        next.add(entryId);
+      }
+      return next;
+    });
+  }
+
+  const colCount = 4 + (hasMultipleEmployees ? 1 : 0);
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold">{statName}</h1>
         <p className="text-muted-foreground">
           {divisionLabel} &middot; {postTitle}
-          {currentEmployeeName && (
-            <> &middot; {currentEmployeeName}</>
-          )}
+          {currentEmployeeName && <> &middot; {currentEmployeeName}</>}
         </p>
       </div>
 
       {hasMultipleEmployees && (
         <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Filter by employee:</span>
+          <span className="text-sm text-muted-foreground">
+            Filter by employee:
+          </span>
           <Select
             value={selectedEmployeeId}
             onValueChange={(v) => v && setSelectedEmployeeId(v)}
           >
             <SelectTrigger className="w-[200px]">
-              <SelectValue />
+              <span>
+                {selectedEmployeeId === "all"
+                  ? "All employees"
+                  : employees.find((e) => e.id === selectedEmployeeId)?.name}
+              </span>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All employees</SelectItem>
@@ -106,10 +122,7 @@ export function StatDetailView({
         </CardHeader>
         <CardContent>
           {filteredEntries.length > 0 ? (
-            <StatHistoryChart
-              entries={filteredEntries}
-              statType={statType}
-            />
+            <StatHistoryChart entries={filteredEntries} statType={statType} />
           ) : (
             <p className="text-muted-foreground text-sm">No data yet.</p>
           )}
@@ -126,6 +139,7 @@ export function StatDetailView({
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-8"></TableHead>
                 <TableHead>Week</TableHead>
                 {hasMultipleEmployees && <TableHead>Employee</TableHead>}
                 <TableHead>Value</TableHead>
@@ -137,41 +151,93 @@ export function StatDetailView({
               {filteredEntries.map((entry) => {
                 const condition =
                   entry.final_condition ?? entry.auto_condition;
+                const hasPlaybook = !!entry.playbook_response;
+                const isExpanded = expandedEntries.has(entry.id);
+
                 return (
-                  <TableRow key={entry.id}>
-                    <TableCell>
-                      {format(
-                        new Date(entry.week_start + "T00:00:00"),
-                        "MMM d, yyyy"
-                      )}
-                    </TableCell>
-                    {hasMultipleEmployees && (
-                      <TableCell className="text-muted-foreground">
-                        {entry.profile?.full_name ?? "—"}
+                  <>
+                    <TableRow
+                      key={entry.id}
+                      className={hasPlaybook ? "cursor-pointer hover:bg-muted/50" : ""}
+                      onClick={() => hasPlaybook && toggleExpand(entry.id)}
+                    >
+                      <TableCell className="w-8 pr-0">
+                        {hasPlaybook && (
+                          <span className="text-muted-foreground">
+                            <ChevronRight
+                              className={`h-4 w-4 transition-transform duration-200 ${
+                                isExpanded ? "rotate-90" : ""
+                              }`}
+                            />
+                          </span>
+                        )}
                       </TableCell>
-                    )}
-                    <TableCell className="font-medium">
-                      {formatStatValue(Number(entry.value), statType)}
-                    </TableCell>
-                    <TableCell>
-                      {entry.percent_change !== null
-                        ? formatPercentChange(Number(entry.percent_change))
-                        : "—"}
-                    </TableCell>
-                    <TableCell>
-                      {condition ? (
-                        <ConditionDisplay condition={condition} size="sm" />
-                      ) : (
-                        "—"
+                      <TableCell>
+                        {format(
+                          new Date(entry.week_start + "T00:00:00"),
+                          "MMM d, yyyy"
+                        )}
+                      </TableCell>
+                      {hasMultipleEmployees && (
+                        <TableCell className="text-muted-foreground">
+                          {entry.profile?.full_name ?? "—"}
+                        </TableCell>
                       )}
-                    </TableCell>
-                  </TableRow>
+                      <TableCell className="font-medium">
+                        {formatStatValue(Number(entry.value), statType)}
+                      </TableCell>
+                      <TableCell>
+                        {entry.percent_change !== null
+                          ? formatPercentChange(Number(entry.percent_change))
+                          : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          {condition ? (
+                            <ConditionDisplay condition={condition} size="sm" />
+                          ) : (
+                            "—"
+                          )}
+                          {hasPlaybook && !isExpanded && (
+                            <MessageSquareText className="h-3.5 w-3.5 text-muted-foreground" />
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    {hasPlaybook && (
+                      <TableRow key={`${entry.id}-playbook`}>
+                        <TableCell className="p-0" />
+                        <TableCell
+                          colSpan={colCount}
+                          className="p-0"
+                        >
+                          <div
+                            className="grid transition-[grid-template-rows] duration-200 ease-in-out"
+                            style={{
+                              gridTemplateRows: isExpanded ? "1fr" : "0fr",
+                            }}
+                          >
+                            <div className="overflow-hidden">
+                              <div className="py-3 px-4 bg-muted/30 border-l-2 border-primary/20">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                                  Action Plan
+                                </p>
+                                <p className="text-sm whitespace-pre-wrap">
+                                  {entry.playbook_response}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </>
                 );
               })}
               {filteredEntries.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={hasMultipleEmployees ? 5 : 4}
+                    colSpan={colCount + 1}
                     className="text-center text-muted-foreground"
                   >
                     No entries yet.

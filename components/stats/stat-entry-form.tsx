@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Check } from "lucide-react";
 import { ConditionDisplay } from "./condition-display";
 import { PlaybookPanel } from "./playbook-panel";
 import { calculateCondition, type ConditionResult } from "@/lib/conditions";
@@ -49,6 +50,15 @@ export function StatEntryForm({
 }: StatEntryFormProps) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
+  const [savingStatId, setSavingStatId] = useState<string | null>(null);
+  const [savedStats, setSavedStats] = useState<Set<string>>(() => {
+    // Mark stats that already have existing entries as saved
+    const initial = new Set<string>();
+    for (const s of stats) {
+      if (s.existingEntry) initial.add(s.stat.id);
+    }
+    return initial;
+  });
 
   // Initialize state from existing entries or blank
   const [entries, setEntries] = useState<Record<string, EntryState>>(() => {
@@ -113,6 +123,40 @@ export function StatEntryForm({
     },
     []
   );
+
+  async function handleSaveSingle(statId: string) {
+    const entry = entries[statId];
+    const val = parseFloat(entry.value);
+    if (isNaN(val)) {
+      toast.error("Please enter a value");
+      return;
+    }
+
+    setSavingStatId(statId);
+    const result = await submitWeeklyStats({
+      week_start: weekStart,
+      entries: [
+        {
+          stat_id: statId,
+          value: val,
+          self_condition: entry.conditionResult?.condition ?? null,
+          playbook_response: entry.playbookResponse || null,
+        },
+      ],
+    });
+
+    if (result.error) {
+      toast.error(
+        typeof result.error === "string"
+          ? result.error
+          : "Save failed"
+      );
+    } else {
+      toast.success("Saved");
+      setSavedStats((prev) => new Set(prev).add(statId));
+    }
+    setSavingStatId(null);
+  }
 
   async function handleSubmit() {
     // Validate all entries have values
@@ -262,12 +306,31 @@ export function StatEntryForm({
                   onResponseChange={(r) => handlePlaybookChange(stat.id, r)}
                 />
               )}
+
+              {entry.value && (
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  {savedStats.has(stat.id) && savingStatId !== stat.id && (
+                    <span className="flex items-center gap-1 text-xs text-green-600">
+                      <Check className="h-3 w-3" />
+                      Saved
+                    </span>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleSaveSingle(stat.id)}
+                    disabled={savingStatId === stat.id || submitting}
+                  >
+                    {savingStatId === stat.id ? "Saving..." : "Save"}
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         );
       })}
 
-      {stats.length > 0 && (
+      {stats.length > 1 && (
         <Button
           onClick={handleSubmit}
           disabled={submitting}
@@ -277,7 +340,7 @@ export function StatEntryForm({
           {submitting
             ? "Submitting..."
             : isEditing
-              ? "Update Stats"
+              ? "Update All Stats"
               : "Submit All Stats"}
         </Button>
       )}

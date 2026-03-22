@@ -1,4 +1,4 @@
-import { startOfWeek, format, subWeeks, addWeeks } from "date-fns";
+import { startOfWeek, format, subWeeks, addWeeks, addDays } from "date-fns";
 
 /**
  * Get the Monday of the current week (our standard week_start).
@@ -27,11 +27,19 @@ export function getNextWeekStart(weekStart: string): string {
 }
 
 /**
- * Format a week_start date for display, e.g. "Week of Mar 17, 2026"
+ * Format a week_start date for display, e.g. "Mar 16 - Mar 22, 2026"
+ * Shows Monday through Sunday of that week.
  */
 export function formatWeekLabel(weekStart: string): string {
-  const date = new Date(weekStart + "T00:00:00");
-  return `Week of ${format(date, "MMM d, yyyy")}`;
+  const monday = new Date(weekStart + "T00:00:00");
+  const sunday = addDays(monday, 6);
+
+  // Same month: "Mar 16 - 22, 2026"
+  if (monday.getMonth() === sunday.getMonth()) {
+    return `${format(monday, "MMM d")} - ${format(sunday, "d, yyyy")}`;
+  }
+  // Different months: "Mar 30 - Apr 5, 2026"
+  return `${format(monday, "MMM d")} - ${format(sunday, "MMM d, yyyy")}`;
 }
 
 /**

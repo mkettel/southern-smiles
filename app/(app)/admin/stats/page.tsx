@@ -2,7 +2,6 @@ import { getProfile } from "@/actions/auth";
 import { getStats, getPosts } from "@/actions/admin";
 import { redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -41,10 +40,10 @@ export default async function ManageStatsPage() {
         <StatFormDialog
           posts={postsTyped}
           trigger={
-            <Button>
-              <Plus className="h-4 w-4 mr-1" />
+            <span className="inline-flex items-center gap-1">
+              <Plus className="h-4 w-4" />
               Add Stat
-            </Button>
+            </span>
           }
         />
       </div>
@@ -119,9 +118,7 @@ export default async function ManageStatsPage() {
                           display_order: stat.display_order,
                         }}
                         trigger={
-                          <Button variant="ghost" size="sm">
-                            <Pencil className="h-3 w-3" />
-                          </Button>
+                          <Pencil className="h-3 w-3" />
                         }
                       />
                       <StatToggleButton

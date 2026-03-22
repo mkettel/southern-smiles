@@ -81,7 +81,10 @@ export function EmployeeEditDialog({
         }
       }}
     >
-      <DialogTrigger onClick={() => setOpen(true)} className="contents">
+      <DialogTrigger
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center justify-center rounded-lg bg-transparent p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+      >
         {trigger}
       </DialogTrigger>
       <DialogPortal>
@@ -128,8 +131,8 @@ export function EmployeeEditDialog({
             </div>
           </div>
           <DialogFooter>
-            <DialogClose>
-              <Button variant="outline">Cancel</Button>
+            <DialogClose className="inline-flex items-center justify-center rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium hover:bg-muted transition-colors">
+              Cancel
             </DialogClose>
             <Button onClick={handleSubmit} disabled={loading}>
               {loading ? "Saving..." : "Save Changes"}

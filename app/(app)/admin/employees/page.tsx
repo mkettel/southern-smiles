@@ -2,7 +2,6 @@ import { getProfile } from "@/actions/auth";
 import { getEmployees, getPosts } from "@/actions/admin";
 import { redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -126,9 +125,7 @@ export default async function ManageEmployeesPage() {
                           is_active: emp.is_active,
                         }}
                         trigger={
-                          <Button variant="ghost" size="sm">
-                            <Pencil className="h-3 w-3" />
-                          </Button>
+                          <Pencil className="h-3 w-3" />
                         }
                       />
                     </TableCell>

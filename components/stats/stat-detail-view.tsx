@@ -20,7 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { StatEntry, StatType } from "@/lib/types";
+import type { StatEntry, StatType, OicLogEntry } from "@/lib/types";
 import { ChevronRight, MessageSquareText } from "lucide-react";
 
 interface StatDetailViewProps {
@@ -29,6 +29,7 @@ interface StatDetailViewProps {
   divisionLabel: string;
   postTitle: string;
   entries: StatEntry[];
+  oicEntries?: OicLogEntry[];
 }
 
 export function StatDetailView({
@@ -37,6 +38,7 @@ export function StatDetailView({
   divisionLabel,
   postTitle,
   entries,
+  oicEntries = [],
 }: StatDetailViewProps) {
   const employees = useMemo(() => {
     const map = new Map<string, string>();
@@ -122,7 +124,11 @@ export function StatDetailView({
         </CardHeader>
         <CardContent>
           {filteredEntries.length > 0 ? (
-            <StatHistoryChart entries={filteredEntries} statType={statType} />
+            <StatHistoryChart
+              entries={filteredEntries}
+              statType={statType}
+              oicEntries={oicEntries}
+            />
           ) : (
             <p className="text-muted-foreground text-sm">No data yet.</p>
           )}

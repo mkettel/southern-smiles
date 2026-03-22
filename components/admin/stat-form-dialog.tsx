@@ -107,7 +107,8 @@ export function StatFormDialog({ posts, editStat, trigger }: StatFormDialogProps
     }}}>
       <DialogTrigger
         onClick={() => setOpen(true)}
-        className="contents"
+        className="inline-flex items-center justify-center rounded-lg border border-transparent bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/80 transition-colors data-[edit]:bg-transparent data-[edit]:text-muted-foreground data-[edit]:hover:bg-muted data-[edit]:hover:text-foreground data-[edit]:px-2 data-[edit]:py-1"
+        {...(editStat ? { "data-edit": "" } : {})}
       >
         {trigger}
       </DialogTrigger>
@@ -192,8 +193,8 @@ export function StatFormDialog({ posts, editStat, trigger }: StatFormDialogProps
             </div>
           </div>
           <DialogFooter>
-            <DialogClose>
-              <Button variant="outline">Cancel</Button>
+            <DialogClose className="inline-flex items-center justify-center rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium hover:bg-muted transition-colors">
+              Cancel
             </DialogClose>
             <Button onClick={handleSubmit} disabled={loading}>
               {loading ? "Saving..." : editStat ? "Save Changes" : "Create Stat"}

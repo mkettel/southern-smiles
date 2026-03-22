@@ -16,6 +16,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Southern Smiles - Stats & Conditions",
   description: "Weekly performance tracking for Southern Smiles Dental",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

@@ -11,10 +11,12 @@ import {
   Settings,
   FileText,
   BarChart3,
+  MessageSquarePlus,
 } from "lucide-react";
 
 interface SidebarProps {
   role: UserRole;
+  openRequestCount?: number;
 }
 
 const employeeLinks = [
@@ -29,9 +31,10 @@ const adminLinks = [
   { href: "/oic-log", label: "OIC Log", icon: FileText },
   { href: "/admin/stats", label: "Manage Stats", icon: BarChart3 },
   { href: "/admin/employees", label: "Manage Team", icon: Settings },
+  { href: "/requests", label: "Requests", icon: MessageSquarePlus, adminOnly: true },
 ];
 
-export function Sidebar({ role }: SidebarProps) {
+export function Sidebar({ role, openRequestCount = 0 }: SidebarProps) {
   const pathname = usePathname();
   const links = role === "admin" ? adminLinks : employeeLinks;
 
@@ -46,6 +49,7 @@ export function Sidebar({ role }: SidebarProps) {
         {links.map((link) => {
           const Icon = link.icon;
           const active = pathname === link.href || pathname.startsWith(link.href + "/");
+          const showBadge = link.href === "/requests" && openRequestCount > 0;
           return (
             <Link
               key={link.href}
@@ -58,7 +62,12 @@ export function Sidebar({ role }: SidebarProps) {
               )}
             >
               <Icon className="h-4 w-4" />
-              {link.label}
+              <span className="flex-1">{link.label}</span>
+              {showBadge && (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+                  {openRequestCount}
+                </span>
+              )}
             </Link>
           );
         })}

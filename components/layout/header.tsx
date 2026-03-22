@@ -13,9 +13,10 @@ import { MobileNav } from "./mobile-nav";
 
 interface HeaderProps {
   profile: Profile;
+  openRequestCount?: number;
 }
 
-export function Header({ profile }: HeaderProps) {
+export function Header({ profile, openRequestCount = 0 }: HeaderProps) {
   const router = useRouter();
   const initials = profile.full_name
     .split(" ")
@@ -26,7 +27,7 @@ export function Header({ profile }: HeaderProps) {
 
   return (
     <header className="flex h-14 items-center justify-between border-b px-4 md:justify-end">
-      <MobileNav role={profile.role} />
+      <MobileNav role={profile.role} openRequestCount={openRequestCount} />
       <DropdownMenu>
         <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-muted transition-colors outline-none">
           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-xs font-medium">

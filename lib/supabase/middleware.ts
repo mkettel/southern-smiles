@@ -33,6 +33,42 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Clean up stale chunked cookies that cause 431 errors.
+  // Supabase splits large tokens into chunks (sb-*-auth-token.0, .1, etc.)
+  // Old chunks can accumulate and bloat headers.
+  const allCookies = request.cookies.getAll();
+  const authCookieNames = new Set<string>();
+  const chunkPattern = /^(sb-.*-auth-token)\.(\d+)$/;
+
+  for (const cookie of allCookies) {
+    const match = cookie.name.match(chunkPattern);
+    if (match) {
+      authCookieNames.add(match[1]);
+    }
+  }
+
+  // Remove any orphaned chunk cookies beyond what Supabase just set
+  const setCookieNames = new Set(
+    supabaseResponse.headers
+      .getSetCookie()
+      .map((c) => c.split("=")[0])
+  );
+
+  for (const cookie of allCookies) {
+    const match = cookie.name.match(chunkPattern);
+    if (match && !setCookieNames.has(cookie.name)) {
+      // Check if supabase set ANY chunks for this base name
+      const baseName = match[1];
+      const supabaseSetThis = [...setCookieNames].some((n) =>
+        n.startsWith(baseName)
+      );
+      if (supabaseSetThis) {
+        // Supabase refreshed this token but with fewer chunks — delete the extra
+        supabaseResponse.cookies.delete(cookie.name);
+      }
+    }
+  }
+
   // Redirect unauthenticated users to login (except for auth pages)
   if (
     !user &&

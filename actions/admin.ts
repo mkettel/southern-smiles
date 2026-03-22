@@ -107,6 +107,30 @@ export async function createStat(input: {
   return { success: true };
 }
 
+export async function updateStat(
+  id: string,
+  input: {
+    name?: string;
+    abbreviation?: string | null;
+    stat_type?: "dollar" | "percentage" | "count";
+    good_direction?: "up" | "down";
+    post_id?: string;
+    display_order?: number;
+  }
+) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("stats")
+    .update({ ...input, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/stats");
+  revalidatePath("/dashboard");
+  revalidatePath("/enter");
+  return { success: true };
+}
+
 export async function toggleStat(id: string, isActive: boolean) {
   const supabase = await createClient();
   const { error } = await supabase

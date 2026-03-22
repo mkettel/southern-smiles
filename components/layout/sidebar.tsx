@@ -29,11 +29,11 @@ interface NavLink {
 const sharedLinks: NavLink[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/enter", label: "Enter Stats", icon: ClipboardEdit },
+  { href: "/oic-log", label: "OIC Log", icon: FileText },
 ];
 
 const adminOnlyLinks: NavLink[] = [
   { href: "/team", label: "Team", icon: Users },
-  { href: "/oic-log", label: "OIC Log", icon: FileText },
   { href: "/admin/stats", label: "Manage Stats", icon: BarChart3 },
   { href: "/admin/employees", label: "Manage Team", icon: Settings },
   { href: "/requests", label: "Requests", icon: MessageSquarePlus },

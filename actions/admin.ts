@@ -4,6 +4,23 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { divisionSchema, postSchema, statDefinitionSchema } from "@/lib/validators";
 
+async function requireAdmin() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (profile?.role !== "admin") throw new Error("Admin access required");
+
+  return { supabase, user };
+}
+
 // ============================================================
 // Divisions
 // ============================================================
@@ -18,7 +35,7 @@ export async function getDivisions() {
 }
 
 export async function createDivision(input: { number: number; name: string }) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   const parsed = divisionSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
@@ -30,7 +47,7 @@ export async function createDivision(input: { number: number; name: string }) {
 }
 
 export async function deleteDivision(id: string) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   const { error } = await supabase.from("divisions").delete().eq("id", id);
   if (error) return { error: error.message };
 
@@ -55,7 +72,7 @@ export async function createPost(input: {
   title: string;
   division_id: string;
 }) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   const parsed = postSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
@@ -67,7 +84,7 @@ export async function createPost(input: {
 }
 
 export async function deletePost(id: string) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   const { error } = await supabase.from("posts").delete().eq("id", id);
   if (error) return { error: error.message };
 
@@ -96,7 +113,7 @@ export async function createStat(input: {
   post_id: string;
   display_order?: number;
 }) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   const parsed = statDefinitionSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
@@ -118,7 +135,7 @@ export async function updateStat(
     display_order?: number;
   }
 ) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   const { error } = await supabase
     .from("stats")
     .update({ ...input, updated_at: new Date().toISOString() })
@@ -132,7 +149,7 @@ export async function updateStat(
 }
 
 export async function toggleStat(id: string, isActive: boolean) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   const { error } = await supabase
     .from("stats")
     .update({ is_active: isActive, updated_at: new Date().toISOString() })
@@ -173,7 +190,7 @@ export async function updateProfile(
     is_active?: boolean;
   }
 ) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   const { error } = await supabase
     .from("profiles")
     .update({ ...input, updated_at: new Date().toISOString() })
@@ -187,7 +204,7 @@ export async function updateProfile(
 }
 
 export async function assignPost(profileId: string, postId: string) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   const { error } = await supabase.from("employee_posts").insert({
     profile_id: profileId,
     post_id: postId,
@@ -199,7 +216,7 @@ export async function assignPost(profileId: string, postId: string) {
 }
 
 export async function removePostAssignment(assignmentId: string) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   const { error } = await supabase
     .from("employee_posts")
     .delete()

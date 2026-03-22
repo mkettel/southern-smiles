@@ -99,6 +99,7 @@ export interface OicLogEntry {
   entry_text: string;
   created_at: string;
   updated_at: string;
+  edited_at: string | null;
   // Joined
   profile?: Profile;
 }

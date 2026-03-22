@@ -18,12 +18,12 @@ interface HeaderProps {
 
 export function Header({ profile, openRequestCount = 0 }: HeaderProps) {
   const router = useRouter();
-  const initials = profile.full_name
-    .split(" ")
-    .map((n) => n[0])
+  const names = (profile.full_name || "").split(" ").filter(Boolean);
+  const initials = names
+    .map((n) => n[0] ?? "")
     .join("")
     .toUpperCase()
-    .slice(0, 2);
+    .slice(0, 2) || "?";
 
   return (
     <header className="flex h-14 items-center justify-between border-b px-4 md:justify-end">

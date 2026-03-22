@@ -1,4 +1,4 @@
-import { startOfWeek, format, subWeeks } from "date-fns";
+import { startOfWeek, format, subWeeks, addWeeks } from "date-fns";
 
 /**
  * Get the Monday of the current week (our standard week_start).
@@ -15,6 +15,15 @@ export function getPreviousWeekStart(weekStart: string): string {
   const date = new Date(weekStart + "T00:00:00");
   const prev = subWeeks(date, 1);
   return format(prev, "yyyy-MM-dd");
+}
+
+/**
+ * Get the Monday of the next week.
+ */
+export function getNextWeekStart(weekStart: string): string {
+  const date = new Date(weekStart + "T00:00:00");
+  const next = addWeeks(date, 1);
+  return format(next, "yyyy-MM-dd");
 }
 
 /**

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,6 +21,9 @@ interface StatEntryFormProps {
   weekLabel: string;
   stats: MyStatForEntry[];
   playbooks: ConditionPlaybook[];
+  isEditing?: boolean;
+  advancedFromWeek?: string | null;
+  advancedFromWeekLabel?: string | null;
 }
 
 interface EntryState {
@@ -39,6 +43,9 @@ export function StatEntryForm({
   weekLabel,
   stats,
   playbooks,
+  isEditing = false,
+  advancedFromWeek = null,
+  advancedFromWeekLabel = null,
 }: StatEntryFormProps) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
@@ -156,9 +163,35 @@ export function StatEntryForm({
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold">Enter Stats</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold">
+            {isEditing ? "Edit Stats" : "Enter Stats"}
+          </h1>
+          {isEditing && (
+            <Badge variant="secondary" className="text-xs">
+              Editing existing entry
+            </Badge>
+          )}
+        </div>
         <p className="text-muted-foreground">{weekLabel}</p>
       </div>
+
+      {advancedFromWeek && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30 p-4">
+          <p className="text-sm text-blue-800 dark:text-blue-300">
+            You already submitted stats for {advancedFromWeekLabel}. This form is for the <strong>upcoming week</strong>.
+          </p>
+          <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
+            Need to make changes?{" "}
+            <Link
+              href={`/enter?week=${advancedFromWeek}`}
+              className="font-medium underline underline-offset-2"
+            >
+              Edit {advancedFromWeekLabel}
+            </Link>
+          </p>
+        </div>
+      )}
 
       {stats.map((statItem) => {
         const entry = entries[statItem.stat.id];
@@ -241,7 +274,11 @@ export function StatEntryForm({
           className="w-full"
           size="lg"
         >
-          {submitting ? "Submitting..." : "Submit All Stats"}
+          {submitting
+            ? "Submitting..."
+            : isEditing
+              ? "Update Stats"
+              : "Submit All Stats"}
         </Button>
       )}
 

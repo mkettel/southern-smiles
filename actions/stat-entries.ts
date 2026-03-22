@@ -162,7 +162,7 @@ export async function getStatHistory(
   const supabase = await createClient();
   const { data } = await supabase
     .from("stat_entries")
-    .select("*, stat:stats(*, post:posts(*, division:divisions(*)))")
+    .select("*, stat:stats(*, post:posts(*, division:divisions(*))), profile:profiles(*)")
     .eq("stat_id", statId)
     .order("week_start", { ascending: false })
     .limit(limit);

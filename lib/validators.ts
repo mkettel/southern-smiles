@@ -1,0 +1,63 @@
+import { z } from "zod";
+
+export const statEntrySchema = z.object({
+  stat_id: z.string().uuid(),
+  value: z.number().finite(),
+  self_condition: z
+    .enum(["affluence", "normal", "emergency", "danger", "non_existence"])
+    .nullable()
+    .optional(),
+  playbook_response: z.string().max(2000).nullable().optional(),
+});
+
+export const submitWeeklyStatsSchema = z.object({
+  week_start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  entries: z.array(statEntrySchema).min(1),
+});
+
+export const dollarValueSchema = z.number().min(0, "Must be a positive amount");
+export const percentageValueSchema = z
+  .number()
+  .min(0, "Must be 0 or greater")
+  .max(100, "Must be 100 or less");
+export const countValueSchema = z
+  .number()
+  .int("Must be a whole number")
+  .min(0, "Must be 0 or greater");
+
+export function getValidatorForStatType(statType: "dollar" | "percentage" | "count") {
+  switch (statType) {
+    case "dollar":
+      return dollarValueSchema;
+    case "percentage":
+      return percentageValueSchema;
+    case "count":
+      return countValueSchema;
+  }
+}
+
+export const divisionSchema = z.object({
+  number: z.number().int().min(1),
+  name: z.string().min(1).max(100),
+});
+
+export const postSchema = z.object({
+  title: z.string().min(1).max(100),
+  division_id: z.string().uuid(),
+});
+
+export const statDefinitionSchema = z.object({
+  name: z.string().min(1).max(100),
+  abbreviation: z.string().max(10).nullable().optional(),
+  stat_type: z.enum(["dollar", "percentage", "count"]),
+  good_direction: z.enum(["up", "down"]),
+  post_id: z.string().uuid(),
+  display_order: z.number().int().min(0).default(0),
+});
+
+export const oicLogSchema = z.object({
+  effective_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  area: z.string().max(100).nullable().optional(),
+  post_affected: z.string().max(100).nullable().optional(),
+  entry_text: z.string().min(1).max(2000),
+});

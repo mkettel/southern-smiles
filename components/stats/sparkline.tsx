@@ -19,8 +19,8 @@ export function Sparkline({ data, condition, height = 40 }: SparklineProps) {
     : "#6b7280";
 
   return (
-    <div style={{ width: "100%", height }}>
-      <ResponsiveContainer width="100%" height="100%">
+    <div style={{ width: "100%", minWidth: 60, height, minHeight: height }}>
+      <ResponsiveContainer width="100%" height={height}>
         <LineChart data={data}>
           <Line
             type="monotone"

@@ -32,8 +32,8 @@ export function StatHistoryChart({ entries, statType }: StatHistoryChartProps) {
     }));
 
   return (
-    <div className="w-full h-[300px]">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="w-full" style={{ minWidth: 200, minHeight: 300, height: 300 }}>
+      <ResponsiveContainer width="100%" height={300}>
         <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
           <XAxis dataKey="week" className="text-xs" tick={{ fontSize: 12 }} />

@@ -29,13 +29,14 @@ export function formatPercentChange(change: number): string {
 }
 
 export function formatDelta(delta: number, statType: StatType): string {
-  const sign = delta > 0 ? "+" : "";
+  const sign = delta > 0 ? "+" : delta < 0 ? "-" : "";
+  const abs = Math.abs(delta);
   switch (statType) {
     case "dollar":
-      return `${sign}${formatStatValue(Math.abs(delta), "dollar")}`;
+      return `${sign}${formatStatValue(abs, "dollar")}`;
     case "percentage":
-      return `${sign}${delta.toFixed(1)}pp`;
+      return `${sign}${abs.toFixed(1)}pp`;
     case "count":
-      return `${sign}${Math.round(delta)}`;
+      return `${sign}${Math.round(abs)}`;
   }
 }

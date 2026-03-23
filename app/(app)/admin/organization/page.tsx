@@ -10,34 +10,38 @@ export default async function OrganizationPage() {
   if (!profile) redirect("/login");
   if (profile.role !== "admin") redirect("/dashboard");
 
-  const [divisions, posts] = await Promise.all([
-    getDivisions(),
-    getPosts(),
-  ]);
+  const [divisions, posts] = await Promise.all([getDivisions(), getPosts()]);
 
-  // Get stat counts and assignment counts per post
   const supabase = await createClient();
   const postIds = (posts as Post[]).map((p) => p.id);
+  const safePostIds = postIds.length > 0 ? postIds : [""];
 
   const [{ data: statData }, { data: assignData }] = await Promise.all([
     supabase
       .from("stats")
-      .select("post_id")
-      .in("post_id", postIds.length > 0 ? postIds : [""]),
+      .select("post_id, name")
+      .in("post_id", safePostIds)
+      .eq("is_active", true),
     supabase
       .from("employee_posts")
-      .select("post_id")
-      .in("post_id", postIds.length > 0 ? postIds : [""]),
+      .select("post_id, profile:profiles(full_name)")
+      .in("post_id", safePostIds),
   ]);
 
-  const statCounts: Record<string, number> = {};
-  const assignmentCounts: Record<string, number> = {};
-
+  // Group stat names by post
+  const statsByPost: Record<string, string[]> = {};
   statData?.forEach((s) => {
-    statCounts[s.post_id] = (statCounts[s.post_id] ?? 0) + 1;
+    if (!statsByPost[s.post_id]) statsByPost[s.post_id] = [];
+    statsByPost[s.post_id].push(s.name);
   });
+
+  // Group employee names by post
+  const employeesByPost: Record<string, string[]> = {};
   assignData?.forEach((a) => {
-    assignmentCounts[a.post_id] = (assignmentCounts[a.post_id] ?? 0) + 1;
+    if (!employeesByPost[a.post_id]) employeesByPost[a.post_id] = [];
+    const name = (a.profile as unknown as { full_name: string } | null)
+      ?.full_name;
+    if (name) employeesByPost[a.post_id].push(name);
   });
 
   return (
@@ -45,15 +49,16 @@ export default async function OrganizationPage() {
       <div>
         <h1 className="text-2xl font-bold">Organization</h1>
         <p className="text-muted-foreground">
-          Manage divisions and posts
+          Manage divisions and posts. Rename, reorder, and delete divisions and
+          posts.
         </p>
       </div>
 
       <OrgManager
         divisions={divisions as Division[]}
         posts={posts as Post[]}
-        statCounts={statCounts}
-        assignmentCounts={assignmentCounts}
+        statsByPost={statsByPost}
+        employeesByPost={employeesByPost}
       />
     </div>
   );

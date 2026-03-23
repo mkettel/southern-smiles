@@ -133,8 +133,6 @@ export async function markRequestsSeen() {
     { profile_id: user.id, seen_at: new Date().toISOString() },
     { onConflict: "profile_id" }
   );
-
-  revalidatePath("/requests");
 }
 
 export async function createRequest(input: {

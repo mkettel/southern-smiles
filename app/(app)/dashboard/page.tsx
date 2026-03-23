@@ -51,11 +51,41 @@ export default async function DashboardPage({
       )}
 
       {stats.length > 0 ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {stats.map((statData) => (
-            <StatCard key={statData.stat.id} data={statData} />
-          ))}
-        </div>
+        (() => {
+          // Group stats by division
+          const grouped = new Map<string, { label: string; number: number; stats: typeof stats }>();
+          for (const statData of stats) {
+            const div = statData.division;
+            const key = div?.id ?? "unknown";
+            const label = div ? `Div ${div.number} – ${div.name}` : "Other";
+            const num = div?.number ?? 99;
+            if (!grouped.has(key)) {
+              grouped.set(key, { label, number: num, stats: [] });
+            }
+            grouped.get(key)!.stats.push(statData);
+          }
+          // Sort by division number
+          const sortedGroups = Array.from(grouped.values()).sort(
+            (a, b) => a.number - b.number
+          );
+
+          return (
+            <div className="space-y-8">
+              {sortedGroups.map((group) => (
+                <div key={group.label}>
+                  <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                    {group.label}
+                  </h2>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {group.stats.map((statData) => (
+                      <StatCard key={statData.stat.id} data={statData} />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()
       ) : (
         <div className="text-center py-12 text-muted-foreground">
           No stats data available for this week.

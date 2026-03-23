@@ -23,6 +23,7 @@ import {
 interface MobileNavProps {
   role: UserRole;
   openRequestCount?: number;
+  newRequestCount?: number;
 }
 
 interface NavLink {
@@ -46,7 +47,7 @@ const adminOnlyLinks: NavLink[] = [
   { href: "/requests", label: "Requests", icon: MessageSquarePlus },
 ];
 
-export function MobileNav({ role, openRequestCount = 0 }: MobileNavProps) {
+export function MobileNav({ role, openRequestCount = 0, newRequestCount = 0 }: MobileNavProps) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const isAdmin = role === "admin";
@@ -69,7 +70,12 @@ export function MobileNav({ role, openRequestCount = 0 }: MobileNavProps) {
         <Icon className="h-4 w-4" />
         <span className="flex-1">{link.label}</span>
         {badge !== undefined && badge > 0 && (
-          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+          <span className={cn(
+            "flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold",
+            newRequestCount > 0
+              ? "bg-blue-500 text-white"
+              : "bg-muted text-muted-foreground"
+          )}>
             {badge}
           </span>
         )}

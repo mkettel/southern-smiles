@@ -18,6 +18,7 @@ export interface AppRequest {
   created_by: string;
   created_at: string;
   completed_at: string | null;
+  updated_at: string;
   profile?: { full_name: string } | null;
 }
 
@@ -66,6 +67,76 @@ export async function getOpenRequestCount(): Promise<number> {
   return count ?? 0;
 }
 
+export async function getNewRequestCount(): Promise<number> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return 0;
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (profile?.role !== "admin") return 0;
+
+  // Get user's last seen timestamp
+  const { data: lastSeen } = await supabase
+    .from("request_last_seen")
+    .select("seen_at")
+    .eq("profile_id", user.id)
+    .single();
+
+  if (!lastSeen) {
+    // Never viewed — all non-completed are new
+    const { count } = await supabase
+      .from("requests")
+      .select("*", { count: "exact", head: true })
+      .neq("status", "completed");
+    return count ?? 0;
+  }
+
+  // Count requests updated after last seen
+  const { count } = await supabase
+    .from("requests")
+    .select("*", { count: "exact", head: true })
+    .gt("updated_at", lastSeen.seen_at);
+
+  return count ?? 0;
+}
+
+export async function getLastSeenAt(): Promise<string | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data } = await supabase
+    .from("request_last_seen")
+    .select("seen_at")
+    .eq("profile_id", user.id)
+    .single();
+
+  return data?.seen_at ?? null;
+}
+
+export async function markRequestsSeen() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  await supabase.from("request_last_seen").upsert(
+    { profile_id: user.id, seen_at: new Date().toISOString() },
+    { onConflict: "profile_id" }
+  );
+
+  revalidatePath("/requests");
+}
+
 export async function createRequest(input: {
   title: string;
   description?: string | null;
@@ -108,6 +179,7 @@ export async function updateRequestStatus(id: string, status: RequestStatus) {
     status,
     is_completed: status === "completed",
     completed_at: status === "completed" ? new Date().toISOString() : null,
+    updated_at: new Date().toISOString(),
   };
 
   const { error } = await supabase
@@ -188,6 +260,12 @@ export async function addComment(requestId: string, message: string) {
   });
 
   if (error) return { error: error.message };
+
+  // Bump the parent request's updated_at so it shows as new activity
+  await supabase
+    .from("requests")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", requestId);
 
   revalidatePath("/requests");
   return { success: true };

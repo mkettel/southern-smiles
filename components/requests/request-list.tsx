@@ -24,6 +24,7 @@ import { RequestThread } from "./request-thread";
 
 interface RequestListProps {
   requests: (AppRequest & { comment_count: number })[];
+  lastSeenAt?: string | null;
 }
 
 const TYPE_CONFIG: Record<RequestType, { label: string; className: string }> = {
@@ -59,7 +60,7 @@ function StatusDot({ status }: { status: RequestStatus }) {
   );
 }
 
-export function RequestList({ requests }: RequestListProps) {
+export function RequestList({ requests, lastSeenAt }: RequestListProps) {
   const [filterType, setFilterType] = useState<string>("all");
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [expandedThread, setExpandedThread] = useState<string | null>(null);
@@ -133,6 +134,9 @@ export function RequestList({ requests }: RequestListProps) {
 
   function renderRequest(req: AppRequest & { comment_count: number }) {
     const isCompleted = req.status === "completed";
+    const isNew = lastSeenAt
+      ? new Date(req.updated_at) > new Date(lastSeenAt)
+      : false;
 
     return (
       <div
@@ -173,14 +177,24 @@ export function RequestList({ requests }: RequestListProps) {
         </Select>
 
         <div className="flex-1 min-w-0">
-          <p
-            className={cn(
-              "text-sm font-medium",
-              isCompleted && "line-through text-muted-foreground"
+          <div className="flex items-center gap-1.5">
+            <p
+              className={cn(
+                "text-sm font-medium",
+                isCompleted && "line-through text-muted-foreground"
+              )}
+            >
+              {req.title}
+            </p>
+            {isNew && (
+              <span className="relative group/new shrink-0">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500" />
+                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-0.5 rounded text-[10px] font-medium bg-foreground text-background whitespace-nowrap opacity-0 group-hover/new:opacity-100 transition-opacity pointer-events-none z-10">
+                  New activity
+                </span>
+              </span>
             )}
-          >
-            {req.title}
-          </p>
+          </div>
           {req.description && (
             <p
               className={cn(

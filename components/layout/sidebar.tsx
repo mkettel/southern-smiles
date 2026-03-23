@@ -20,6 +20,7 @@ import {
 interface SidebarProps {
   role: UserRole;
   openRequestCount?: number;
+  newRequestCount?: number;
 }
 
 interface NavLink {
@@ -47,10 +48,12 @@ function NavItem({
   link,
   active,
   badge,
+  hasNew,
 }: {
   link: NavLink;
   active: boolean;
   badge?: number;
+  hasNew?: boolean;
 }) {
   const Icon = link.icon;
   return (
@@ -66,7 +69,12 @@ function NavItem({
       <Icon className="h-4 w-4" />
       <span className="flex-1">{link.label}</span>
       {badge !== undefined && badge > 0 && (
-        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+        <span className={cn(
+          "flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold",
+          hasNew
+            ? "bg-blue-500 text-white"
+            : "bg-muted text-muted-foreground"
+        )}>
           {badge}
         </span>
       )}
@@ -74,7 +82,7 @@ function NavItem({
   );
 }
 
-export function Sidebar({ role, openRequestCount = 0 }: SidebarProps) {
+export function Sidebar({ role, openRequestCount = 0, newRequestCount = 0 }: SidebarProps) {
   const pathname = usePathname();
   const isAdmin = role === "admin";
 
@@ -108,6 +116,7 @@ export function Sidebar({ role, openRequestCount = 0 }: SidebarProps) {
                 link={link}
                 active={pathname === link.href || pathname.startsWith(link.href + "/")}
                 badge={link.href === "/requests" ? openRequestCount : undefined}
+                hasNew={link.href === "/requests" && newRequestCount > 0}
               />
             ))}
           </>

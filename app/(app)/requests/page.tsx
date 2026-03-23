@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "@/actions/auth";
-import { getRequests } from "@/actions/requests";
+import { getRequests, getLastSeenAt, markRequestsSeen } from "@/actions/requests";
 import { RequestForm } from "@/components/requests/request-form";
 import { RequestList } from "@/components/requests/request-list";
 
@@ -9,7 +9,13 @@ export default async function RequestsPage() {
   if (!profile) redirect("/login");
   if (profile.role !== "admin") redirect("/dashboard");
 
-  const requests = await getRequests();
+  const [requests, lastSeenAt] = await Promise.all([
+    getRequests(),
+    getLastSeenAt(),
+  ]);
+
+  // Mark as seen now that we're viewing the page
+  await markRequestsSeen();
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
@@ -21,7 +27,7 @@ export default async function RequestsPage() {
       </div>
 
       <RequestForm />
-      <RequestList requests={requests} />
+      <RequestList requests={requests} lastSeenAt={lastSeenAt} />
     </div>
   );
 }

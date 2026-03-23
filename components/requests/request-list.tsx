@@ -17,11 +17,12 @@ import {
   type RequestType,
 } from "@/actions/requests";
 import { format } from "date-fns";
-import { Trash2, CheckCircle2, Circle } from "lucide-react";
+import { Trash2, CheckCircle2, Circle, MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { RequestThread } from "./request-thread";
 
 interface RequestListProps {
-  requests: AppRequest[];
+  requests: (AppRequest & { comment_count: number })[];
 }
 
 const TYPE_CONFIG: Record<RequestType, { label: string; className: string }> = {
@@ -40,6 +41,7 @@ export function RequestList({ requests }: RequestListProps) {
   const [filterType, setFilterType] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("open");
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [expandedThread, setExpandedThread] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     return requests.filter((r) => {
@@ -125,75 +127,104 @@ export function RequestList({ requests }: RequestListProps) {
             <div
               key={req.id}
               className={cn(
-                "flex items-start gap-3 rounded-lg border p-4 transition-colors",
+                "rounded-lg border p-4 transition-colors",
                 req.is_completed && "opacity-60"
               )}
             >
-              <button
-                onClick={() => handleToggle(req.id)}
-                disabled={pendingId === req.id}
-                className="mt-0.5 shrink-0 text-muted-foreground hover:text-primary transition-colors"
-              >
-                {req.is_completed ? (
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
-                ) : (
-                  <Circle className="h-5 w-5" />
-                )}
-              </button>
-
-              <div className="flex-1 min-w-0">
-                <p
-                  className={cn(
-                    "font-medium",
-                    req.is_completed && "line-through text-muted-foreground"
-                  )}
+              <div className="flex items-start gap-3">
+                <button
+                  onClick={() => handleToggle(req.id)}
+                  disabled={pendingId === req.id}
+                  className="mt-0.5 shrink-0 text-muted-foreground hover:text-primary transition-colors"
                 >
-                  {req.title}
-                </p>
-                {req.description && (
+                  {req.is_completed ? (
+                    <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  ) : (
+                    <Circle className="h-5 w-5" />
+                  )}
+                </button>
+
+                <div className="flex-1 min-w-0">
                   <p
                     className={cn(
-                      "text-sm text-muted-foreground mt-1",
-                      req.is_completed && "line-through"
+                      "font-medium",
+                      req.is_completed && "line-through text-muted-foreground"
                     )}
                   >
-                    {req.description}
+                    {req.title}
                   </p>
-                )}
-                <div className="flex items-center gap-2 mt-2 flex-wrap">
-                  <Badge
-                    variant="secondary"
-                    className={cn("text-xs border-0", TYPE_CONFIG[req.type].className)}
-                  >
-                    {TYPE_CONFIG[req.type].label}
-                  </Badge>
-                  <Badge
-                    variant="secondary"
-                    className={cn("text-xs border-0", PRIORITY_CONFIG[req.priority].className)}
-                  >
-                    {PRIORITY_CONFIG[req.priority].label}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">
-                    Added {format(new Date(req.created_at), "MMM d, yyyy")}
-                    {req.profile?.full_name && ` by ${req.profile.full_name}`}
-                  </span>
-                  {req.is_completed && req.completed_at && (
-                    <span className="text-xs text-green-600">
-                      Completed {format(new Date(req.completed_at), "MMM d, yyyy")}
-                    </span>
+                  {req.description && (
+                    <p
+                      className={cn(
+                        "text-sm text-muted-foreground mt-1",
+                        req.is_completed && "line-through"
+                      )}
+                    >
+                      {req.description}
+                    </p>
                   )}
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <Badge
+                      variant="secondary"
+                      className={cn("text-xs border-0", TYPE_CONFIG[req.type].className)}
+                    >
+                      {TYPE_CONFIG[req.type].label}
+                    </Badge>
+                    <Badge
+                      variant="secondary"
+                      className={cn("text-xs border-0", PRIORITY_CONFIG[req.priority].className)}
+                    >
+                      {PRIORITY_CONFIG[req.priority].label}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      Added {format(new Date(req.created_at), "MMM d, yyyy")}
+                      {req.profile?.full_name && ` by ${req.profile.full_name}`}
+                    </span>
+                    {req.is_completed && req.completed_at && (
+                      <span className="text-xs text-green-600">
+                        Completed {format(new Date(req.completed_at), "MMM d, yyyy")}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() =>
+                      setExpandedThread(
+                        expandedThread === req.id ? null : req.id
+                      )
+                    }
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors",
+                      expandedThread === req.id
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    )}
+                  >
+                    <MessageCircle className="h-3.5 w-3.5" />
+                    {req.comment_count > 0 && (
+                      <span>{req.comment_count}</span>
+                    )}
+                  </button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDelete(req.id)}
+                    disabled={pendingId === req.id}
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
 
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleDelete(req.id)}
-                disabled={pendingId === req.id}
-                className="shrink-0 text-muted-foreground hover:text-destructive"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              {expandedThread === req.id && (
+                <RequestThread
+                  requestId={req.id}
+                  commentCount={req.comment_count}
+                />
+              )}
             </div>
           ))}
         </div>

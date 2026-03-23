@@ -19,7 +19,7 @@ export interface AppRequest {
   profile?: { full_name: string } | null;
 }
 
-export async function getRequests(): Promise<AppRequest[]> {
+export async function getRequests(): Promise<(AppRequest & { comment_count: number })[]> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -28,11 +28,18 @@ export async function getRequests(): Promise<AppRequest[]> {
 
   const { data } = await supabase
     .from("requests")
-    .select("*, profile:profiles(full_name)")
+    .select("*, profile:profiles(full_name), request_comments(count)")
     .order("is_completed", { ascending: true })
     .order("created_at", { ascending: false });
 
-  return (data as AppRequest[]) ?? [];
+  return (
+    (data as (AppRequest & { request_comments: { count: number }[] })[])?.map(
+      (r) => ({
+        ...r,
+        comment_count: r.request_comments?.[0]?.count ?? 0,
+      })
+    ) ?? []
+  );
 }
 
 export async function getOpenRequestCount(): Promise<number> {
@@ -113,6 +120,56 @@ export async function toggleRequest(id: string) {
       completed_at: nowCompleted ? new Date().toISOString() : null,
     })
     .eq("id", id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/requests");
+  return { success: true };
+}
+
+// ============================================================
+// Comments
+// ============================================================
+
+export interface RequestComment {
+  id: string;
+  request_id: string;
+  profile_id: string;
+  message: string;
+  created_at: string;
+  profile?: { full_name: string } | null;
+}
+
+export async function getComments(requestId: string): Promise<RequestComment[]> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const { data } = await supabase
+    .from("request_comments")
+    .select("*, profile:profiles(full_name)")
+    .eq("request_id", requestId)
+    .order("created_at", { ascending: true });
+
+  return (data as RequestComment[]) ?? [];
+}
+
+export async function addComment(requestId: string, message: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  if (!message.trim()) return { error: "Message is required" };
+
+  const { error } = await supabase.from("request_comments").insert({
+    request_id: requestId,
+    profile_id: user.id,
+    message: message.trim(),
+  });
 
   if (error) return { error: error.message };
 

@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/actions/auth";
 import {
   getAdminDashboard,
-  getEmployeeDashboard,
   getMissingSubmissions,
 } from "@/actions/dashboard";
 import { getCurrentWeekStart, formatWeekLabel } from "@/lib/constants";
@@ -23,9 +22,7 @@ export default async function DashboardPage({
   const isAdmin = profile.role === "admin";
 
   const [stats, missing] = await Promise.all([
-    isAdmin
-      ? getAdminDashboard(weekStart)
-      : getEmployeeDashboard(weekStart),
+    getAdminDashboard(weekStart),
     isAdmin ? getMissingSubmissions(weekStart) : Promise.resolve([]),
   ]);
 

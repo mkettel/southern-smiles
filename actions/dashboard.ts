@@ -5,12 +5,17 @@ import { getCurrentWeekStart, getPreviousWeekStart, getLastNWeeks } from "@/lib/
 import type { DashboardStat, Profile } from "@/lib/types";
 
 /**
- * Get dashboard data for admin: all stats with current/previous entries and sparklines.
+ * Get dashboard data: all stats with current/previous entries and sparklines.
+ * Visible to all authenticated users.
  */
 export async function getAdminDashboard(
   weekStart?: string
 ): Promise<DashboardStat[]> {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
   const week = weekStart ?? getCurrentWeekStart();
   const prevWeek = getPreviousWeekStart(week);
   const sparklineWeeks = getLastNWeeks(week, 4);

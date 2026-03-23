@@ -17,6 +17,7 @@ import {
   MessageSquarePlus,
   Shield,
   Building2,
+  Network,
 } from "lucide-react";
 
 interface MobileNavProps {
@@ -34,6 +35,7 @@ const sharedLinks: NavLink[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/enter", label: "Enter Stats", icon: ClipboardEdit },
   { href: "/oic-log", label: "OIC Log", icon: FileText },
+  { href: "/org-board", label: "Org Board", icon: Network },
 ];
 
 const adminOnlyLinks: NavLink[] = [

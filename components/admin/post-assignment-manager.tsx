@@ -105,7 +105,16 @@ export function PostAssignmentManager({
             onValueChange={(v) => v && setSelectedPostId(v)}
           >
             <SelectTrigger className="h-7 text-xs w-[180px]">
-              <SelectValue placeholder="Select post..." />
+              <span>
+                {selectedPostId
+                  ? (() => {
+                      const p = availablePosts.find((p) => p.id === selectedPostId);
+                      return p
+                        ? `${p.division ? `Div ${p.division.number}: ` : ""}${p.title}`
+                        : "Select post...";
+                    })()
+                  : "Select post..."}
+              </span>
             </SelectTrigger>
             <SelectContent>
               {availablePosts.map((post) => (

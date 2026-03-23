@@ -106,7 +106,7 @@ export function EmployeeEditDialog({
               <Label>Role</Label>
               <Select value={role} onValueChange={(v) => v && setRole(v)}>
                 <SelectTrigger>
-                  <SelectValue />
+                  <span>{role === "admin" ? "Admin" : "Employee"}</span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="employee">Employee</SelectItem>
@@ -121,7 +121,7 @@ export function EmployeeEditDialog({
                 onValueChange={(v) => v && setIsActive(v === "active")}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <span>{isActive ? "Active" : "Inactive"}</span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="active">Active</SelectItem>

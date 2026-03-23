@@ -159,7 +159,9 @@ export function StatFormDialog({ posts, editStat, trigger }: StatFormDialogProps
                 <Label>Type</Label>
                 <Select value={statType} onValueChange={(v) => v && setStatType(v)}>
                   <SelectTrigger>
-                    <SelectValue />
+                    <span>
+                      {statType === "dollar" ? "Dollar ($)" : statType === "percentage" ? "Percentage (%)" : "Count (#)"}
+                    </span>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="dollar">Dollar ($)</SelectItem>
@@ -172,7 +174,7 @@ export function StatFormDialog({ posts, editStat, trigger }: StatFormDialogProps
                 <Label>Good Direction</Label>
                 <Select value={goodDirection} onValueChange={(v) => v && setGoodDirection(v)}>
                   <SelectTrigger>
-                    <SelectValue />
+                    <span>{goodDirection === "up" ? "Higher is better" : "Lower is better"}</span>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="up">Higher is better</SelectItem>
@@ -185,7 +187,16 @@ export function StatFormDialog({ posts, editStat, trigger }: StatFormDialogProps
               <Label>Assigned Post</Label>
               <Select value={postId} onValueChange={(v) => v && setPostId(v)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a post..." />
+                  <span>
+                    {postId
+                      ? (() => {
+                          const p = posts.find((p) => p.id === postId);
+                          return p
+                            ? `${p.division ? `Div ${p.division.number}: ` : ""}${p.title}`
+                            : "Select a post...";
+                        })()
+                      : "Select a post..."}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   {posts.map((post) => (

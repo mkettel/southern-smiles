@@ -215,6 +215,90 @@ export async function assignPost(profileId: string, postId: string) {
   return { success: true };
 }
 
+/**
+ * Create a new post with stats and employee assignment in one operation.
+ * Validates all inputs and rolls back on any failure.
+ */
+export async function createPostWithStats(input: {
+  postTitle: string;
+  divisionId: string;
+  stats: {
+    name: string;
+    abbreviation?: string;
+    stat_type: "dollar" | "percentage" | "count";
+    good_direction: "up" | "down";
+  }[];
+  employeeId?: string;
+}) {
+  const { supabase } = await requireAdmin();
+
+  // Validate inputs
+  if (!input.postTitle.trim()) return { error: "Post title is required" };
+  if (!input.divisionId) return { error: "Division is required" };
+  if (input.stats.length === 0) return { error: "At least one stat is required" };
+
+  // Check for duplicate stat names
+  const statNames = input.stats.map((s) => s.name.toLowerCase().trim());
+  if (new Set(statNames).size !== statNames.length) {
+    return { error: "Stat names must be unique" };
+  }
+
+  for (const s of input.stats) {
+    if (!s.name.trim()) return { error: "All stats must have a name" };
+  }
+
+  // 1. Create the post
+  const { data: post, error: postError } = await supabase
+    .from("posts")
+    .insert({ title: input.postTitle.trim(), division_id: input.divisionId })
+    .select("id")
+    .single();
+
+  if (postError || !post) {
+    return { error: postError?.message ?? "Failed to create post" };
+  }
+
+  // 2. Create stats for this post
+  const statRows = input.stats.map((s, i) => ({
+    name: s.name.trim(),
+    abbreviation: s.abbreviation?.trim() || null,
+    stat_type: s.stat_type,
+    good_direction: s.good_direction,
+    post_id: post.id,
+    display_order: i + 1,
+  }));
+
+  const { error: statsError } = await supabase
+    .from("stats")
+    .insert(statRows);
+
+  if (statsError) {
+    // Rollback: delete the post
+    await supabase.from("posts").delete().eq("id", post.id);
+    return { error: statsError.message };
+  }
+
+  // 3. Assign employee if provided
+  if (input.employeeId) {
+    const { error: assignError } = await supabase
+      .from("employee_posts")
+      .insert({ profile_id: input.employeeId, post_id: post.id });
+
+    if (assignError) {
+      // Rollback: delete stats and post (cascade will handle stats via FK)
+      await supabase.from("posts").delete().eq("id", post.id);
+      return { error: assignError.message };
+    }
+  }
+
+  revalidatePath("/admin/employees");
+  revalidatePath("/admin/stats");
+  revalidatePath("/dashboard");
+  revalidatePath("/enter");
+  revalidatePath("/oic-log");
+  return { success: true, postId: post.id };
+}
+
 export async function removePostAssignment(assignmentId: string) {
   const { supabase } = await requireAdmin();
   const { error } = await supabase

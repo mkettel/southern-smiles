@@ -1,5 +1,5 @@
 import { getProfile } from "@/actions/auth";
-import { getEmployees, getPosts } from "@/actions/admin";
+import { getEmployees, getPosts, getDivisions } from "@/actions/admin";
 import { redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -18,16 +18,18 @@ import {
 } from "@/components/ui/table";
 import { EmployeeEditDialog } from "@/components/admin/employee-edit-dialog";
 import { PostAssignmentManager } from "@/components/admin/post-assignment-manager";
-import { Pencil } from "lucide-react";
-import type { Profile, Post } from "@/lib/types";
+import { AddPostWizard } from "@/components/admin/add-post-wizard";
+import { Pencil, Plus } from "lucide-react";
+import type { Profile, Post, Division } from "@/lib/types";
 
 export default async function ManageEmployeesPage() {
   const profile = (await getProfile()) as Profile;
   if (profile.role !== "admin") redirect("/dashboard");
 
-  const [{ profiles, assignments }, posts] = await Promise.all([
+  const [{ profiles, assignments }, posts, divisions] = await Promise.all([
     getEmployees(),
     getPosts(),
+    getDivisions(),
   ]);
 
   // Group assignments by employee
@@ -45,11 +47,23 @@ export default async function ManageEmployeesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Manage Team</h1>
-        <p className="text-muted-foreground">
-          Edit employees, change roles, and manage post assignments
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Manage Team</h1>
+          <p className="text-muted-foreground">
+            Edit employees, change roles, and manage post assignments
+          </p>
+        </div>
+        <AddPostWizard
+          divisions={divisions as Division[]}
+          employees={profiles as Profile[]}
+          trigger={
+            <span className="inline-flex items-center gap-1">
+              <Plus className="h-4 w-4" />
+              Add Post
+            </span>
+          }
+        />
       </div>
 
       <Card>

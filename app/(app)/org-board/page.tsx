@@ -12,7 +12,7 @@ export default async function OrgBoardPage() {
       <div>
         <h1 className="text-2xl font-bold">Org Board</h1>
         <p className="text-muted-foreground">
-          Southern Smiles organizational structure and responsibilities
+          Full organizational structure showing divisions, departments, sections, and who is responsible for each role
         </p>
       </div>
 

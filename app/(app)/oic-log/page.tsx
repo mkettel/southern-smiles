@@ -23,7 +23,7 @@ export default async function OicLogPage() {
       <div>
         <h1 className="text-2xl font-bold">OIC Log</h1>
         <p className="text-muted-foreground">
-          Track operational changes and initiatives
+          Log operational changes, new initiatives, and decisions. Everyone can add entries, admins can edit and delete
         </p>
       </div>
 

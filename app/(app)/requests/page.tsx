@@ -21,7 +21,7 @@ export default async function RequestsPage() {
       <div>
         <h1 className="text-2xl font-bold">Bugs & Feature Requests</h1>
         <p className="text-muted-foreground">
-          Track bugs, feature requests, and improvements
+          Submit bugs, feature requests, or improvements. Change status as work progresses, and use the comment thread to discuss details
         </p>
       </div>
 

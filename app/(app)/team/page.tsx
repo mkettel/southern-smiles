@@ -55,7 +55,9 @@ export default async function TeamPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Team</h1>
-        <p className="text-muted-foreground">{formatWeekLabel(weekStart)}</p>
+        <p className="text-muted-foreground">
+          Overview of all employees, their posts, and who still needs to submit stats for {formatWeekLabel(weekStart)}
+        </p>
       </div>
 
       {missing.length > 0 && <MissingSubmissions missing={missing} />}

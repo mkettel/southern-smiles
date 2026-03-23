@@ -51,7 +51,7 @@ export default async function ManageEmployeesPage() {
         <div>
           <h1 className="text-2xl font-bold">Manage Team</h1>
           <p className="text-muted-foreground">
-            Edit employees, change roles, and manage post assignments
+            Add a new post with the wizard, assign employees to posts, edit names and roles, or activate/deactivate team members
           </p>
         </div>
         <AddPostWizard

@@ -49,8 +49,7 @@ export default async function OrganizationPage() {
       <div>
         <h1 className="text-2xl font-bold">Organization</h1>
         <p className="text-muted-foreground">
-          Manage divisions and posts. Rename, reorder, and delete divisions and
-          posts.
+          View your org structure as a tree. Rename or renumber divisions, edit post names, or move posts between divisions
         </p>
       </div>
 

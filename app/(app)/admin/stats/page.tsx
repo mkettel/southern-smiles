@@ -34,7 +34,7 @@ export default async function ManageStatsPage() {
         <div>
           <h1 className="text-2xl font-bold">Manage Stats</h1>
           <p className="text-muted-foreground">
-            Add, edit, or deactivate stat definitions
+            Add new stats to a post, edit stat names and types, set descriptions for employees, or deactivate stats you no longer need
           </p>
         </div>
         <StatFormDialog

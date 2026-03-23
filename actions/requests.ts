@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export type RequestType = "bug" | "feature" | "improvement";
 export type RequestPriority = "low" | "medium" | "high";
+export type RequestStatus = "open" | "in_progress" | "in_review" | "completed";
 
 export interface AppRequest {
   id: string;
@@ -12,6 +13,7 @@ export interface AppRequest {
   description: string | null;
   type: RequestType;
   priority: RequestPriority;
+  status: RequestStatus;
   is_completed: boolean;
   created_by: string;
   created_at: string;
@@ -49,7 +51,6 @@ export async function getOpenRequestCount(): Promise<number> {
   } = await supabase.auth.getUser();
   if (!user) return 0;
 
-  // Check admin
   const { data: profile } = await supabase
     .from("profiles")
     .select("role")
@@ -60,7 +61,7 @@ export async function getOpenRequestCount(): Promise<number> {
   const { count } = await supabase
     .from("requests")
     .select("*", { count: "exact", head: true })
-    .eq("is_completed", false);
+    .neq("status", "completed");
 
   return count ?? 0;
 }
@@ -86,6 +87,7 @@ export async function createRequest(input: {
     description: input.description?.trim() || null,
     type: input.type,
     priority: input.priority,
+    status: "open",
     created_by: user.id,
   });
 
@@ -95,6 +97,31 @@ export async function createRequest(input: {
   return { success: true };
 }
 
+export async function updateRequestStatus(id: string, status: RequestStatus) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const update: Record<string, unknown> = {
+    status,
+    is_completed: status === "completed",
+    completed_at: status === "completed" ? new Date().toISOString() : null,
+  };
+
+  const { error } = await supabase
+    .from("requests")
+    .update(update)
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/requests");
+  return { success: true };
+}
+
+// Keep for backwards compat — wraps updateRequestStatus
 export async function toggleRequest(id: string) {
   const supabase = await createClient();
   const {
@@ -102,29 +129,18 @@ export async function toggleRequest(id: string) {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
 
-  // Get current state
   const { data: request } = await supabase
     .from("requests")
-    .select("is_completed")
+    .select("status")
     .eq("id", id)
     .single();
 
   if (!request) return { error: "Request not found" };
 
-  const nowCompleted = !request.is_completed;
+  const newStatus: RequestStatus =
+    request.status === "completed" ? "open" : "completed";
 
-  const { error } = await supabase
-    .from("requests")
-    .update({
-      is_completed: nowCompleted,
-      completed_at: nowCompleted ? new Date().toISOString() : null,
-    })
-    .eq("id", id);
-
-  if (error) return { error: error.message };
-
-  revalidatePath("/requests");
-  return { success: true };
+  return updateRequestStatus(id, newStatus);
 }
 
 // ============================================================

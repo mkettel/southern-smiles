@@ -18,6 +18,7 @@ interface SparklineProps {
   data: { week: string; value: number }[];
   condition?: ConditionName | null;
   statType?: StatType;
+  goodDirection?: "up" | "down";
   height?: number;
 }
 
@@ -25,6 +26,7 @@ export function Sparkline({
   data,
   condition,
   statType = "count",
+  goodDirection = "up",
   height = 100,
 }: SparklineProps) {
   const color = condition ? CONDITION_CONFIG[condition].color : "#6b7280";
@@ -63,6 +65,7 @@ export function Sparkline({
             tickLine={false}
             width={40}
             domain={[0, "auto"]}
+            reversed={goodDirection === "down"}
             allowDecimals={false}
             tickCount={4}
             tickFormatter={(v) => {

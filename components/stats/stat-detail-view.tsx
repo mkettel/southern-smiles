@@ -27,6 +27,7 @@ interface StatDetailViewProps {
   statName: string;
   statType: StatType;
   statDescription?: string | null;
+  goodDirection?: "up" | "down";
   divisionLabel: string;
   postTitle: string;
   entries: StatEntry[];
@@ -37,6 +38,7 @@ export function StatDetailView({
   statName,
   statType,
   statDescription,
+  goodDirection = "up",
   divisionLabel,
   postTitle,
   entries,
@@ -134,6 +136,7 @@ export function StatDetailView({
             <StatHistoryChart
               entries={filteredEntries}
               statType={statType}
+              goodDirection={goodDirection}
               oicEntries={oicEntries}
             />
           ) : (

@@ -119,6 +119,7 @@ export function StatCard({ data }: StatCardProps) {
             data={filteredSparkline}
             condition={condition}
             statType={stat.stat_type}
+            goodDirection={stat.good_direction}
             height={120}
           />
         </CardContent>

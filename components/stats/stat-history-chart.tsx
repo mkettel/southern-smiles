@@ -20,6 +20,7 @@ import { format, startOfWeek, addDays } from "date-fns";
 interface StatHistoryChartProps {
   entries: StatEntry[];
   statType: StatType;
+  goodDirection?: "up" | "down";
   oicEntries?: OicLogEntry[];
 }
 
@@ -49,6 +50,7 @@ interface WeekAnnotation {
 export function StatHistoryChart({
   entries,
   statType,
+  goodDirection = "up",
   oicEntries = [],
 }: StatHistoryChartProps) {
   const [activeAnnotation, setActiveAnnotation] = useState<string | null>(null);
@@ -104,6 +106,7 @@ export function StatHistoryChart({
             <YAxis
               className="text-xs"
               tick={{ fontSize: 12 }}
+              reversed={goodDirection === "down"}
               tickFormatter={(v) => formatStatValue(v, statType)}
             />
             <Tooltip

@@ -42,6 +42,7 @@ export default async function StatDetailPage({
       statName={stat.name}
       statType={stat.stat_type}
       statDescription={stat.description}
+      goodDirection={stat.good_direction}
       divisionLabel={divisionLabel}
       postTitle={typedStat.post?.title ?? ""}
       entries={entries}

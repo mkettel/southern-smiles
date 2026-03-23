@@ -93,7 +93,12 @@ export function StatCard({ data }: StatCardProps) {
               Not submitted yet
             </div>
           )}
-          <Sparkline data={sparklineData} condition={condition} />
+          <Sparkline
+            data={sparklineData}
+            condition={condition}
+            statType={stat.stat_type}
+            height={120}
+          />
         </CardContent>
       </Card>
     </Link>

@@ -41,6 +41,7 @@ export default async function StatDetailPage({
     <StatDetailView
       statName={stat.name}
       statType={stat.stat_type}
+      statDescription={stat.description}
       divisionLabel={divisionLabel}
       postTitle={typedStat.post?.title ?? ""}
       entries={entries}

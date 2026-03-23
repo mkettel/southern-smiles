@@ -16,6 +16,7 @@ import {
   BarChart3,
   MessageSquarePlus,
   Shield,
+  Building2,
 } from "lucide-react";
 
 interface MobileNavProps {
@@ -37,6 +38,7 @@ const sharedLinks: NavLink[] = [
 
 const adminOnlyLinks: NavLink[] = [
   { href: "/team", label: "Team", icon: Users },
+  { href: "/admin/organization", label: "Organization", icon: Building2 },
   { href: "/admin/stats", label: "Manage Stats", icon: BarChart3 },
   { href: "/admin/employees", label: "Manage Team", icon: Settings },
   { href: "/requests", label: "Requests", icon: MessageSquarePlus },

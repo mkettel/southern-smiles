@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -36,6 +37,7 @@ interface StatFormDialogProps {
     good_direction: string;
     post_id: string;
     display_order: number;
+    description?: string | null;
   } | null;
   trigger: React.ReactNode;
 }
@@ -45,6 +47,7 @@ export function StatFormDialog({ posts, editStat, trigger }: StatFormDialogProps
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState(editStat?.name ?? "");
   const [abbreviation, setAbbreviation] = useState(editStat?.abbreviation ?? "");
+  const [description, setDescription] = useState(editStat?.description ?? "");
   const [statType, setStatType] = useState(editStat?.stat_type ?? "count");
   const [goodDirection, setGoodDirection] = useState(editStat?.good_direction ?? "up");
   const [postId, setPostId] = useState(editStat?.post_id ?? "");
@@ -54,6 +57,7 @@ export function StatFormDialog({ posts, editStat, trigger }: StatFormDialogProps
     if (!editStat) {
       setName("");
       setAbbreviation("");
+      setDescription("");
       setStatType("count");
       setGoodDirection("up");
       setPostId("");
@@ -76,6 +80,7 @@ export function StatFormDialog({ posts, editStat, trigger }: StatFormDialogProps
     const data = {
       name: name.trim(),
       abbreviation: abbreviation.trim() || null,
+      description: description.trim() || null,
       stat_type: statType as "dollar" | "percentage" | "count",
       good_direction: goodDirection as "up" | "down",
       post_id: postId,
@@ -100,6 +105,7 @@ export function StatFormDialog({ posts, editStat, trigger }: StatFormDialogProps
     <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (o && editStat) {
       setName(editStat.name);
       setAbbreviation(editStat.abbreviation ?? "");
+      setDescription(editStat.description ?? "");
       setStatType(editStat.stat_type);
       setGoodDirection(editStat.good_direction);
       setPostId(editStat.post_id);
@@ -136,6 +142,16 @@ export function StatFormDialog({ posts, editStat, trigger }: StatFormDialogProps
                 onChange={(e) => setAbbreviation(e.target.value)}
                 placeholder="e.g., Coll"
                 maxLength={10}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="stat-desc">Description (optional)</Label>
+              <Textarea
+                id="stat-desc"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Define what this stat measures and how to calculate it. E.g., 'Number of first-time patients who completed their first appointment this week.'"
+                rows={2}
               />
             </div>
             <div className="grid grid-cols-2 gap-4">

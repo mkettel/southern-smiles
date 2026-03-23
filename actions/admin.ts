@@ -46,12 +46,40 @@ export async function createDivision(input: { number: number; name: string }) {
   return { success: true };
 }
 
+export async function updateDivision(
+  id: string,
+  input: { number?: number; name?: string }
+) {
+  const { supabase } = await requireAdmin();
+  const { error } = await supabase
+    .from("divisions")
+    .update({ ...input, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/employees");
+  revalidatePath("/dashboard");
+  return { success: true };
+}
+
 export async function deleteDivision(id: string) {
   const { supabase } = await requireAdmin();
+
+  // Check if division has posts
+  const { count } = await supabase
+    .from("posts")
+    .select("*", { count: "exact", head: true })
+    .eq("division_id", id);
+
+  if (count && count > 0) {
+    return { error: "Cannot delete a division that has posts. Remove or reassign posts first." };
+  }
+
   const { error } = await supabase.from("divisions").delete().eq("id", id);
   if (error) return { error: error.message };
 
-  revalidatePath("/admin/divisions");
+  revalidatePath("/admin/employees");
+  revalidatePath("/dashboard");
   return { success: true };
 }
 
@@ -83,12 +111,45 @@ export async function createPost(input: {
   return { success: true };
 }
 
+export async function updatePost(
+  id: string,
+  input: { title?: string; division_id?: string }
+) {
+  const { supabase } = await requireAdmin();
+  const { error } = await supabase
+    .from("posts")
+    .update({ ...input, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/employees");
+  revalidatePath("/dashboard");
+  revalidatePath("/enter");
+  revalidatePath("/oic-log");
+  return { success: true };
+}
+
 export async function deletePost(id: string) {
   const { supabase } = await requireAdmin();
+
+  // Check if post has active stats or employee assignments
+  const [{ count: statCount }, { count: assignCount }] = await Promise.all([
+    supabase.from("stats").select("*", { count: "exact", head: true }).eq("post_id", id),
+    supabase.from("employee_posts").select("*", { count: "exact", head: true }).eq("post_id", id),
+  ]);
+
+  if ((statCount ?? 0) > 0) {
+    return { error: "Cannot delete a post that has stats. Deactivate or remove stats first." };
+  }
+  if ((assignCount ?? 0) > 0) {
+    return { error: "Cannot delete a post that has employees assigned. Remove assignments first." };
+  }
+
   const { error } = await supabase.from("posts").delete().eq("id", id);
   if (error) return { error: error.message };
 
-  revalidatePath("/admin/posts");
+  revalidatePath("/admin/employees");
+  revalidatePath("/dashboard");
   return { success: true };
 }
 

@@ -249,6 +249,11 @@ export function StatEntryForm({
                   {stat.post?.title}
                 </Badge>
               </div>
+              {stat.description && (
+                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                  {stat.description}
+                </p>
+              )}
             </CardHeader>
             <CardContent className="space-y-3">
               {statItem.previousValue !== null && (

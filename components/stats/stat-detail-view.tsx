@@ -26,6 +26,7 @@ import { ChevronRight, MessageSquareText } from "lucide-react";
 interface StatDetailViewProps {
   statName: string;
   statType: StatType;
+  statDescription?: string | null;
   divisionLabel: string;
   postTitle: string;
   entries: StatEntry[];
@@ -35,6 +36,7 @@ interface StatDetailViewProps {
 export function StatDetailView({
   statName,
   statType,
+  statDescription,
   divisionLabel,
   postTitle,
   entries,
@@ -88,6 +90,11 @@ export function StatDetailView({
           {divisionLabel} &middot; {postTitle}
           {currentEmployeeName && <> &middot; {currentEmployeeName}</>}
         </p>
+        {statDescription && (
+          <p className="text-sm text-muted-foreground mt-1">
+            {statDescription}
+          </p>
+        )}
       </div>
 
       {hasMultipleEmployees && (

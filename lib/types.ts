@@ -49,6 +49,7 @@ export interface Stat {
   id: string;
   name: string;
   abbreviation: string | null;
+  description: string | null;
   stat_type: StatType;
   good_direction: GoodDirection;
   post_id: string;

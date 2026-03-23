@@ -49,6 +49,7 @@ export const postSchema = z.object({
 export const statDefinitionSchema = z.object({
   name: z.string().min(1).max(100),
   abbreviation: z.string().max(10).nullable().optional(),
+  description: z.string().max(500).nullable().optional(),
   stat_type: z.enum(["dollar", "percentage", "count"]),
   good_direction: z.enum(["up", "down"]),
   post_id: z.string().uuid(),

@@ -22,9 +22,10 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
-import { createPostWithStats } from "@/actions/admin";
+import { createPostWithStats, createDivision } from "@/actions/admin";
 import type { Division, Profile } from "@/lib/types";
 import { Plus, Trash2, Check, ChevronRight, ChevronLeft, Pencil } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
 
 interface AddPostWizardProps {
   divisions: Division[];
@@ -58,6 +59,11 @@ export function AddPostWizard({ divisions, employees, trigger }: AddPostWizardPr
   // Step 1
   const [postTitle, setPostTitle] = useState("");
   const [divisionId, setDivisionId] = useState("");
+  const [creatingDivision, setCreatingDivision] = useState(false);
+  const [newDivName, setNewDivName] = useState("");
+  const [newDivNumber, setNewDivNumber] = useState("");
+  const [localDivisions, setLocalDivisions] = useState(divisions);
+  const [savingDiv, setSavingDiv] = useState(false);
 
   // Step 2
   const [stats, setStats] = useState<StatDraft[]>([]);
@@ -76,6 +82,10 @@ export function AddPostWizard({ divisions, employees, trigger }: AddPostWizardPr
     setStep(1);
     setPostTitle("");
     setDivisionId("");
+    setCreatingDivision(false);
+    setNewDivName("");
+    setNewDivNumber("");
+    setLocalDivisions(divisions);
     setStats([]);
     setNewStatName("");
     setNewStatAbbr("");
@@ -117,6 +127,46 @@ export function AddPostWizard({ divisions, employees, trigger }: AddPostWizardPr
     setStats((prev) => prev.filter((s) => s.id !== id));
   }
 
+  async function handleCreateDivision() {
+    const num = parseInt(newDivNumber);
+    if (!newDivName.trim() || isNaN(num) || num < 1) {
+      toast.error("Division name and a valid number are required");
+      return;
+    }
+
+    setSavingDiv(true);
+    const result = await createDivision({ number: num, name: newDivName.trim() });
+
+    if (result.error) {
+      toast.error(typeof result.error === "string" ? result.error : "Failed to create division");
+      setSavingDiv(false);
+      return;
+    }
+
+    // Refetch divisions to get the new one with its ID
+    const { createClient } = await import("@/lib/supabase/client");
+    const supabase = createClient();
+    const { data: updatedDivs } = await supabase
+      .from("divisions")
+      .select("*")
+      .order("number");
+
+    if (updatedDivs) {
+      setLocalDivisions(updatedDivs as Division[]);
+      // Auto-select the newly created division
+      const newDiv = updatedDivs.find(
+        (d: Division) => d.number === num && d.name === newDivName.trim()
+      );
+      if (newDiv) setDivisionId(newDiv.id);
+    }
+
+    setCreatingDivision(false);
+    setNewDivName("");
+    setNewDivNumber("");
+    setSavingDiv(false);
+    toast.success("Division created");
+  }
+
   function canProceed(): boolean {
     switch (step) {
       case 1: return !!postTitle.trim() && !!divisionId;
@@ -151,7 +201,7 @@ export function AddPostWizard({ divisions, employees, trigger }: AddPostWizardPr
     });
   }
 
-  const selectedDivision = divisions.find((d) => d.id === divisionId);
+  const selectedDivision = localDivisions.find((d) => d.id === divisionId);
   const selectedEmployee = employees.find((e) => e.id === employeeId);
 
   return (
@@ -218,25 +268,84 @@ export function AddPostWizard({ divisions, employees, trigger }: AddPostWizardPr
                 </div>
                 <div className="space-y-2">
                   <Label>Division</Label>
-                  <Select
-                    value={divisionId || "_none"}
-                    onValueChange={(v) => v && v !== "_none" && setDivisionId(v)}
-                  >
-                    <SelectTrigger>
-                      <span>
-                        {selectedDivision
-                          ? `Div ${selectedDivision.number} – ${selectedDivision.name}`
-                          : "Select division..."}
-                      </span>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {divisions.map((div) => (
-                        <SelectItem key={div.id} value={div.id}>
-                          Div {div.number} – {div.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {!creatingDivision ? (
+                    <>
+                      <Select
+                        value={divisionId || "_none"}
+                        onValueChange={(v) => v && v !== "_none" && setDivisionId(v)}
+                      >
+                        <SelectTrigger>
+                          <span>
+                            {selectedDivision
+                              ? `Div ${selectedDivision.number} – ${selectedDivision.name}`
+                              : "Select division..."}
+                          </span>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {localDivisions.map((div) => (
+                            <SelectItem key={div.id} value={div.id}>
+                              Div {div.number} – {div.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <button
+                        onClick={() => setCreatingDivision(true)}
+                        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <Plus className="h-3 w-3" />
+                        Create new division
+                      </button>
+                    </>
+                  ) : (
+                    <div className="rounded-md border p-3 space-y-3">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        New Division
+                      </p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Number</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={newDivNumber}
+                            onChange={(e) => setNewDivNumber(e.target.value)}
+                            placeholder="e.g., 5"
+                            className="text-sm"
+                          />
+                        </div>
+                        <div className="col-span-2 space-y-1">
+                          <Label className="text-xs">Name</Label>
+                          <Input
+                            value={newDivName}
+                            onChange={(e) => setNewDivName(e.target.value)}
+                            placeholder="e.g., Qualifications"
+                            className="text-sm"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          onClick={handleCreateDivision}
+                          disabled={savingDiv || !newDivName.trim() || !newDivNumber}
+                        >
+                          {savingDiv ? "Creating..." : "Create Division"}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setCreatingDivision(false);
+                            setNewDivName("");
+                            setNewDivNumber("");
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

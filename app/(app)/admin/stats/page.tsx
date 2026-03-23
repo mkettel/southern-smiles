@@ -112,6 +112,7 @@ export default async function ManageStatsPage() {
                           id: stat.id,
                           name: stat.name,
                           abbreviation: stat.abbreviation,
+                          description: stat.description,
                           stat_type: stat.stat_type,
                           good_direction: stat.good_direction,
                           post_id: stat.post_id,

@@ -5,7 +5,9 @@ import { markRequestsSeen } from "@/actions/requests";
 
 export function MarkSeenOnMount() {
   useEffect(() => {
-    markRequestsSeen();
+    markRequestsSeen().catch(() => {
+      // Silently ignore — non-critical operation
+    });
   }, []);
 
   return null;

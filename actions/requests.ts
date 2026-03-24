@@ -173,6 +173,13 @@ export async function updateRequestStatus(id: string, status: RequestStatus) {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
 
+  const { data: callerProfile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (callerProfile?.role !== "admin") return { error: "Admin access required" };
+
   const update: Record<string, unknown> = {
     status,
     is_completed: status === "completed",
@@ -249,6 +256,13 @@ export async function addComment(requestId: string, message: string) {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
 
+  const { data: callerProfile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (callerProfile?.role !== "admin") return { error: "Admin access required" };
+
   if (!message.trim()) return { error: "Message is required" };
 
   const { error } = await supabase.from("request_comments").insert({
@@ -275,6 +289,13 @@ export async function deleteRequest(id: string) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
+
+  const { data: callerProfile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (callerProfile?.role !== "admin") return { error: "Admin access required" };
 
   const { error } = await supabase.from("requests").delete().eq("id", id);
   if (error) return { error: error.message };

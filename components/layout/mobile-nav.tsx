@@ -72,7 +72,7 @@ export function MobileNav({ role, openRequestCount = 0, newRequestCount = 0 }: M
         {badge !== undefined && badge > 0 && (
           <span className={cn(
             "flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold",
-            newRequestCount > 0
+            badge !== undefined && badge > 0 && newRequestCount > 0
               ? "bg-blue-500 text-white"
               : "bg-muted text-muted-foreground"
           )}>

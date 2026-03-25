@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentPracticeId } from "@/lib/practice";
 import { calculateCondition } from "@/lib/conditions";
 import { submitWeeklyStatsSchema } from "@/lib/validators";
 import { getCurrentWeekStart, getPreviousWeekStart } from "@/lib/constants";
@@ -89,6 +90,8 @@ export async function submitWeeklyStats(input: {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
 
+  const practiceId = await getCurrentPracticeId(supabase);
+
   // Validate input
   const parsed = submitWeeklyStatsSchema.safeParse(input);
   if (!parsed.success) {
@@ -139,6 +142,7 @@ export async function submitWeeklyStats(input: {
       playbook_response: entry.playbook_response ?? null,
       submitted_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      practice_id: practiceId,
     };
   });
 

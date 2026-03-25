@@ -13,12 +13,12 @@ async function requireAdmin() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, practice_id")
     .eq("id", user.id)
     .single();
   if (profile?.role !== "admin") throw new Error("Admin access required");
 
-  return { supabase, user };
+  return { supabase, user, practiceId: profile.practice_id as string };
 }
 
 // ============================================================
@@ -35,11 +35,11 @@ export async function getDivisions() {
 }
 
 export async function createDivision(input: { number: number; name: string }) {
-  const { supabase } = await requireAdmin();
+  const { supabase, practiceId } = await requireAdmin();
   const parsed = divisionSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
-  const { error } = await supabase.from("divisions").insert(parsed.data);
+  const { error } = await supabase.from("divisions").insert({ ...parsed.data, practice_id: practiceId });
   if (error) return { error: error.message };
 
   revalidatePath("/admin/divisions");
@@ -100,11 +100,11 @@ export async function createPost(input: {
   title: string;
   division_id: string;
 }) {
-  const { supabase } = await requireAdmin();
+  const { supabase, practiceId } = await requireAdmin();
   const parsed = postSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
-  const { error } = await supabase.from("posts").insert(parsed.data);
+  const { error } = await supabase.from("posts").insert({ ...parsed.data, practice_id: practiceId });
   if (error) return { error: error.message };
 
   revalidatePath("/admin/posts");
@@ -174,11 +174,11 @@ export async function createStat(input: {
   post_id: string;
   display_order?: number;
 }) {
-  const { supabase } = await requireAdmin();
+  const { supabase, practiceId } = await requireAdmin();
   const parsed = statDefinitionSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
-  const { error } = await supabase.from("stats").insert(parsed.data);
+  const { error } = await supabase.from("stats").insert({ ...parsed.data, practice_id: practiceId });
   if (error) return { error: error.message };
 
   revalidatePath("/admin/stats");
@@ -265,10 +265,11 @@ export async function updateProfile(
 }
 
 export async function assignPost(profileId: string, postId: string) {
-  const { supabase } = await requireAdmin();
+  const { supabase, practiceId } = await requireAdmin();
   const { error } = await supabase.from("employee_posts").insert({
     profile_id: profileId,
     post_id: postId,
+    practice_id: practiceId,
   });
   if (error) return { error: error.message };
 
@@ -291,7 +292,7 @@ export async function createPostWithStats(input: {
   }[];
   employeeId?: string;
 }) {
-  const { supabase } = await requireAdmin();
+  const { supabase, practiceId } = await requireAdmin();
 
   // Validate inputs
   if (!input.postTitle.trim()) return { error: "Post title is required" };
@@ -311,7 +312,7 @@ export async function createPostWithStats(input: {
   // 1. Create the post
   const { data: post, error: postError } = await supabase
     .from("posts")
-    .insert({ title: input.postTitle.trim(), division_id: input.divisionId })
+    .insert({ title: input.postTitle.trim(), division_id: input.divisionId, practice_id: practiceId })
     .select("id")
     .single();
 
@@ -327,6 +328,7 @@ export async function createPostWithStats(input: {
     good_direction: s.good_direction,
     post_id: post.id,
     display_order: i + 1,
+    practice_id: practiceId,
   }));
 
   const { error: statsError } = await supabase
@@ -334,7 +336,6 @@ export async function createPostWithStats(input: {
     .insert(statRows);
 
   if (statsError) {
-    // Rollback: delete the post
     await supabase.from("posts").delete().eq("id", post.id);
     return { error: statsError.message };
   }
@@ -343,7 +344,7 @@ export async function createPostWithStats(input: {
   if (input.employeeId) {
     const { error: assignError } = await supabase
       .from("employee_posts")
-      .insert({ profile_id: input.employeeId, post_id: post.id });
+      .insert({ profile_id: input.employeeId, post_id: post.id, practice_id: practiceId });
 
     if (assignError) {
       // Rollback: delete stats and post (cascade will handle stats via FK)

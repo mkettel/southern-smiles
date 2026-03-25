@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentPracticeId } from "@/lib/practice";
 import { oicLogSchema } from "@/lib/validators";
 import type { OicLogEntry } from "@/lib/types";
 
@@ -38,9 +39,12 @@ export async function createOicEntry(input: {
     return { error: parsed.error.flatten().fieldErrors };
   }
 
+  const practiceId = await getCurrentPracticeId(supabase);
+
   const { error } = await supabase.from("oic_log").insert({
     ...parsed.data,
     profile_id: user.id,
+    practice_id: practiceId,
   });
 
   if (error) return { error: error.message };

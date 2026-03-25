@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentPracticeId } from "@/lib/practice";
 
 export interface PracticeSettings {
   id: string;
@@ -31,10 +32,21 @@ const DEFAULT_SETTINGS: PracticeSettings = {
 
 export async function getPracticeSettings(): Promise<PracticeSettings> {
   const supabase = await createClient();
+
+  let practiceId: string;
+  try {
+    practiceId = await getCurrentPracticeId(supabase);
+  } catch {
+    // User might not be authenticated (e.g., login page metadata)
+    // Fall back to first practice
+    const { data } = await supabase.from("practices").select("*").limit(1).single();
+    return (data as PracticeSettings) ?? DEFAULT_SETTINGS;
+  }
+
   const { data } = await supabase
-    .from("practice_settings")
+    .from("practices")
     .select("*")
-    .limit(1)
+    .eq("id", practiceId)
     .single();
 
   return (data as PracticeSettings) ?? DEFAULT_SETTINGS;
@@ -59,7 +71,7 @@ export async function updatePracticeSettings(input: {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, practice_id")
     .eq("id", user.id)
     .single();
   if (profile?.role !== "admin") return { error: "Admin access required" };
@@ -68,31 +80,16 @@ export async function updatePracticeSettings(input: {
     return { error: "Practice name is required" };
   }
 
-  // Get existing settings ID
-  const { data: existing } = await supabase
-    .from("practice_settings")
-    .select("id")
-    .limit(1)
-    .single();
-
-  if (!existing) {
-    // Create if doesn't exist
-    const { error } = await supabase.from("practice_settings").insert({
+  const { error } = await supabase
+    .from("practices")
+    .update({
       ...input,
-      name: input.name?.trim() ?? "My Practice",
-    });
-    if (error) return { error: error.message };
-  } else {
-    const { error } = await supabase
-      .from("practice_settings")
-      .update({
-        ...input,
-        name: input.name?.trim(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", existing.id);
-    if (error) return { error: error.message };
-  }
+      name: input.name?.trim(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", profile.practice_id);
+
+  if (error) return { error: error.message };
 
   revalidatePath("/", "layout");
   return { success: true };
@@ -142,7 +139,6 @@ export async function uploadLogo(formData: FormData) {
 
   const logoUrl = urlData.publicUrl;
 
-  // Update practice settings with new logo URL
   const result = await updatePracticeSettings({ logo_url: logoUrl });
   if (result.error) return result;
 

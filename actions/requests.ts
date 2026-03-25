@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentPracticeId } from "@/lib/practice";
 
 export type RequestType = "bug" | "feature" | "improvement";
 export type RequestPriority = "low" | "medium" | "high";
@@ -129,9 +130,11 @@ export async function markRequestsSeen() {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
 
+  const practiceId = await getCurrentPracticeId(supabase);
+
   await supabase.from("request_last_seen").upsert(
-    { profile_id: user.id, seen_at: new Date().toISOString() },
-    { onConflict: "profile_id" }
+    { profile_id: user.id, seen_at: new Date().toISOString(), practice_id: practiceId },
+    { onConflict: "profile_id,practice_id" }
   );
 }
 
@@ -151,6 +154,8 @@ export async function createRequest(input: {
     return { error: "Title is required" };
   }
 
+  const practiceId = await getCurrentPracticeId(supabase);
+
   const { error } = await supabase.from("requests").insert({
     title: input.title.trim(),
     description: input.description?.trim() || null,
@@ -158,6 +163,7 @@ export async function createRequest(input: {
     priority: input.priority,
     status: "open",
     created_by: user.id,
+    practice_id: practiceId,
   });
 
   if (error) return { error: error.message };
@@ -265,10 +271,13 @@ export async function addComment(requestId: string, message: string) {
 
   if (!message.trim()) return { error: "Message is required" };
 
+  const practiceId = await getCurrentPracticeId(supabase);
+
   const { error } = await supabase.from("request_comments").insert({
     request_id: requestId,
     profile_id: user.id,
     message: message.trim(),
+    practice_id: practiceId,
   });
 
   if (error) return { error: error.message };

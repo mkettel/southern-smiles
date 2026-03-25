@@ -58,6 +58,11 @@ export async function GET(request: Request) {
   // Render PDF
   const element = React.createElement(WeeklyReport, {
     practiceName: settings.name,
+    contactInfo: {
+      address: settings.address,
+      phone: settings.phone,
+      website: settings.website,
+    },
     weekLabel,
     generatedAt,
     stats,

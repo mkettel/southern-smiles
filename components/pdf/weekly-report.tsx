@@ -13,6 +13,7 @@ import { format } from "date-fns";
 
 interface WeeklyReportProps {
   practiceName: string;
+  contactInfo?: { address?: string | null; phone?: string | null; website?: string | null };
   weekLabel: string;
   generatedAt: string;
   stats: DashboardStat[];
@@ -174,6 +175,7 @@ function ConditionBadge({ condition }: { condition: ConditionName | null }) {
 
 export function WeeklyReport({
   practiceName,
+  contactInfo,
   weekLabel,
   generatedAt,
   stats,
@@ -344,9 +346,16 @@ export function WeeklyReport({
         )}
 
         {/* Footer */}
-        <Text style={styles.footer}>
-          {practiceName} — Stats & Conditions Report
-        </Text>
+        <View style={styles.footer}>
+          <Text>{practiceName} — Stats & Conditions Report</Text>
+          {contactInfo && (
+            <Text style={{ marginTop: 2 }}>
+              {[contactInfo.address, contactInfo.phone, contactInfo.website]
+                .filter(Boolean)
+                .join(" · ")}
+            </Text>
+          )}
+        </View>
       </Page>
     </Document>
   );

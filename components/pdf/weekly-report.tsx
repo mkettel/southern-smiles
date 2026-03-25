@@ -12,6 +12,7 @@ import type { DashboardStat, Profile, OicLogEntry } from "@/lib/types";
 import { format } from "date-fns";
 
 interface WeeklyReportProps {
+  practiceName: string;
   weekLabel: string;
   generatedAt: string;
   stats: DashboardStat[];
@@ -172,6 +173,7 @@ function ConditionBadge({ condition }: { condition: ConditionName | null }) {
 }
 
 export function WeeklyReport({
+  practiceName,
   weekLabel,
   generatedAt,
   stats,
@@ -202,7 +204,7 @@ export function WeeklyReport({
       <Page size="LETTER" style={styles.page}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Southern Smiles</Text>
+          <Text style={styles.title}>{practiceName}</Text>
           <Text style={styles.subtitle}>Weekly Stats Report — {weekLabel}</Text>
           <Text style={styles.generatedAt}>Generated {generatedAt}</Text>
         </View>
@@ -343,7 +345,7 @@ export function WeeklyReport({
 
         {/* Footer */}
         <Text style={styles.footer}>
-          Southern Smiles Dental — Stats & Conditions Report
+          {practiceName} — Stats & Conditions Report
         </Text>
       </Page>
     </Document>

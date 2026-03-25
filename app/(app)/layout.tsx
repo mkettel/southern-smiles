@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "@/actions/auth";
 import { getOpenRequestCount, getNewRequestCount } from "@/actions/requests";
+import { getPracticeSettings } from "@/actions/settings";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
+import { ThemeColorInjector } from "@/components/theme-color-injector";
 import type { Profile } from "@/lib/types";
 
 export default async function AppLayout({
@@ -16,22 +18,34 @@ export default async function AppLayout({
     redirect("/login");
   }
 
-  const [openRequestCount, newRequestCount] = profile.role === "admin"
-    ? await Promise.all([getOpenRequestCount(), getNewRequestCount()])
-    : [0, 0];
+  const [requestCounts, settings] = await Promise.all([
+    profile.role === "admin"
+      ? Promise.all([getOpenRequestCount(), getNewRequestCount()])
+      : Promise.resolve([0, 0]),
+    getPracticeSettings(),
+  ]);
+
+  const [openRequestCount, newRequestCount] = requestCounts;
+  const practiceName = settings.short_name ?? settings.name;
+  const logoUrl = settings.logo_url;
 
   return (
     <div className="flex h-screen overflow-hidden">
+      <ThemeColorInjector primaryColor={settings.primary_color} />
       <Sidebar
         role={profile.role}
         openRequestCount={openRequestCount}
         newRequestCount={newRequestCount}
+        practiceName={practiceName}
+        logoUrl={logoUrl}
+        showNameWithLogo={settings.show_name_with_logo}
       />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header
           profile={profile}
           openRequestCount={openRequestCount}
           newRequestCount={newRequestCount}
+          practiceName={practiceName}
         />
         <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
       </div>

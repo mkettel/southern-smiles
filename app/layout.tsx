@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
+import { getPracticeSettings } from "@/actions/settings";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,20 +15,33 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "Southern Smiles - Stats & Conditions",
-  description: "Weekly performance tracking for Southern Smiles Dental",
-  manifest: "/manifest.json",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "default",
-    title: "Southern Smiles",
-  },
-  icons: {
-    icon: "/icon.svg",
-    apple: "/apple-touch-icon.png",
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  let practiceName = "Stats & Conditions";
+  let tagline = "Weekly performance tracking";
+
+  try {
+    const settings = await getPracticeSettings();
+    practiceName = settings.name;
+    tagline = settings.tagline ?? "Weekly performance tracking";
+  } catch {
+    // Settings table may not exist yet during initial setup
+  }
+
+  return {
+    title: `${practiceName} - Stats & Conditions`,
+    description: `${tagline} for ${practiceName}`,
+    manifest: "/api/manifest",
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: "default",
+      title: practiceName,
+    },
+    icons: {
+      icon: "/icon.svg",
+      apple: "/apple-touch-icon.png",
+    },
+  };
+}
 
 export default function RootLayout({
   children,

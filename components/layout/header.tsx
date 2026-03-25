@@ -16,9 +16,10 @@ interface HeaderProps {
   profile: Profile;
   openRequestCount?: number;
   newRequestCount?: number;
+  practiceName?: string;
 }
 
-export function Header({ profile, openRequestCount = 0, newRequestCount = 0 }: HeaderProps) {
+export function Header({ profile, openRequestCount = 0, newRequestCount = 0, practiceName }: HeaderProps) {
   const router = useRouter();
   const names = (profile.full_name || "").split(" ").filter(Boolean);
   const initials = names
@@ -29,7 +30,7 @@ export function Header({ profile, openRequestCount = 0, newRequestCount = 0 }: H
 
   return (
     <header className="flex h-14 items-center justify-between border-b px-4 md:justify-end gap-2">
-      <MobileNav role={profile.role} openRequestCount={openRequestCount} newRequestCount={newRequestCount} />
+      <MobileNav role={profile.role} openRequestCount={openRequestCount} newRequestCount={newRequestCount} practiceName={practiceName} />
       <div className="flex items-center gap-1">
         <ThemeToggle />
       <DropdownMenu>

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentWeekStart, formatWeekLabel } from "@/lib/constants";
 import { getAdminDashboard, getMissingSubmissions } from "@/actions/dashboard";
 import { getOicEntries } from "@/actions/oic-log";
+import { getPracticeSettings } from "@/actions/settings";
 import { WeeklyReport } from "@/components/pdf/weekly-report";
 import { format } from "date-fns";
 
@@ -35,10 +36,11 @@ export async function GET(request: Request) {
   const weekLabel = formatWeekLabel(weekStart);
 
   // Fetch all data in parallel
-  const [stats, missing, oicEntries] = await Promise.all([
+  const [stats, missing, oicEntries, settings] = await Promise.all([
     getAdminDashboard(weekStart),
     getMissingSubmissions(weekStart),
     getOicEntries(),
+    getPracticeSettings(),
   ]);
 
   // Filter OIC entries to the selected week (approximately)
@@ -55,6 +57,7 @@ export async function GET(request: Request) {
 
   // Render PDF
   const element = React.createElement(WeeklyReport, {
+    practiceName: settings.name,
     weekLabel,
     generatedAt,
     stats,

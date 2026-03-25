@@ -15,12 +15,16 @@ import {
   Shield,
   Building2,
   Network,
+  Wrench,
 } from "lucide-react";
 
 interface SidebarProps {
   role: UserRole;
   openRequestCount?: number;
   newRequestCount?: number;
+  practiceName?: string;
+  logoUrl?: string | null;
+  showNameWithLogo?: boolean;
 }
 
 interface NavLink {
@@ -42,6 +46,7 @@ const adminOnlyLinks: NavLink[] = [
   { href: "/admin/stats", label: "Manage Stats", icon: BarChart3 },
   { href: "/admin/employees", label: "Manage Team", icon: Settings },
   { href: "/requests", label: "Requests", icon: MessageSquarePlus },
+  { href: "/admin/settings", label: "Settings", icon: Wrench },
 ];
 
 function NavItem({
@@ -82,17 +87,30 @@ function NavItem({
   );
 }
 
-export function Sidebar({ role, openRequestCount = 0, newRequestCount = 0 }: SidebarProps) {
+export function Sidebar({ role, openRequestCount = 0, newRequestCount = 0, practiceName = "Stats & Conditions", logoUrl, showNameWithLogo = true }: SidebarProps) {
   const pathname = usePathname();
   const isAdmin = role === "admin";
 
   return (
     <aside className="hidden md:flex md:w-56 md:flex-col md:border-r bg-muted/30">
-      <div className="flex h-14 items-center border-b px-4">
-        <Link href="/dashboard" className="font-semibold text-lg">
-          Southern Smiles
-        </Link>
-      </div>
+      <Link href="/dashboard" className="flex h-14 items-center border-b px-4 gap-2.5">
+        {logoUrl ? (
+          showNameWithLogo ? (
+            <>
+              <img src={logoUrl} alt="" className="h-8 w-8 rounded object-contain shrink-0" />
+              <span className="font-semibold text-sm leading-tight truncate">
+                {practiceName}
+              </span>
+            </>
+          ) : (
+            <img src={logoUrl} alt={practiceName} className="h-9 max-w-[180px] object-contain" />
+          )
+        ) : (
+          <span className="font-semibold text-sm leading-tight truncate">
+            {practiceName}
+          </span>
+        )}
+      </Link>
       <nav className="flex-1 p-3 space-y-1">
         {sharedLinks.map((link) => (
           <NavItem

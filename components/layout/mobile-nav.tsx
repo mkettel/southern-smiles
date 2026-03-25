@@ -18,12 +18,14 @@ import {
   Shield,
   Building2,
   Network,
+  Wrench,
 } from "lucide-react";
 
 interface MobileNavProps {
   role: UserRole;
   openRequestCount?: number;
   newRequestCount?: number;
+  practiceName?: string;
 }
 
 interface NavLink {
@@ -45,9 +47,10 @@ const adminOnlyLinks: NavLink[] = [
   { href: "/admin/stats", label: "Manage Stats", icon: BarChart3 },
   { href: "/admin/employees", label: "Manage Team", icon: Settings },
   { href: "/requests", label: "Requests", icon: MessageSquarePlus },
+  { href: "/admin/settings", label: "Settings", icon: Wrench },
 ];
 
-export function MobileNav({ role, openRequestCount = 0, newRequestCount = 0 }: MobileNavProps) {
+export function MobileNav({ role, openRequestCount = 0, newRequestCount = 0, practiceName = "Stats & Conditions" }: MobileNavProps) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const isAdmin = role === "admin";
@@ -90,7 +93,7 @@ export function MobileNav({ role, openRequestCount = 0, newRequestCount = 0 }: M
       </SheetTrigger>
       <SheetContent side="left" className="w-64 p-0">
         <SheetTitle className="flex h-14 items-center border-b px-4 font-semibold text-lg">
-          Southern Smiles
+          {practiceName}
         </SheetTitle>
         <nav className="p-3 space-y-1">
           {sharedLinks.map((link) => renderLink(link))}

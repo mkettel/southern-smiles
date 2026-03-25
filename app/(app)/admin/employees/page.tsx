@@ -19,7 +19,9 @@ import {
 import { EmployeeEditDialog } from "@/components/admin/employee-edit-dialog";
 import { PostAssignmentManager } from "@/components/admin/post-assignment-manager";
 import { AddPostWizard } from "@/components/admin/add-post-wizard";
-import { Pencil, Plus } from "lucide-react";
+import { InviteEmployeeDialog } from "@/components/admin/invite-employee-dialog";
+import { ArchiveEmployeeButton } from "@/components/admin/archive-employee-button";
+import { Pencil, Plus, Mail } from "lucide-react";
 import type { Profile, Post, Division } from "@/lib/types";
 
 export default async function ManageEmployeesPage() {
@@ -54,16 +56,26 @@ export default async function ManageEmployeesPage() {
             Add a new post with the wizard, assign employees to posts, edit names and roles, or activate/deactivate team members
           </p>
         </div>
-        <AddPostWizard
-          divisions={divisions as Division[]}
-          employees={profiles as Profile[]}
-          trigger={
-            <span className="inline-flex items-center gap-1">
-              <Plus className="h-4 w-4" />
-              Add Post
-            </span>
-          }
-        />
+        <div className="flex items-center gap-2 shrink-0">
+          <InviteEmployeeDialog
+            trigger={
+              <span className="inline-flex items-center gap-1">
+                <Mail className="h-4 w-4" />
+                Invite Employee
+              </span>
+            }
+          />
+          <AddPostWizard
+            divisions={divisions as Division[]}
+            employees={profiles as Profile[]}
+            trigger={
+              <span className="inline-flex items-center gap-1">
+                <Plus className="h-4 w-4" />
+                Add Post
+              </span>
+            }
+          />
+        </div>
       </div>
 
       <Card>
@@ -131,17 +143,29 @@ export default async function ManageEmployeesPage() {
                       />
                     </TableCell>
                     <TableCell className="text-right">
-                      <EmployeeEditDialog
-                        profile={{
-                          id: emp.id,
-                          full_name: emp.full_name,
-                          role: emp.role,
-                          is_active: emp.is_active,
-                        }}
-                        trigger={
-                          <Pencil className="h-3 w-3" />
-                        }
-                      />
+                      <div className="flex items-center justify-end gap-1">
+                        <span className="relative group/edit">
+                          <EmployeeEditDialog
+                            profile={{
+                              id: emp.id,
+                              full_name: emp.full_name,
+                              role: emp.role,
+                              is_active: emp.is_active,
+                            }}
+                            trigger={
+                              <Pencil className="h-3 w-3" />
+                            }
+                          />
+                          <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-0.5 rounded text-[10px] font-medium bg-foreground text-background whitespace-nowrap opacity-0 group-hover/edit:opacity-100 transition-opacity pointer-events-none z-10">
+                            Edit employee
+                          </span>
+                        </span>
+                        <ArchiveEmployeeButton
+                          profileId={emp.id}
+                          isActive={emp.is_active}
+                          fullName={emp.full_name}
+                        />
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -161,22 +185,6 @@ export default async function ManageEmployeesPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardContent className="pt-4">
-          <p className="text-sm text-muted-foreground">
-            To add a new employee, create their account in the{" "}
-            <a
-              href={`${process.env.NEXT_PUBLIC_SUPABASE_URL?.replace('.supabase.co', '')}/auth/users`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-medium underline underline-offset-2"
-            >
-              Supabase dashboard
-            </a>{" "}
-            (Authentication &gt; Users), then their profile will appear here automatically.
-          </p>
-        </CardContent>
-      </Card>
     </div>
   );
 }

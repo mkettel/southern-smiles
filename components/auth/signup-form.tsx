@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { login } from "@/actions/auth";
+import { signupPractice } from "@/actions/signup";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -15,18 +15,19 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-interface LoginFormProps {
-  practiceName: string;
-}
-
-export function LoginForm({ practiceName }: LoginFormProps) {
+export function SignupForm() {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function handleSubmit(formData: FormData) {
     setError(null);
     startTransition(async () => {
-      const result = await login(formData);
+      const result = await signupPractice({
+        practiceName: formData.get("practiceName") as string,
+        fullName: formData.get("fullName") as string,
+        email: formData.get("email") as string,
+        password: formData.get("password") as string,
+      });
       if (result?.error) {
         setError(result.error);
       }
@@ -36,20 +37,40 @@ export function LoginForm({ practiceName }: LoginFormProps) {
   return (
     <Card>
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl">{practiceName}</CardTitle>
+        <CardTitle className="text-2xl">Create Your Practice</CardTitle>
         <CardDescription>
-          Sign in to access your stats dashboard
+          Set up your practice to start tracking stats and conditions
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form action={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="practiceName">Practice Name</Label>
+            <Input
+              id="practiceName"
+              name="practiceName"
+              placeholder="Bright Smiles Dental"
+              required
+              autoComplete="organization"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="fullName">Your Full Name</Label>
+            <Input
+              id="fullName"
+              name="fullName"
+              placeholder="Dr. Jane Smith"
+              required
+              autoComplete="name"
+            />
+          </div>
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input
               id="email"
               name="email"
               type="email"
-              placeholder="you@example.com"
+              placeholder="jane@brightsmiles.com"
               required
               autoComplete="email"
             />
@@ -60,8 +81,10 @@ export function LoginForm({ practiceName }: LoginFormProps) {
               id="password"
               name="password"
               type="password"
+              placeholder="At least 6 characters"
               required
-              autoComplete="current-password"
+              minLength={6}
+              autoComplete="new-password"
             />
           </div>
           {error && (
@@ -69,15 +92,15 @@ export function LoginForm({ practiceName }: LoginFormProps) {
           )}
           <Button type="submit" className="w-full" disabled={isPending}>
             {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-            {isPending ? "Signing in..." : "Sign in"}
+            {isPending ? "Creating practice..." : "Create Practice"}
           </Button>
           <p className="text-center text-sm text-muted-foreground">
-            Don&apos;t have an account?{" "}
+            Already have an account?{" "}
             <Link
-              href="/signup"
+              href="/login"
               className="font-medium text-primary hover:underline"
             >
-              Create a practice
+              Sign in
             </Link>
           </p>
         </form>

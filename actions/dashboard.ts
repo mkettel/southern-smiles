@@ -63,6 +63,7 @@ export async function getAdminDashboard(
     email: "",
     username: null,
     avatar_url: null,
+    avatar_color: null,
     role: "employee" as const,
     is_active: true,
     created_at: "",

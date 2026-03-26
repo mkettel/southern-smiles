@@ -1,5 +1,6 @@
--- Add avatar_url column to profiles for user profile pictures
+-- Add avatar columns to profiles for user profile pictures
 ALTER TABLE profiles ADD COLUMN avatar_url text;
+ALTER TABLE profiles ADD COLUMN avatar_color text DEFAULT '#6b7280';
 
 -- Allow users to update their own profile (name, username, avatar)
 -- WITH CHECK prevents escalation: role, practice_id, email, is_active must remain unchanged

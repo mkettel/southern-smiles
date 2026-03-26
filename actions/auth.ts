@@ -125,9 +125,28 @@ export async function uploadAvatar(formData: FormData) {
   return { success: true, avatar_url: avatarUrl };
 }
 
+export async function removeAvatar() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ avatar_url: null, updated_at: new Date().toISOString() })
+    .eq("id", user.id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/", "layout");
+  return { success: true };
+}
+
 export async function updateMyProfile(input: {
   full_name?: string;
   username?: string | null;
+  avatar_color?: string | null;
 }) {
   const supabase = await createClient();
   const {
@@ -153,11 +172,18 @@ export async function updateMyProfile(input: {
     }
   }
 
+  if (input.avatar_color !== undefined && input.avatar_color) {
+    if (!/^#[0-9a-fA-F]{6}$/.test(input.avatar_color)) {
+      return { error: "Invalid color" };
+    }
+  }
+
   const { error } = await supabase
     .from("profiles")
     .update({
       ...(fullName !== undefined && { full_name: fullName }),
       ...(input.username !== undefined && { username: usernameVal }),
+      ...(input.avatar_color !== undefined && { avatar_color: input.avatar_color }),
       updated_at: new Date().toISOString(),
     })
     .eq("id", user.id);

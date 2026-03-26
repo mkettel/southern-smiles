@@ -51,7 +51,10 @@ export function Header({ profile, openRequestCount = 0, newRequestCount = 0, pra
               onError={() => setImgError(true)}
             />
           ) : (
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-xs font-medium">
+            <span
+              className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium text-white"
+              style={{ backgroundColor: profile.avatar_color ?? "#6b7280" }}
+            >
               {initials}
             </span>
           )}

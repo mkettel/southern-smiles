@@ -22,7 +22,12 @@ interface HeaderProps {
   practiceName?: string;
 }
 
-export function Header({ profile, openRequestCount = 0, newRequestCount = 0, practiceName }: HeaderProps) {
+export function Header({
+  profile,
+  openRequestCount = 0,
+  newRequestCount = 0,
+  practiceName,
+}: HeaderProps) {
   const router = useRouter();
   const [imgError, setImgError] = useState(false);
   const names = (profile.full_name || "").split(" ").filter(Boolean);

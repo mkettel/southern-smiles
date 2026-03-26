@@ -157,6 +157,7 @@ export async function getOtherStatsForWeek(
       avatar_url: null,
       avatar_color: null,
       role: "employee" as const,
+      practice_id: "",
       is_active: true,
       created_at: "",
       updated_at: "",

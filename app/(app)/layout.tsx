@@ -2,8 +2,10 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/actions/auth";
 import { getOpenRequestCount, getNewRequestCount } from "@/actions/requests";
 import { getPracticeSettings } from "@/actions/settings";
+import { getConversations, getUnreadMessageCount, getPracticeMembers } from "@/actions/messages";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
+import { ChatWidget } from "@/components/messages/chat-widget";
 import { ThemeColorInjector } from "@/components/theme-color-injector";
 import type { Profile } from "@/lib/types";
 
@@ -18,12 +20,16 @@ export default async function AppLayout({
     redirect("/login");
   }
 
-  const [requestCounts, settings] = await Promise.all([
-    profile.role === "admin"
-      ? Promise.all([getOpenRequestCount(), getNewRequestCount()])
-      : Promise.resolve([0, 0]),
-    getPracticeSettings(),
-  ]);
+  const [requestCounts, settings, conversations, unreadMessageCount, practiceMembers] =
+    await Promise.all([
+      profile.role === "admin"
+        ? Promise.all([getOpenRequestCount(), getNewRequestCount()])
+        : Promise.resolve([0, 0]),
+      getPracticeSettings(),
+      getConversations(),
+      getUnreadMessageCount(),
+      getPracticeMembers(),
+    ]);
 
   const [openRequestCount, newRequestCount] = requestCounts;
   const practiceName = settings.short_name ?? settings.name;
@@ -49,6 +55,12 @@ export default async function AppLayout({
         />
         <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
       </div>
+      <ChatWidget
+        profile={profile}
+        initialConversations={conversations}
+        practiceMembers={practiceMembers}
+        unreadMessageCount={unreadMessageCount}
+      />
     </div>
   );
 }

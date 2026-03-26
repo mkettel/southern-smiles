@@ -63,3 +63,12 @@ export const oicLogSchema = z.object({
   post_affected: z.string().max(100).nullable().optional(),
   entry_text: z.string().min(1).max(2000),
 });
+
+export const messageSchema = z.object({
+  content: z.string().min(1, "Message cannot be empty").max(4000),
+  mentions: z.array(z.string().uuid()).default([]),
+});
+
+export const channelSchema = z.object({
+  name: z.string().min(1, "Channel name is required").max(50),
+});

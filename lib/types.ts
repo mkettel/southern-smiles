@@ -33,6 +33,7 @@ export interface Profile {
   avatar_url: string | null;
   avatar_color: string | null;
   role: UserRole;
+  practice_id: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -106,6 +107,59 @@ export interface OicLogEntry {
   edited_at: string | null;
   // Joined
   profile?: Profile;
+}
+
+// ============================================================
+// Messaging types
+// ============================================================
+
+export type ConversationType = "dm" | "channel";
+
+export interface Conversation {
+  id: string;
+  practice_id: string;
+  type: ConversationType;
+  name: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  members?: ConversationMember[];
+}
+
+export interface ConversationMember {
+  conversation_id: string;
+  profile_id: string;
+  practice_id: string;
+  joined_at: string;
+  // Joined
+  profile?: Profile;
+}
+
+export interface Message {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  practice_id: string;
+  content: string;
+  mentions: string[];
+  created_at: string;
+  // Joined
+  sender?: Profile;
+}
+
+export interface ConversationLastSeen {
+  conversation_id: string;
+  profile_id: string;
+  practice_id: string;
+  seen_at: string;
+}
+
+export interface ConversationListItem {
+  conversation: Conversation;
+  otherMember?: Profile;
+  lastMessage: Message | null;
+  unreadCount: number;
 }
 
 // ============================================================

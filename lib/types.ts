@@ -30,6 +30,7 @@ export interface Profile {
   full_name: string;
   email: string;
   username: string | null;
+  avatar_url: string | null;
   role: UserRole;
   is_active: boolean;
   created_at: string;

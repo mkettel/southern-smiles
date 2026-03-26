@@ -27,19 +27,19 @@ export function getNextWeekStart(weekStart: string): string {
 }
 
 /**
- * Format a week_start date for display, e.g. "Mar 16 - Mar 22, 2026"
- * Shows Monday through Sunday of that week.
+ * Format a week_start date for display, e.g. "Mar 16 - Mar 20, 2026"
+ * Shows Monday through Friday of that week.
  */
 export function formatWeekLabel(weekStart: string): string {
   const monday = new Date(weekStart + "T00:00:00");
-  const sunday = addDays(monday, 6);
+  const friday = addDays(monday, 4);
 
   // Same month: "Mar 16 - 22, 2026"
-  if (monday.getMonth() === sunday.getMonth()) {
-    return `${format(monday, "MMM d")} - ${format(sunday, "d, yyyy")}`;
+  if (monday.getMonth() === friday.getMonth()) {
+    return `${format(monday, "MMM d")} - ${format(friday, "d, yyyy")}`;
   }
   // Different months: "Mar 30 - Apr 5, 2026"
-  return `${format(monday, "MMM d")} - ${format(sunday, "MMM d, yyyy")}`;
+  return `${format(monday, "MMM d")} - ${format(friday, "MMM d, yyyy")}`;
 }
 
 /**

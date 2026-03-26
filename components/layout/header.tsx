@@ -1,12 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { logout } from "@/actions/auth";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import type { Profile } from "@/lib/types";
 import { MobileNav } from "./mobile-nav";
@@ -21,12 +24,15 @@ interface HeaderProps {
 
 export function Header({ profile, openRequestCount = 0, newRequestCount = 0, practiceName }: HeaderProps) {
   const router = useRouter();
+  const [imgError, setImgError] = useState(false);
   const names = (profile.full_name || "").split(" ").filter(Boolean);
   const initials = names
     .map((n) => n[0] ?? "")
     .join("")
     .toUpperCase()
     .slice(0, 2) || "?";
+
+  const showAvatar = profile.avatar_url && !imgError;
 
   return (
     <header className="flex h-14 items-center justify-between border-b px-4 md:justify-end gap-2">
@@ -35,9 +41,20 @@ export function Header({ profile, openRequestCount = 0, newRequestCount = 0, pra
         <ThemeToggle />
       <DropdownMenu>
         <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-muted transition-colors outline-none">
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-xs font-medium">
-            {initials}
-          </span>
+          {showAvatar ? (
+            <Image
+              src={profile.avatar_url!}
+              alt={profile.full_name}
+              width={28}
+              height={28}
+              className="h-7 w-7 rounded-full object-cover"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-xs font-medium">
+              {initials}
+            </span>
+          )}
           <span className="hidden sm:inline-block">
             {profile.full_name}
           </span>
@@ -48,6 +65,12 @@ export function Header({ profile, openRequestCount = 0, newRequestCount = 0, pra
             disabled
           >
             {profile.email}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => router.push("/profile")}
+          >
+            My Profile
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={async () => {

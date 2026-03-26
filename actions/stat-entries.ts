@@ -154,6 +154,7 @@ export async function getOtherStatsForWeek(
       full_name: "Unassigned",
       email: "",
       username: null,
+      avatar_url: null,
       role: "employee" as const,
       is_active: true,
       created_at: "",

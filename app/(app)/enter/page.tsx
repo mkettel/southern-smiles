@@ -1,4 +1,5 @@
-import { getMyStatsForWeek } from "@/actions/stat-entries";
+import { getMyStatsForWeek, getOtherStatsForWeek } from "@/actions/stat-entries";
+import { getProfile } from "@/actions/auth";
 import { createClient } from "@/lib/supabase/server";
 import {
   getCurrentWeekStart,
@@ -6,7 +7,10 @@ import {
   formatWeekLabel,
 } from "@/lib/constants";
 import { StatEntryForm } from "@/components/stats/stat-entry-form";
-import type { ConditionPlaybook } from "@/lib/types";
+import { OtherStatsSection } from "@/components/stats/other-stats-section";
+import { WeekSelector } from "@/components/dashboard/week-selector";
+import { Separator } from "@/components/ui/separator";
+import type { ConditionPlaybook, Profile } from "@/lib/types";
 
 export default async function EnterStatsPage({
   searchParams,
@@ -37,16 +41,28 @@ export default async function EnterStatsPage({
   }
 
   const weekLabel = formatWeekLabel(weekStart);
+  const profile = (await getProfile()) as Profile | null;
+  const isAdmin = profile?.role === "admin";
 
-  const [stats, playbooks] = await Promise.all([
+  const [stats, playbooks, otherStats] = await Promise.all([
     getMyStatsForWeek(weekStart),
     getPlaybooks(),
+    isAdmin ? getOtherStatsForWeek(weekStart) : Promise.resolve([]),
   ]);
 
   const hasExistingEntries = stats.some((s) => s.existingEntry !== null);
 
   return (
     <div className="max-w-2xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold">
+            {hasExistingEntries ? "Edit Stats" : "Enter Stats"}
+          </h1>
+          <p className="text-muted-foreground">{weekLabel}</p>
+        </div>
+        <WeekSelector currentWeek={weekStart} />
+      </div>
       <StatEntryForm
         weekStart={weekStart}
         weekLabel={weekLabel}
@@ -55,7 +71,18 @@ export default async function EnterStatsPage({
         isEditing={hasExistingEntries}
         advancedFromWeek={advancedFromWeek}
         advancedFromWeekLabel={advancedFromWeekLabel}
+        hideHeader
       />
+      {isAdmin && otherStats.length > 0 && (
+        <>
+          <Separator className="my-8" />
+          <OtherStatsSection
+            weekStart={weekStart}
+            stats={otherStats}
+            playbooks={playbooks}
+          />
+        </>
+      )}
     </div>
   );
 }

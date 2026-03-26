@@ -26,6 +26,7 @@ interface StatEntryFormProps {
   isEditing?: boolean;
   advancedFromWeek?: string | null;
   advancedFromWeekLabel?: string | null;
+  hideHeader?: boolean;
 }
 
 interface EntryState {
@@ -48,6 +49,7 @@ export function StatEntryForm({
   isEditing = false,
   advancedFromWeek = null,
   advancedFromWeekLabel = null,
+  hideHeader = false,
 }: StatEntryFormProps) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
@@ -207,19 +209,21 @@ export function StatEntryForm({
 
   return (
     <div className="space-y-4">
-      <div>
-        <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold">
-            {isEditing ? "Edit Stats" : "Enter Stats"}
-          </h1>
-          {isEditing && (
-            <Badge variant="secondary" className="text-xs">
-              Editing existing entry
-            </Badge>
-          )}
+      {!hideHeader && (
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold">
+              {isEditing ? "Edit Stats" : "Enter Stats"}
+            </h1>
+            {isEditing && (
+              <Badge variant="secondary" className="text-xs">
+                Editing existing entry
+              </Badge>
+            )}
+          </div>
+          <p className="text-muted-foreground">{weekLabel}</p>
         </div>
-        <p className="text-muted-foreground">{weekLabel}</p>
-      </div>
+      )}
 
       {advancedFromWeek && (
         <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30 p-4">
@@ -254,14 +258,16 @@ export function StatEntryForm({
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              {statItem.previousValue !== null && (
-                <p className="text-sm text-muted-foreground">
-                  Last week:{" "}
+              <p className="text-sm text-muted-foreground">
+                Week prior:{" "}
+                {statItem.previousValue !== null ? (
                   <span className="font-medium text-foreground">
                     {formatStatValue(statItem.previousValue, stat.stat_type)}
                   </span>
-                </p>
-              )}
+                ) : (
+                  <span className="italic">Never entered</span>
+                )}
+              </p>
 
               <div className="flex items-center gap-3">
                 <div className="flex-1">

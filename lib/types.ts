@@ -125,3 +125,11 @@ export interface MyStatForEntry {
   previousValue: number | null;
   existingEntry: StatEntry | null;
 }
+
+export interface OtherStatForEntry {
+  stat: Stat;
+  post: Post;
+  employee: Profile;
+  previousValue: number | null;
+  existingEntry: StatEntry | null;
+}

@@ -12,6 +12,7 @@ export const statEntrySchema = z.object({
 
 export const submitWeeklyStatsSchema = z.object({
   week_start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  profile_id: z.string().uuid().optional(),
   entries: z.array(statEntrySchema).min(1),
 });
 

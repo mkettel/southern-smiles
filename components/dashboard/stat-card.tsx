@@ -103,11 +103,11 @@ export function StatCard({ data }: StatCardProps) {
               </div>
               {showingPrevious ? (
                 <p className="text-xs text-muted-foreground italic">
-                  Last week &middot; not yet submitted
+                  Week prior &middot; not yet submitted
                 </p>
               ) : delta !== null ? (
                 <p className="text-xs text-muted-foreground">
-                  {formatDelta(delta, stat.stat_type)} vs last week
+                  {formatDelta(delta, stat.stat_type)} vs week prior
                 </p>
               ) : null}
             </>

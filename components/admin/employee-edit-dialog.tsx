@@ -29,6 +29,7 @@ interface EmployeeEditDialogProps {
   profile: {
     id: string;
     full_name: string;
+    username: string | null;
     role: string;
     is_active: boolean;
   };
@@ -42,6 +43,7 @@ export function EmployeeEditDialog({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState(profile.full_name);
+  const [username, setUsername] = useState(profile.username ?? "");
   const [role, setRole] = useState(profile.role);
   const [isActive, setIsActive] = useState(profile.is_active);
 
@@ -54,6 +56,7 @@ export function EmployeeEditDialog({
     setLoading(true);
     const result = await updateProfile(profile.id, {
       full_name: name.trim(),
+      username: username.trim() || null,
       role: role as "admin" | "employee",
       is_active: isActive,
     });
@@ -76,6 +79,7 @@ export function EmployeeEditDialog({
         setOpen(o);
         if (o) {
           setName(profile.full_name);
+          setUsername(profile.username ?? "");
           setRole(profile.role);
           setIsActive(profile.is_active);
         }
@@ -101,6 +105,18 @@ export function EmployeeEditDialog({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="emp-username">Username</Label>
+              <Input
+                id="emp-username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ""))}
+                placeholder="e.g. odalis"
+              />
+              <p className="text-xs text-muted-foreground">
+                Used for login. Letters, numbers, dots, dashes only.
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Role</Label>

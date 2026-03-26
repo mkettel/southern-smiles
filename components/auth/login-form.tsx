@@ -44,14 +44,14 @@ export function LoginForm({ practiceName }: LoginFormProps) {
       <CardContent>
         <form action={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="identifier">Username or Email</Label>
             <Input
-              id="email"
-              name="email"
-              type="email"
-              placeholder="you@example.com"
+              id="identifier"
+              name="identifier"
+              type="text"
+              placeholder="jsmith or you@example.com"
               required
-              autoComplete="email"
+              autoComplete="username"
             />
           </div>
           <div className="space-y-2">

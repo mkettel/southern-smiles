@@ -29,6 +29,7 @@ export interface Profile {
   id: string;
   full_name: string;
   email: string;
+  username: string | null;
   role: UserRole;
   is_active: boolean;
   created_at: string;

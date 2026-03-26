@@ -247,6 +247,7 @@ export async function updateProfile(
   id: string,
   input: {
     full_name?: string;
+    username?: string | null;
     role?: "admin" | "employee";
     is_active?: boolean;
   }

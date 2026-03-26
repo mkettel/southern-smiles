@@ -107,6 +107,11 @@ export default async function ManageEmployeesPage() {
                   >
                     <TableCell className="font-medium">
                       {emp.full_name}
+                      {emp.username && (
+                        <span className="block text-xs text-muted-foreground font-normal">
+                          @{emp.username}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
                       {emp.email}
@@ -149,6 +154,7 @@ export default async function ManageEmployeesPage() {
                             profile={{
                               id: emp.id,
                               full_name: emp.full_name,
+                              username: emp.username ?? null,
                               role: emp.role,
                               is_active: emp.is_active,
                             }}

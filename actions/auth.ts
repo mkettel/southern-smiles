@@ -2,12 +2,31 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function login(formData: FormData) {
   const supabase = await createClient();
 
-  const email = formData.get("email") as string;
+  const identifier = (formData.get("identifier") as string).trim();
   const password = formData.get("password") as string;
+
+  let email = identifier;
+
+  // If the input doesn't look like an email, treat it as a username.
+  // Use admin client to bypass RLS (user isn't authenticated yet).
+  if (!identifier.includes("@")) {
+    const admin = createAdminClient();
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("email")
+      .ilike("username", identifier)
+      .single();
+
+    if (!profile) {
+      return { error: "No account found with that username" };
+    }
+    email = profile.email;
+  }
 
   const { error } = await supabase.auth.signInWithPassword({
     email,

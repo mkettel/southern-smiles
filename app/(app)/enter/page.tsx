@@ -64,6 +64,7 @@ export default async function EnterStatsPage({
         <WeekSelector currentWeek={weekStart} />
       </div>
       <StatEntryForm
+        key={weekStart}
         weekStart={weekStart}
         weekLabel={weekLabel}
         stats={stats}
@@ -77,6 +78,7 @@ export default async function EnterStatsPage({
         <>
           <Separator className="my-8" />
           <OtherStatsSection
+            key={weekStart}
             weekStart={weekStart}
             stats={otherStats}
             playbooks={playbooks}

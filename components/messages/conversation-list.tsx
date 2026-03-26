@@ -3,6 +3,12 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Hash, Plus, X } from "lucide-react";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
 import Image from "next/image";
 import { formatDistanceToNow } from "date-fns";
 import { getOrCreateDM, createChannel } from "@/actions/messages";
@@ -96,29 +102,35 @@ export function ConversationList({
             ))}
           </div>
           <div className="w-px h-4 bg-border mx-0.5" />
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => {
-              setShowNewDM(true);
-              setShowNewChannel(false);
-            }}
-            title="New message"
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger
+                onClick={() => {
+                  setShowNewDM(true);
+                  setShowNewChannel(false);
+                }}
+                className="inline-flex items-center justify-center rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+              </TooltipTrigger>
+              <TooltipContent side="bottom">New direct message</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           {profile.role === "admin" && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => {
-                setShowNewChannel(true);
-                setShowNewDM(false);
-              }}
-              title="New channel"
-            >
-              <Hash className="h-4 w-4" />
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger
+                  onClick={() => {
+                    setShowNewChannel(true);
+                    setShowNewDM(false);
+                  }}
+                  className="inline-flex items-center justify-center rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                >
+                  <Hash className="h-4 w-4" />
+                </TooltipTrigger>
+                <TooltipContent side="bottom">New channel</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
           <Button variant="ghost" size="icon-sm" onClick={onClose}>
             <X className="h-4 w-4" />

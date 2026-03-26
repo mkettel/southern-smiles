@@ -9,13 +9,12 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
-  Legend,
   ReferenceLine,
 } from "recharts";
-import { CONDITION_CONFIG, type ConditionName } from "@/lib/conditions";
 import type { StatEntry, StatType, OicLogEntry } from "@/lib/types";
 import { formatStatValue } from "@/lib/utils";
-import { format, startOfWeek, addDays } from "date-fns";
+import { format, startOfWeek } from "date-fns";
+import { Activity } from "lucide-react";
 
 interface StatHistoryChartProps {
   entries: StatEntry[];
@@ -53,6 +52,7 @@ export function StatHistoryChart({
   goodDirection = "up",
   oicEntries = [],
 }: StatHistoryChartProps) {
+  const [showOic, setShowOic] = useState(false);
   const [activeAnnotation, setActiveAnnotation] = useState<string | null>(null);
 
   const sorted = [...entries].sort(
@@ -67,7 +67,6 @@ export function StatHistoryChart({
     week: format(new Date(e.week_start + "T00:00:00"), "MMM d"),
     value: Number(e.value),
     avg: rolling[i],
-    condition: e.final_condition ?? e.auto_condition,
   }));
 
   // Group OIC entries by their corresponding chart week
@@ -93,19 +92,64 @@ export function StatHistoryChart({
     return Array.from(byWeek.values());
   }, [oicEntries, chartWeekLabels]);
 
+  const hasAnnotations = annotations.length > 0;
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
+      {/* Legend + OIC toggle */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block w-3 h-0.5 rounded-full bg-[#3b82f6]" />
+            Weekly
+          </span>
+          {entries.length >= 4 && (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block w-3 h-0.5 rounded-full bg-[#94a3b8] opacity-60" />
+              4-wk avg
+            </span>
+          )}
+        </div>
+        {hasAnnotations && (
+          <button
+            onClick={() => {
+              setShowOic(!showOic);
+              if (showOic) setActiveAnnotation(null);
+            }}
+            className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors ${
+              showOic
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+            }`}
+          >
+            <Activity className="h-3 w-3" />
+            OIC Changes ({annotations.reduce((n, a) => n + a.entries.length, 0)})
+          </button>
+        )}
+      </div>
+
+      {/* Chart */}
       <div
         className="w-full"
         style={{ minWidth: 200, minHeight: 300, height: 300 }}
       >
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-            <XAxis dataKey="week" className="text-xs" tick={{ fontSize: 12 }} />
+            <CartesianGrid
+              vertical={false}
+              stroke="var(--color-border, #e5e7eb)"
+              strokeOpacity={0.12}
+            />
+            <XAxis
+              dataKey="week"
+              tick={{ fontSize: 12, fill: "var(--color-muted-foreground, #9ca3af)" }}
+              axisLine={false}
+              tickLine={false}
+            />
             <YAxis
-              className="text-xs"
-              tick={{ fontSize: 12 }}
+              tick={{ fontSize: 12, fill: "var(--color-muted-foreground, #9ca3af)" }}
+              axisLine={false}
+              tickLine={false}
               reversed={goodDirection === "down"}
               tickFormatter={(v) => formatStatValue(v, statType)}
             />
@@ -129,98 +173,59 @@ export function StatHistoryChart({
                 name === "avg" ? "4-wk avg" : "Value",
               ]}
             />
-            {entries.length >= 4 && (
-              <Legend
-                formatter={(value) =>
-                  value === "avg" ? "4-week average" : "Weekly"
-                }
-              />
-            )}
 
-            {/* OIC annotation lines */}
-            {annotations.map((ann) => {
-              const isActive = activeAnnotation === ann.weekLabel;
-              return (
-              <ReferenceLine
-                key={ann.weekLabel}
-                x={ann.weekLabel}
-                stroke={isActive ? "#3b82f6" : "#9ca3af"}
-                strokeDasharray={isActive ? "0" : "4 4"}
-                strokeWidth={isActive ? 2 : 1.5}
-                strokeOpacity={isActive ? 1 : 0.5}
-                label={{
-                  value: `${ann.entries.length}`,
-                  position: "top",
-                  fill: isActive ? "#3b82f6" : "#9ca3af",
-                  fontSize: 10,
-                  fontWeight: 600,
-                }}
-              />
-              );
-            })}
+            {/* OIC annotation lines (only when toggled on) */}
+            {showOic &&
+              annotations.map((ann) => {
+                const isActive = activeAnnotation === ann.weekLabel;
+                return (
+                  <ReferenceLine
+                    key={ann.weekLabel}
+                    x={ann.weekLabel}
+                    stroke={isActive ? "#3b82f6" : "#9ca3af"}
+                    strokeWidth={isActive ? 1.5 : 1}
+                    strokeOpacity={isActive ? 0.7 : 0.3}
+                    label={{
+                      value: `${ann.entries.length}`,
+                      position: "top",
+                      fill: isActive ? "#3b82f6" : "#9ca3af",
+                      fontSize: 10,
+                      fontWeight: 600,
+                    }}
+                  />
+                );
+              })}
 
+            {/* Weekly line — hero */}
             <Line
               type="monotone"
               dataKey="value"
               name="value"
               stroke="#3b82f6"
-              strokeWidth={2}
-              dot={(props: Record<string, unknown>) => {
-                const cx = (props.cx as number) ?? 0;
-                const cy = (props.cy as number) ?? 0;
-                const payload = props.payload as {
-                  condition?: ConditionName | null;
-                  week?: string;
-                } | undefined;
-                const condition = payload?.condition ?? null;
-                const weekLabel = payload?.week ?? "";
-                const hasAnnotation = annotations.some(
-                  (a) => a.weekLabel === weekLabel
-                );
-                const color = condition
-                  ? CONDITION_CONFIG[condition].color
-                  : "#6b7280";
-                return (
-                  <g key={`${cx}-${cy}`}>
-                    <circle
-                      cx={cx}
-                      cy={cy}
-                      r={4}
-                      fill={color}
-                      stroke="white"
-                      strokeWidth={2}
-                    />
-                    {hasAnnotation && (() => {
-                      const isActivePoint = activeAnnotation === weekLabel;
-                      return (
-                      <circle
-                        cx={cx}
-                        cy={cy}
-                        r={isActivePoint ? 10 : 8}
-                        fill={isActivePoint ? "rgba(59,130,246,0.1)" : "none"}
-                        stroke={isActivePoint ? "#3b82f6" : "#9ca3af"}
-                        strokeWidth={isActivePoint ? 2 : 1.5}
-                        strokeDasharray={isActivePoint ? "0" : "3 2"}
-                        onClick={() =>
-                          setActiveAnnotation(
-                            activeAnnotation === weekLabel ? null : weekLabel
-                          )
-                        }
-                        className="cursor-pointer"
-                      />
-                      );
-                    })()}
-                  </g>
-                );
+              strokeWidth={2.5}
+              dot={{
+                r: 3,
+                fill: "#3b82f6",
+                stroke: "var(--color-background, #fff)",
+                strokeWidth: 1.5,
+              }}
+              activeDot={{
+                r: 5,
+                fill: "#3b82f6",
+                stroke: "var(--color-background, #fff)",
+                strokeWidth: 2,
               }}
             />
+
+            {/* 4-week rolling average — secondary */}
             {entries.length >= 4 && (
               <Line
                 type="monotone"
                 dataKey="avg"
                 name="avg"
-                stroke="#a855f7"
-                strokeWidth={2}
+                stroke="#94a3b8"
+                strokeWidth={1.5}
+                strokeOpacity={0.6}
                 strokeDasharray="6 3"
                 dot={false}
                 connectNulls={false}
@@ -230,11 +235,10 @@ export function StatHistoryChart({
         </ResponsiveContainer>
       </div>
 
-      {/* Annotation pills */}
-      {annotations.length > 0 && (
+      {/* OIC annotation pills (only when toggled on) */}
+      {showOic && hasAnnotations && (
         <div className="space-y-2">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs text-muted-foreground mr-1">OIC changes (click to view):</span>
             {annotations.map((ann) => (
               <button
                 key={ann.weekLabel}
@@ -252,25 +256,33 @@ export function StatHistoryChart({
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-muted-foreground" />
                 {ann.weekLabel}
                 {ann.entries.length > 1 && (
-                  <span className="text-[10px] opacity-70">({ann.entries.length})</span>
+                  <span className="text-[10px] opacity-70">
+                    ({ann.entries.length})
+                  </span>
                 )}
               </button>
             ))}
           </div>
-          {activeAnnotation && (() => {
-            const ann = annotations.find((a) => a.weekLabel === activeAnnotation);
-            if (!ann) return null;
-            return (
-              <div className="rounded-md border border-border bg-muted/50 px-3 py-2 space-y-1">
-                {ann.entries.map((e, i) => (
-                  <div key={i} className="text-xs">
-                    <span className="text-foreground">{e.text}</span>
-                    <span className="text-muted-foreground"> — {e.by}, {e.date}</span>
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
+          {activeAnnotation &&
+            (() => {
+              const ann = annotations.find(
+                (a) => a.weekLabel === activeAnnotation
+              );
+              if (!ann) return null;
+              return (
+                <div className="rounded-md border border-border bg-muted/50 px-3 py-2 space-y-1">
+                  {ann.entries.map((e, i) => (
+                    <div key={i} className="text-xs">
+                      <span className="text-foreground">{e.text}</span>
+                      <span className="text-muted-foreground">
+                        {" "}
+                        — {e.by}, {e.date}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
         </div>
       )}
     </div>

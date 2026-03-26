@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
+import { FontInjector } from "@/components/font-injector";
 import { getPracticeSettings } from "@/actions/settings";
 import "./globals.css";
 
@@ -43,11 +44,22 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default function RootLayout({
+async function getFontFamily(): Promise<string> {
+  try {
+    const settings = await getPracticeSettings();
+    return settings.font_family ?? "Geist";
+  } catch {
+    return "Geist";
+  }
+}
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const fontFamily = await getFontFamily();
+
   return (
     <html
       lang="en"
@@ -57,6 +69,7 @@ export default function RootLayout({
       <head>
         <meta name="theme-color" content="#0a0a0a" />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+        <FontInjector fontFamily={fontFamily} />
       </head>
       <body className="min-h-full flex flex-col">
         <ThemeProvider>

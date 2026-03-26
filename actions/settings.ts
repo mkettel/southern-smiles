@@ -12,6 +12,7 @@ export interface PracticeSettings {
   logo_url: string | null;
   show_name_with_logo: boolean;
   primary_color: string;
+  font_family: string;
   address: string | null;
   phone: string | null;
   website: string | null;
@@ -25,6 +26,7 @@ const DEFAULT_SETTINGS: PracticeSettings = {
   logo_url: null,
   show_name_with_logo: true,
   primary_color: "#0a0a0a",
+  font_family: "Geist",
   address: null,
   phone: null,
   website: null,
@@ -59,6 +61,7 @@ export async function updatePracticeSettings(input: {
   logo_url?: string | null;
   show_name_with_logo?: boolean;
   primary_color?: string;
+  font_family?: string;
   address?: string | null;
   phone?: string | null;
   website?: string | null;

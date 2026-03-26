@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { updatePracticeSettings, uploadLogo } from "@/actions/settings";
 import type { PracticeSettings } from "@/actions/settings";
 import { Upload, Check, RotateCcw } from "lucide-react";
+import { FONT_OPTIONS, getGoogleFontUrl } from "@/lib/fonts";
 
 interface SettingsFormProps {
   settings: PracticeSettings;
@@ -26,6 +27,7 @@ export function SettingsForm({ settings }: SettingsFormProps) {
   const [website, setWebsite] = useState(settings.website ?? "");
   const [logoUrl, setLogoUrl] = useState(settings.logo_url);
   const [showNameWithLogo, setShowNameWithLogo] = useState(settings.show_name_with_logo);
+  const [fontFamily, setFontFamily] = useState(settings.font_family ?? "Geist");
   const [uploading, setUploading] = useState(false);
   const defaultColor = "#0a0a0a";
   const originalColor = useRef(settings.primary_color);
@@ -72,6 +74,7 @@ export function SettingsForm({ settings }: SettingsFormProps) {
         short_name: shortName.trim() || null,
         tagline: tagline.trim() || null,
         primary_color: primaryColor,
+        font_family: fontFamily,
         show_name_with_logo: showNameWithLogo,
         address: address.trim() || null,
         phone: phone.trim() || null,
@@ -290,6 +293,65 @@ export function SettingsForm({ settings }: SettingsFormProps) {
                 </span>
               </div>
             </div>
+          </div>
+          {/* Font */}
+          <div className="space-y-2">
+            <Label>Font</Label>
+            <div className="grid grid-cols-2 gap-2">
+              {FONT_OPTIONS.map((font) => {
+                const isSelected = fontFamily === font.name;
+                return (
+                  <button
+                    key={font.name}
+                    type="button"
+                    onClick={() => setFontFamily(font.name)}
+                    className={`text-left rounded-lg border p-3 transition-colors ${
+                      isSelected
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/30 hover:bg-muted/50"
+                    }`}
+                  >
+                    <span
+                      className="text-sm font-semibold block"
+                      style={{
+                        fontFamily: font.name === "Geist" ? "var(--font-geist-sans)" : `'${font.name}', sans-serif`,
+                      }}
+                    >
+                      {font.name}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {font.description}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              Save to apply. The font loads from Google Fonts.
+            </p>
+
+            {/* Font preview */}
+            {fontFamily !== "Geist" && (
+              <>
+                <link
+                  rel="stylesheet"
+                  href={getGoogleFontUrl(fontFamily) ?? ""}
+                />
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Preview</Label>
+                  <div
+                    className="rounded-lg border bg-muted/30 p-4 space-y-1"
+                    style={{ fontFamily: `'${fontFamily}', sans-serif` }}
+                  >
+                    <p className="text-lg font-bold">$23,974</p>
+                    <p className="text-sm">Production — Div 4</p>
+                    <p className="text-xs text-muted-foreground">
+                      Weekly performance tracking for your practice
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>

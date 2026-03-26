@@ -21,18 +21,15 @@ export function MessageBubble({
 
   // Render content with @mentions highlighted
   function renderContent(content: string) {
-    // Match @[uuid] patterns
     const mentionRegex = /@\[([0-9a-f-]{36})\]/g;
     const parts: React.ReactNode[] = [];
     let lastIndex = 0;
     let match;
 
     while ((match = mentionRegex.exec(content)) !== null) {
-      // Add text before mention
       if (match.index > lastIndex) {
         parts.push(content.slice(lastIndex, match.index));
       }
-      // Find the mentioned user's name
       const mentionedId = match[1];
       const member = practiceMembers.find((m) => m.id === mentionedId) ?? sender;
       const displayName = member?.full_name ?? "Unknown";
@@ -47,7 +44,6 @@ export function MessageBubble({
       lastIndex = match.index + match[0].length;
     }
 
-    // Add remaining text
     if (lastIndex < content.length) {
       parts.push(content.slice(lastIndex));
     }
@@ -57,9 +53,11 @@ export function MessageBubble({
 
   return (
     <div
-      className={`group animate-in fade-in-0 slide-in-from-bottom-2 duration-200 ${showSender ? "mt-3" : "mt-0.5"}`}
+      className={`group animate-in fade-in-0 slide-in-from-bottom-2 duration-200 ${
+        showSender ? "mt-3" : "mt-0.5"
+      } ${isOwn ? "flex flex-col items-end" : ""}`}
     >
-      {showSender && sender && (
+      {showSender && sender && !isOwn && (
         <div className="flex items-center gap-2 mb-1">
           <MemberAvatar member={sender} size={20} />
           <span className="text-xs font-medium">{sender.full_name}</span>
@@ -70,9 +68,18 @@ export function MessageBubble({
           </span>
         </div>
       )}
+      {showSender && isOwn && (
+        <span className="text-[10px] text-muted-foreground mb-1">
+          {formatDistanceToNow(new Date(message.created_at), {
+            addSuffix: true,
+          })}
+        </span>
+      )}
       <div
-        className={`text-sm pl-7 ${
-          isOwn ? "bg-primary/5 rounded-md px-2 py-0.5 -ml-2" : ""
+        className={`text-sm max-w-[85%] rounded-2xl px-3 py-1.5 ${
+          isOwn
+            ? "bg-primary text-primary-foreground rounded-br-sm"
+            : "bg-muted rounded-bl-sm ml-7"
         }`}
       >
         <span className="whitespace-pre-wrap break-words">

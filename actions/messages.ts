@@ -87,7 +87,8 @@ export async function getConversations(): Promise<ConversationListItem[]> {
     let query = supabase
       .from("messages")
       .select("*", { count: "exact", head: true })
-      .eq("conversation_id", convId);
+      .eq("conversation_id", convId)
+      .neq("sender_id", user.id);
     if (seenAt) {
       query = query.gt("created_at", seenAt);
     }
@@ -183,7 +184,8 @@ export async function getUnreadMessageCount(): Promise<number> {
     let query = supabase
       .from("messages")
       .select("*", { count: "exact", head: true })
-      .eq("conversation_id", convId);
+      .eq("conversation_id", convId)
+      .neq("sender_id", user.id);
     if (seenAt) {
       query = query.gt("created_at", seenAt);
     }
@@ -461,6 +463,26 @@ export async function renameChannel(conversationId: string, name: string) {
 
   if (error) return { error: error.message };
   return { success: true };
+}
+
+export async function getOtherMemberSeenAt(
+  conversationId: string,
+  otherProfileId: string
+): Promise<string | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  // Use a direct query — the RLS on conversation_last_seen is self-only,
+  // so we use an RPC function that checks membership first
+  const { data } = await supabase.rpc("get_member_seen_at", {
+    conv_id: conversationId,
+    member_id: otherProfileId,
+  });
+
+  return data ?? null;
 }
 
 export async function markConversationSeen(conversationId: string) {

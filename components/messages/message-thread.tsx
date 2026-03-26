@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { ArrowLeft, Hash } from "lucide-react";
+import { ArrowLeft, Hash, CheckCheck, Check } from "lucide-react";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
-import { getMessages, markConversationSeen } from "@/actions/messages";
+import { getMessages, markConversationSeen, getOtherMemberSeenAt } from "@/actions/messages";
 import { MessageBubble } from "./message-bubble";
 import { MessageInput } from "./message-input";
 import { MemberAvatar } from "./conversation-list";
@@ -32,9 +33,11 @@ export function MessageThread({
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
+  const [otherSeenAt, setOtherSeenAt] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  const isDM = conversation.type === "dm";
   const isChannel = conversation.type === "channel";
   const displayName = isChannel
     ? conversation.name
@@ -43,20 +46,23 @@ export function MessageThread({
   // Register handler for incoming realtime messages
   const handleIncomingMessage = useCallback((message: Message) => {
     setMessages((prev) => {
-      // Avoid duplicates
       if (prev.some((m) => m.id === message.id)) return prev;
       return [...prev, message];
     });
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
     markConversationSeen(conversation.id);
-  }, [conversation.id]);
+    // If the other person sent a message, they've seen everything up to now
+    if (isDM && message.sender_id === otherMember?.id) {
+      setOtherSeenAt(message.created_at);
+    }
+  }, [conversation.id, isDM, otherMember?.id]);
 
   useEffect(() => {
     onRegisterRealtimeHandler(handleIncomingMessage);
     return () => onUnregisterRealtimeHandler();
   }, [handleIncomingMessage, onRegisterRealtimeHandler, onUnregisterRealtimeHandler]);
 
-  // Load initial messages and mark as seen
+  // Load initial messages, mark as seen, fetch read receipt
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -69,12 +75,18 @@ export function MessageThread({
         setTimeout(() => bottomRef.current?.scrollIntoView(), 50);
       }
       markConversationSeen(conversation.id);
+
+      // Fetch other person's read receipt for DMs
+      if (isDM && otherMember) {
+        const seenAt = await getOtherMemberSeenAt(conversation.id, otherMember.id);
+        if (!cancelled) setOtherSeenAt(seenAt);
+      }
     }
     load();
     return () => {
       cancelled = true;
     };
-  }, [conversation.id]);
+  }, [conversation.id, isDM, otherMember]);
 
   // Load older messages on scroll up
   const loadMore = useCallback(async () => {
@@ -100,6 +112,21 @@ export function MessageThread({
     },
     [conversation.id, onNewMessage]
   );
+
+  // Find the last own message to show delivery/read status (DMs only)
+  const lastOwnMessageId = (() => {
+    if (!isDM) return null;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].sender_id === profile.id) return messages[i].id;
+    }
+    return null;
+  })();
+
+  const lastOwnMessageIsRead = (() => {
+    if (!lastOwnMessageId || !otherSeenAt) return false;
+    const msg = messages.find((m) => m.id === lastOwnMessageId);
+    return msg ? msg.created_at <= otherSeenAt : false;
+  })();
 
   return (
     <div className="flex flex-col h-full">
@@ -146,14 +173,33 @@ export function MessageThread({
               const prevMsg = i > 0 ? messages[i - 1] : null;
               const showSender =
                 !prevMsg || prevMsg.sender_id !== msg.sender_id;
+              const showReceipt = msg.id === lastOwnMessageId;
               return (
-                <MessageBubble
-                  key={msg.id}
-                  message={msg}
-                  isOwn={msg.sender_id === profile.id}
-                  showSender={showSender}
-                  practiceMembers={practiceMembers}
-                />
+                <div key={msg.id}>
+                  <MessageBubble
+                    message={msg}
+                    isOwn={msg.sender_id === profile.id}
+                    showSender={showSender}
+                    practiceMembers={practiceMembers}
+                  />
+                  {showReceipt && (
+                    <div className="flex items-center justify-end gap-1 mt-0.5 mr-1">
+                      {lastOwnMessageIsRead ? (
+                        <>
+                          <CheckCheck className="h-3 w-3 text-primary" />
+                          <span className="text-[10px] text-muted-foreground">
+                            Read {otherSeenAt ? format(new Date(otherSeenAt), "h:mm a") : ""}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <Check className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-[10px] text-muted-foreground">Delivered</span>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </>

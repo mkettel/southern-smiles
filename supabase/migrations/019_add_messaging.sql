@@ -110,6 +110,20 @@ RETURNS boolean AS $$
   );
 $$ LANGUAGE sql SECURITY DEFINER STABLE;
 
+-- Helper: get another member's seen_at for read receipts (only if caller is a member)
+CREATE OR REPLACE FUNCTION get_member_seen_at(conv_id uuid, member_id uuid)
+RETURNS timestamptz AS $$
+  SELECT seen_at FROM conversation_last_seen
+  WHERE conversation_id = conv_id
+    AND profile_id = member_id
+    AND EXISTS (
+      SELECT 1 FROM conversation_members
+      WHERE conversation_id = conv_id
+        AND profile_id = auth.uid()
+    )
+  LIMIT 1;
+$$ LANGUAGE sql SECURITY DEFINER STABLE;
+
 -- Helper: check if current user created a conversation (bypasses RLS)
 CREATE OR REPLACE FUNCTION is_conversation_creator(conv_id uuid)
 RETURNS boolean AS $$

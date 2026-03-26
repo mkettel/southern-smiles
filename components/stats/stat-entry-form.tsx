@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Check } from "lucide-react";
 import { ConditionDisplay } from "./condition-display";
+import { StatName } from "./stat-name";
 import { PlaybookPanel } from "./playbook-panel";
 import { calculateCondition, type ConditionResult } from "@/lib/conditions";
 import { formatStatValue } from "@/lib/utils";
@@ -244,16 +245,13 @@ export function StatEntryForm({
           <Card key={stat.id}>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base">{stat.name}</CardTitle>
+                <CardTitle className="text-base">
+                  <StatName name={stat.name} description={stat.description} />
+                </CardTitle>
                 <Badge variant="outline" className="text-xs">
                   {stat.post?.title}
                 </Badge>
               </div>
-              {stat.description && (
-                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                  {stat.description}
-                </p>
-              )}
             </CardHeader>
             <CardContent className="space-y-3">
               {statItem.previousValue !== null && (

@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/table";
 import { StatFormDialog } from "@/components/admin/stat-form-dialog";
 import { StatToggleButton } from "@/components/admin/stat-toggle-button";
+import { StatName } from "@/components/stats/stat-name";
 import { Plus, Pencil } from "lucide-react";
 import type { Profile, Post } from "@/lib/types";
 
@@ -72,7 +73,7 @@ export default async function ManageStatsPage() {
                   className={!stat.is_active ? "opacity-50" : ""}
                 >
                   <TableCell className="font-medium">
-                    {stat.name}
+                    <StatName name={stat.name} description={stat.description} />
                     {stat.abbreviation && (
                       <span className="text-muted-foreground text-xs ml-1">
                         ({stat.abbreviation})

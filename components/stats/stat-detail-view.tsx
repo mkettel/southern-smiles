@@ -20,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatName } from "@/components/stats/stat-name";
 import type { StatEntry, StatType, OicLogEntry } from "@/lib/types";
 import { ChevronRight, MessageSquareText } from "lucide-react";
 
@@ -87,16 +88,13 @@ export function StatDetailView({
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold">{statName}</h1>
+        <h1 className="text-2xl font-bold">
+          <StatName name={statName} description={statDescription} />
+        </h1>
         <p className="text-muted-foreground">
           {divisionLabel} &middot; {postTitle}
           {currentEmployeeName && <> &middot; {currentEmployeeName}</>}
         </p>
-        {statDescription && (
-          <p className="text-sm text-muted-foreground mt-1">
-            {statDescription}
-          </p>
-        )}
       </div>
 
       {hasMultipleEmployees && (

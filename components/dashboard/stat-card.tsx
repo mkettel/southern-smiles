@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { ConditionDisplay } from "@/components/stats/condition-display";
 import { Sparkline } from "@/components/stats/sparkline";
 import { formatStatValue, formatPercentChange, formatDelta } from "@/lib/utils";
+import { StatName } from "@/components/stats/stat-name";
 import type { DashboardStat } from "@/lib/types";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 
@@ -77,7 +78,7 @@ export function StatCard({ data }: StatCardProps) {
           <div className="flex items-start justify-between gap-2">
             <div>
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                {stat.name}
+                <StatName name={stat.name} description={stat.description} />
               </CardTitle>
               <p className="text-xs text-muted-foreground/70 mt-0.5">
                 {employee.full_name} &middot; {post?.title}

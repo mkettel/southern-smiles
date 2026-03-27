@@ -23,6 +23,8 @@ export function MessageInput({
   const [sending, setSending] = useState(false);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionStartIndex, setMentionStartIndex] = useState(0);
+  // Track active mentions by display name -> profile id
+  const mentionsRef = useRef<Map<string, string>>(new Map());
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleChange = useCallback(
@@ -40,9 +42,13 @@ export function MessageInput({
         const query = textBeforeCursor.slice(atIndex + 1);
         // Only trigger if @ is at start or preceded by whitespace, and no space in query
         if ((charBefore === " " || charBefore === "\n" || atIndex === 0) && !query.includes(" ")) {
-          setMentionQuery(query);
-          setMentionStartIndex(atIndex);
-          return;
+          // Don't trigger if the query matches an already-inserted mention name
+          const isExistingMention = mentionsRef.current.has(query);
+          if (!isExistingMention) {
+            setMentionQuery(query);
+            setMentionStartIndex(atIndex);
+            return;
+          }
         }
       }
       setMentionQuery(null);
@@ -56,9 +62,12 @@ export function MessageInput({
       const after = text.slice(
         mentionStartIndex + 1 + (mentionQuery?.length ?? 0)
       );
-      const mention = `@[${member.id}]`;
-      const newText = before + mention + " " + after;
+      // Insert @DisplayName in the textarea (human-readable)
+      const displayMention = `@${member.full_name}`;
+      const newText = before + displayMention + " " + after;
       setText(newText);
+      // Track this mention for conversion on send
+      mentionsRef.current.set(member.full_name, member.id);
       setMentionQuery(null);
       textareaRef.current?.focus();
     },
@@ -69,21 +78,25 @@ export function MessageInput({
     const trimmed = text.trim();
     if (!trimmed || sending) return;
 
-    // Extract mention UUIDs from content
-    const mentionRegex = /@\[([0-9a-f-]{36})\]/g;
+    // Convert @DisplayName back to @[uuid] for storage
+    let content = trimmed;
     const mentions: string[] = [];
-    let match;
-    while ((match = mentionRegex.exec(trimmed)) !== null) {
-      mentions.push(match[1]);
+    for (const [name, id] of mentionsRef.current) {
+      const displayMention = `@${name}`;
+      if (content.includes(displayMention)) {
+        content = content.replaceAll(displayMention, `@[${id}]`);
+        mentions.push(id);
+      }
     }
 
     setSending(true);
-    const result = await sendMessage(conversationId, trimmed, mentions);
+    const result = await sendMessage(conversationId, content, mentions);
     if (result.error) {
       toast.error(result.error);
     } else if (result.message) {
       onMessageSent(result.message);
       setText("");
+      mentionsRef.current.clear();
     }
     setSending(false);
   }
@@ -94,9 +107,6 @@ export function MessageInput({
       handleSend();
     }
   }
-
-  // Display text with mention names for visual preview
-  const displayText = text;
 
   return (
     <div className="relative border-t px-3 py-2">
@@ -111,7 +121,7 @@ export function MessageInput({
       <div className="flex items-end gap-2">
         <textarea
           ref={textareaRef}
-          value={displayText}
+          value={text}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           placeholder="Type a message..."

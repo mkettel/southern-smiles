@@ -36,7 +36,11 @@ export function MessageBubble({
       parts.push(
         <span
           key={match.index}
-          className="bg-primary/15 text-primary font-medium rounded px-0.5"
+          className={
+            isOwn
+              ? "bg-primary-foreground/20 text-primary-foreground font-medium rounded px-0.5"
+              : "bg-primary/15 text-primary font-medium rounded px-0.5"
+          }
         >
           @{displayName}
         </span>

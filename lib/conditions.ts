@@ -28,10 +28,10 @@ export function calculateCondition(
   previousValue: number | null,
   goodDirection: GoodDirection = "up"
 ): ConditionResult {
-  // First entry ever — no comparison possible
+  // First entry ever — stat has no history yet
   if (previousValue === null) {
     return {
-      condition: "normal",
+      condition: "non_existence",
       percentChange: 0,
       direction: "flat",
     };

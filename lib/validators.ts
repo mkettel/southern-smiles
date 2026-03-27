@@ -1,7 +1,14 @@
 import { z } from "zod";
 
+// Relaxed UUID pattern — accepts any UUID-shaped string without enforcing
+// RFC 4122 version/variant bits (our seed data uses hand-crafted UUIDs).
+const uuidLike = z.string().regex(
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
+  "Invalid UUID"
+);
+
 export const statEntrySchema = z.object({
-  stat_id: z.string().uuid(),
+  stat_id: uuidLike,
   value: z.number().finite(),
   self_condition: z
     .enum(["affluence", "normal", "emergency", "danger", "non_existence"])
@@ -12,7 +19,7 @@ export const statEntrySchema = z.object({
 
 export const submitWeeklyStatsSchema = z.object({
   week_start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  profile_id: z.string().uuid().optional(),
+  profile_id: uuidLike.optional(),
   entries: z.array(statEntrySchema).min(1),
 });
 
@@ -44,7 +51,7 @@ export const divisionSchema = z.object({
 
 export const postSchema = z.object({
   title: z.string().min(1).max(100),
-  division_id: z.string().uuid(),
+  division_id: uuidLike,
 });
 
 export const statDefinitionSchema = z.object({
@@ -53,7 +60,7 @@ export const statDefinitionSchema = z.object({
   description: z.string().max(500).nullable().optional(),
   stat_type: z.enum(["dollar", "percentage", "count"]),
   good_direction: z.enum(["up", "down"]),
-  post_id: z.string().uuid(),
+  post_id: uuidLike,
   display_order: z.number().int().min(0).default(0),
 });
 
@@ -66,7 +73,7 @@ export const oicLogSchema = z.object({
 
 export const messageSchema = z.object({
   content: z.string().min(1, "Message cannot be empty").max(4000),
-  mentions: z.array(z.string().uuid()).default([]),
+  mentions: z.array(uuidLike).default([]),
 });
 
 export const channelSchema = z.object({

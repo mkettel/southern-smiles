@@ -224,7 +224,8 @@ export async function submitWeeklyStats(input: {
   // Validate input
   const parsed = submitWeeklyStatsSchema.safeParse(input);
   if (!parsed.success) {
-    const messages = parsed.error.issues.map((i) => i.message).join(", ");
+    const messages = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join(", ");
+    console.error("Validation failed:", JSON.stringify(parsed.error.issues));
     return { error: messages || "Validation failed" };
   }
 

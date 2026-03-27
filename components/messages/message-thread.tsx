@@ -15,7 +15,7 @@ interface MessageThreadProps {
   profile: Profile;
   practiceMembers: Profile[];
   onBack: () => void;
-  onNewMessage: (conversationId: string, preview: string) => void;
+  onNewMessage: (conversationId: string, preview: string, senderId?: string) => void;
   onRegisterRealtimeHandler: (handler: (message: Message) => void) => void;
   onUnregisterRealtimeHandler: () => void;
 }
@@ -107,7 +107,7 @@ export function MessageThread({
   const handleMessageSent = useCallback(
     (message: Message) => {
       setMessages((prev) => [...prev, message]);
-      onNewMessage(conversation.id, message.content);
+      onNewMessage(conversation.id, message.content, message.sender_id);
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
     },
     [conversation.id, onNewMessage]

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { MessageCircle } from "lucide-react";
 import { ChatSheet } from "./chat-sheet";
 import type { Profile, ConversationListItem } from "@/lib/types";
@@ -28,6 +28,7 @@ export function ChatWidget({
 }: ChatWidgetProps) {
   const [open, setOpen] = useState(false);
   const [size, setSize] = useState<ChatSize>("md");
+  const [unreadCount, setUnreadCount] = useState(unreadMessageCount);
 
   const isMac = typeof navigator !== "undefined" && navigator.userAgent.includes("Mac");
   const shortcutLabel = isMac ? "\u2318B" : "Ctrl+B";
@@ -44,31 +45,38 @@ export function ChatWidget({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  const handleUnreadCountChange = useCallback((count: number) => {
+    setUnreadCount(count);
+  }, []);
+
   const { w, h } = SIZES[size];
 
   return (
     <>
-      {/* Floating chat window */}
-      {open && (
-        <div
-          className="fixed bottom-16 right-4 z-50 flex flex-col rounded-xl border bg-background shadow-2xl overflow-hidden animate-in fade-in-0 slide-in-from-bottom-4 duration-200"
-          style={{
-            width: w,
-            height: h,
-            transition: "width 300ms ease, height 300ms ease",
-          }}
-        >
-          <ChatSheet
-            open={open}
-            onOpenChange={setOpen}
-            profile={profile}
-            initialConversations={initialConversations}
-            practiceMembers={practiceMembers}
-            size={size}
-            onSizeChange={setSize}
-          />
-        </div>
-      )}
+      {/* Floating chat window — always mounted, hidden when closed */}
+      <div
+        className={`fixed bottom-16 right-4 z-50 flex flex-col rounded-xl border bg-background shadow-2xl overflow-hidden transition-all duration-200 ${
+          open
+            ? "opacity-100 translate-y-0 pointer-events-auto"
+            : "opacity-0 translate-y-4 pointer-events-none"
+        }`}
+        style={{
+          width: w,
+          height: h,
+          transition: "width 300ms ease, height 300ms ease, opacity 200ms ease, transform 200ms ease",
+        }}
+      >
+        <ChatSheet
+          open={open}
+          onOpenChange={setOpen}
+          profile={profile}
+          initialConversations={initialConversations}
+          practiceMembers={practiceMembers}
+          size={size}
+          onSizeChange={setSize}
+          onUnreadCountChange={handleUnreadCountChange}
+        />
+      </div>
 
       {/* Floating button */}
       <button
@@ -77,9 +85,9 @@ export function ChatWidget({
       >
         <MessageCircle className="h-4 w-4" />
         <span>Messages</span>
-        {unreadMessageCount > 0 && (
+        {unreadCount > 0 && (
           <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-medium text-primary-foreground">
-            {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
+            {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
         <kbd className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">{shortcutLabel}</kbd>

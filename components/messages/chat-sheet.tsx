@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import { ConversationList } from "./conversation-list";
 import { MessageThread } from "./message-thread";
@@ -17,6 +17,7 @@ interface ChatSheetProps {
   practiceMembers: Profile[];
   size: ChatSize;
   onSizeChange: (size: ChatSize) => void;
+  onUnreadCountChange?: (count: number) => void;
 }
 
 export function ChatSheet({
@@ -27,6 +28,7 @@ export function ChatSheet({
   practiceMembers,
   size,
   onSizeChange,
+  onUnreadCountChange,
 }: ChatSheetProps) {
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [conversations, setConversations] = useState(initialConversations);
@@ -34,6 +36,12 @@ export function ChatSheet({
   openRef.current = open;
   const activeConvRef = useRef(activeConversationId);
   activeConvRef.current = activeConversationId;
+
+  // Sync total unread count up to the widget whenever conversations change
+  useEffect(() => {
+    const total = conversations.reduce((sum, c) => sum + c.unreadCount, 0);
+    onUnreadCountChange?.(total);
+  }, [conversations, onUnreadCountChange]);
 
   // Ref for pushing realtime messages into the active thread
   const threadMessageHandlerRef = useRef<((message: Message) => void) | null>(null);
@@ -67,10 +75,14 @@ export function ChatSheet({
   );
 
   const handleNewMessage = useCallback(
-    (conversationId: string, preview: string) => {
+    (conversationId: string, preview: string, senderId?: string) => {
       setConversations((prev) => {
+        const isOwnMessage = senderId === profile.id;
         const updated = prev.map((c) => {
           if (c.conversation.id !== conversationId) return c;
+          // Don't increment unread for own messages or if actively viewing the conversation
+          const shouldIncrementUnread =
+            !isOwnMessage && conversationId !== activeConvRef.current;
           return {
             ...c,
             conversation: {
@@ -80,16 +92,17 @@ export function ChatSheet({
             lastMessage: {
               id: "temp",
               conversation_id: conversationId,
-              sender_id: "",
+              sender_id: senderId ?? "",
               practice_id: "",
               content: preview,
               mentions: [],
               created_at: new Date().toISOString(),
             },
-            unreadCount:
-              conversationId === activeConvRef.current
+            unreadCount: shouldIncrementUnread
+              ? c.unreadCount + 1
+              : conversationId === activeConvRef.current
                 ? 0
-                : c.unreadCount + 1,
+                : c.unreadCount,
           };
         });
         return updated.sort(
@@ -99,7 +112,7 @@ export function ChatSheet({
         );
       });
     },
-    []
+    [profile.id]
   );
 
   // Build a profile lookup for enriching realtime messages
@@ -118,7 +131,7 @@ export function ChatSheet({
       };
 
       // Update conversation list
-      handleNewMessage(enriched.conversation_id, enriched.content);
+      handleNewMessage(enriched.conversation_id, enriched.content, enriched.sender_id);
 
       // If viewing this conversation, push message into the thread
       const isViewingConversation =

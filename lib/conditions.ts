@@ -28,12 +28,29 @@ export function calculateCondition(
   previousValue: number | null,
   goodDirection: GoodDirection = "up"
 ): ConditionResult {
-  // First entry or previous was zero — no meaningful comparison
-  if (previousValue === null || previousValue === 0) {
+  // First entry ever — no comparison possible
+  if (previousValue === null) {
     return {
       condition: "normal",
       percentChange: 0,
       direction: "flat",
+    };
+  }
+
+  // Previous was 0: can't compute % change, but the direction is meaningful
+  if (previousValue === 0) {
+    if (currentValue === 0) {
+      return { condition: "normal", percentChange: 0, direction: "flat" };
+    }
+    // Any move away from zero is treated as a large change
+    const direction = currentValue > 0 ? "up" : "down";
+    const isGood =
+      (goodDirection === "up" && currentValue > 0) ||
+      (goodDirection === "down" && currentValue < 0);
+    return {
+      condition: isGood ? "affluence" : "non_existence",
+      percentChange: currentValue > 0 ? 100 : -100,
+      direction,
     };
   }
 

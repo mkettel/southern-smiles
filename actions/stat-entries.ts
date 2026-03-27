@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentPracticeId } from "@/lib/practice";
 import { calculateCondition } from "@/lib/conditions";
 import { submitWeeklyStatsSchema } from "@/lib/validators";
-import { getCurrentWeekStart, getPreviousWeekStart } from "@/lib/constants";
+import { getCurrentWeekStart } from "@/lib/constants";
 import type { MyStatForEntry, OtherStatForEntry, StatEntry, Profile } from "@/lib/types";
 
 /**
@@ -22,7 +22,6 @@ export async function getMyStatsForWeek(
   if (!user) throw new Error("Unauthorized");
 
   const week = weekStart ?? getCurrentWeekStart();
-  const prevWeek = getPreviousWeekStart(week);
 
   // Get this user's assigned posts
   const { data: assignments } = await supabase
@@ -54,19 +53,27 @@ export async function getMyStatsForWeek(
     .eq("profile_id", user.id)
     .eq("week_start", week);
 
-  // Get previous week entries for THIS user for condition calculation
+  // Get the most recent prior entry for each stat (not just the immediate prior week)
   const { data: prevEntries } = await supabase
     .from("stat_entries")
     .select("*")
     .in("stat_id", statIds)
     .eq("profile_id", user.id)
-    .eq("week_start", prevWeek);
+    .lt("week_start", week)
+    .order("week_start", { ascending: false });
+
+  // Build a map of stat_id -> most recent prior value
+  const prevMap = new Map<string, number>();
+  for (const e of prevEntries ?? []) {
+    if (!prevMap.has(e.stat_id)) {
+      prevMap.set(e.stat_id, e.value);
+    }
+  }
 
   return stats.map((stat) => ({
     stat,
     post: stat.post,
-    previousValue:
-      prevEntries?.find((e) => e.stat_id === stat.id)?.value ?? null,
+    previousValue: prevMap.get(stat.id) ?? null,
     existingEntry:
       (currentEntries?.find((e) => e.stat_id === stat.id) as StatEntry) ?? null,
   }));
@@ -94,7 +101,6 @@ export async function getOtherStatsForWeek(
   if (profile?.role !== "admin") return [];
 
   const week = weekStart ?? getCurrentWeekStart();
-  const prevWeek = getPreviousWeekStart(week);
 
   // Get this user's assigned post IDs
   const { data: myAssignments } = await supabase
@@ -141,12 +147,22 @@ export async function getOtherStatsForWeek(
     .in("stat_id", otherStatIds)
     .eq("week_start", week);
 
-  // Get previous week entries for condition calculation
+  // Get most recent prior entries for condition calculation (not just immediate prior week)
   const { data: prevEntries } = await supabase
     .from("stat_entries")
     .select("stat_id, value, profile_id")
     .in("stat_id", otherStatIds)
-    .eq("week_start", prevWeek);
+    .lt("week_start", week)
+    .order("week_start", { ascending: false });
+
+  // Build map of (stat_id + profile_id) -> most recent prior value
+  const prevMap = new Map<string, number>();
+  for (const e of prevEntries ?? []) {
+    const key = `${e.stat_id}:${e.profile_id}`;
+    if (!prevMap.has(key)) {
+      prevMap.set(key, e.value);
+    }
+  }
 
   return otherStats.map((stat) => {
     const employee = postEmployeeMap.get(stat.post_id) ?? {
@@ -169,11 +185,8 @@ export async function getOtherStatsForWeek(
         (e) => e.stat_id === stat.id && e.profile_id === employee.id
       ) ?? null;
 
-    // Previous value from the assigned employee
-    const previousValue =
-      prevEntries?.find(
-        (e) => e.stat_id === stat.id && e.profile_id === employee.id
-      )?.value ?? null;
+    // Most recent prior value from the assigned employee
+    const previousValue = prevMap.get(`${stat.id}:${employee.id}`) ?? null;
 
     return {
       stat,
@@ -230,7 +243,6 @@ export async function submitWeeklyStats(input: {
   }
 
   const { week_start, entries } = parsed.data;
-  const prevWeek = getPreviousWeekStart(week_start);
 
   // Get stat definitions for condition calculation
   const statIds = entries.map((e) => e.stat_id);
@@ -239,15 +251,22 @@ export async function submitWeeklyStats(input: {
     .select("id, good_direction")
     .in("id", statIds);
 
-  // Get previous values for the TARGET user
+  // Get the most recent prior entries for the TARGET user (not just immediate prior week)
   const { data: prevEntries } = await supabase
     .from("stat_entries")
     .select("stat_id, value")
     .in("stat_id", statIds)
     .eq("profile_id", targetProfileId)
-    .eq("week_start", prevWeek);
+    .lt("week_start", week_start)
+    .order("week_start", { ascending: false });
 
-  const prevMap = new Map(prevEntries?.map((e) => [e.stat_id, e.value]) ?? []);
+  // Build map of stat_id -> most recent prior value
+  const prevMap = new Map<string, number>();
+  for (const e of prevEntries ?? []) {
+    if (!prevMap.has(e.stat_id)) {
+      prevMap.set(e.stat_id, e.value);
+    }
+  }
   const statMap = new Map(stats?.map((s) => [s.id, s]) ?? []);
 
   // Build upsert rows

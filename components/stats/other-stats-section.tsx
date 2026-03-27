@@ -117,6 +117,11 @@ export function OtherStatsSection({
       return;
     }
 
+    if (!statItem.employee.id) {
+      toast.error("No employee assigned to this post. Assign an employee first.");
+      return;
+    }
+
     setSavingStatId(statId);
     const result = await submitWeeklyStats({
       week_start: weekStart,

@@ -6,7 +6,7 @@ import {
   Text,
   StyleSheet,
 } from "@react-pdf/renderer";
-import { CONDITION_CONFIG, type ConditionName } from "@/lib/conditions";
+import { CONDITION_CONFIG, calculateCondition, type ConditionName } from "@/lib/conditions";
 import { formatStatValue, formatPercentChange, formatDelta } from "@/lib/utils";
 import type { DashboardStat, Profile, OicLogEntry } from "@/lib/types";
 import { format } from "date-fns";
@@ -245,12 +245,19 @@ export function WeeklyReport({
                 displayEntry?.final_condition ??
                 displayEntry?.auto_condition ??
                 null;
-              const delta =
-                hasCurrentData && previousEntry
-                  ? (currentEntry?.value ?? 0) - previousEntry.value
-                  : null;
-              const percentChange = hasCurrentData
-                ? (currentEntry?.percent_change ?? null)
+              const hasPrevious =
+                hasCurrentData &&
+                currentEntry?.previous_value !== null &&
+                currentEntry?.previous_value !== undefined;
+              const delta = hasPrevious
+                ? (currentEntry!.value ?? 0) - currentEntry!.previous_value!
+                : null;
+              const percentChange = hasPrevious
+                ? calculateCondition(
+                    currentEntry!.value,
+                    currentEntry!.previous_value!,
+                    stat.good_direction
+                  ).percentChange
                 : null;
 
               return (

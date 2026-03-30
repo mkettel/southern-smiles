@@ -7,6 +7,7 @@ import { ConditionDisplay } from "@/components/stats/condition-display";
 import { Sparkline } from "@/components/stats/sparkline";
 import { formatStatValue, formatPercentChange, formatDelta } from "@/lib/utils";
 import { StatName } from "@/components/stats/stat-name";
+import { calculateCondition } from "@/lib/conditions";
 import type { DashboardStat } from "@/lib/types";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 
@@ -30,15 +31,24 @@ export function StatCard({ data }: StatCardProps) {
     displayEntry?.auto_condition ??
     null;
 
-  // Delta: compare displayed entry against the one before it
-  // If showing current: delta = current - previous
-  // If showing previous (fallback): no delta to show
-  const delta =
-    hasCurrentData && previousEntry
-      ? (currentEntry?.value ?? 0) - previousEntry.value
-      : null;
+  // Compute delta and % change from the same stored previous_value
+  // so they can never disagree
+  const hasPrevious =
+    hasCurrentData &&
+    currentEntry?.previous_value !== null &&
+    currentEntry?.previous_value !== undefined;
 
-  const percentChange = hasCurrentData ? (currentEntry?.percent_change ?? null) : null;
+  const delta = hasPrevious
+    ? (currentEntry!.value ?? 0) - currentEntry!.previous_value!
+    : null;
+
+  const percentChange = hasPrevious
+    ? calculateCondition(
+        currentEntry!.value,
+        currentEntry!.previous_value!,
+        stat.good_direction
+      ).percentChange
+    : null;
 
   const TrendIcon =
     delta !== null
@@ -107,7 +117,7 @@ export function StatCard({ data }: StatCardProps) {
                 </p>
               ) : delta !== null ? (
                 <p className="text-xs text-muted-foreground">
-                  {formatDelta(delta, stat.stat_type)} vs week prior
+                  {formatDelta(delta, stat.stat_type)} vs prior week
                 </p>
               ) : null}
             </>

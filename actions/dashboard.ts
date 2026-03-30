@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentWeekStart, getPreviousWeekStart, getLastNWeeks } from "@/lib/constants";
+import { getCurrentWeekStart, getLastNWeeks } from "@/lib/constants";
 import type { DashboardStat, Profile } from "@/lib/types";
 
 /**
@@ -17,7 +17,6 @@ export async function getAdminDashboard(
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
   const week = weekStart ?? getCurrentWeekStart();
-  const prevWeek = getPreviousWeekStart(week);
   const sparklineWeeks = getLastNWeeks(week, 4);
 
   // Get all active stats with their post + division
@@ -83,19 +82,27 @@ export async function getAdminDashboard(
     // sum their values (for counts/dollars) to show the aggregate.
     // For single employee (current norm), this just returns their entry.
     const currentWeekEntries = statEntries.filter((e) => e.week_start === week);
-    const prevWeekEntries = statEntries.filter((e) => e.week_start === prevWeek);
+    // Find the most recent entry before the current week (not just immediate prior)
+    const priorEntries = statEntries
+      .filter((e) => e.week_start < week)
+      .sort((a, b) => b.week_start.localeCompare(a.week_start));
 
     let currentEntry = currentWeekEntries[0] ?? null;
-    let previousEntry = prevWeekEntries[0] ?? null;
+    let previousEntry = priorEntries[0] ?? null;
 
     // If multiple entries for same week, aggregate into the first entry object
     if (currentWeekEntries.length > 1) {
       const totalValue = currentWeekEntries.reduce((sum, e) => sum + Number(e.value), 0);
       currentEntry = { ...currentWeekEntries[0], value: totalValue };
     }
-    if (prevWeekEntries.length > 1) {
-      const totalValue = prevWeekEntries.reduce((sum, e) => sum + Number(e.value), 0);
-      previousEntry = { ...prevWeekEntries[0], value: totalValue };
+    // If multiple employees submitted for the same prior week, aggregate
+    if (previousEntry) {
+      const prevWeekStr = previousEntry.week_start;
+      const samePrevWeek = priorEntries.filter((e) => e.week_start === prevWeekStr);
+      if (samePrevWeek.length > 1) {
+        const totalValue = samePrevWeek.reduce((sum, e) => sum + Number(e.value), 0);
+        previousEntry = { ...samePrevWeek[0], value: totalValue };
+      }
     }
 
     // Sparkline: aggregate per week
@@ -138,7 +145,6 @@ export async function getEmployeeDashboard(
   if (!user) throw new Error("Unauthorized");
 
   const week = weekStart ?? getCurrentWeekStart();
-  const prevWeek = getPreviousWeekStart(week);
   const sparklineWeeks = getLastNWeeks(week, 4);
 
   // Get assigned posts
@@ -180,8 +186,11 @@ export async function getEmployeeDashboard(
   return stats.map((stat) => {
     const statEntries = entries?.filter((e) => e.stat_id === stat.id) ?? [];
     const currentEntry = statEntries.find((e) => e.week_start === week) ?? null;
+    // Find the most recent entry before the current week (not just immediate prior)
     const previousEntry =
-      statEntries.find((e) => e.week_start === prevWeek) ?? null;
+      [...statEntries]
+        .filter((e) => e.week_start < week)
+        .sort((a, b) => b.week_start.localeCompare(a.week_start))[0] ?? null;
 
     const sparklineData = sparklineWeeks.map((w) => ({
       week: w,

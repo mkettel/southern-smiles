@@ -139,6 +139,8 @@ export function MessageInput({
       </div>
       <p className="text-[10px] text-muted-foreground mt-1">
         Enter to send, Shift+Enter for new line. Type @ to mention.
+        <span className="mx-1">·</span>
+        <span className="text-destructive/70">Please do not share patient information here.</span>
       </p>
     </div>
   );

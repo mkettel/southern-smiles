@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { divisionSchema, postSchema, statDefinitionSchema } from "@/lib/validators";
+import { divisionSchema, postSchema, statDefinitionSchema, departmentSchema, sectionSchema } from "@/lib/validators";
 
 async function requireAdmin() {
   const supabase = await createClient();
@@ -48,7 +48,7 @@ export async function createDivision(input: { number: number; name: string }) {
 
 export async function updateDivision(
   id: string,
-  input: { number?: number; name?: string }
+  input: { number?: number; name?: string; executive?: string | null; vfp?: string | null; color?: string }
 ) {
   const { supabase } = await requireAdmin();
   const { error } = await supabase
@@ -65,20 +65,24 @@ export async function updateDivision(
 export async function deleteDivision(id: string) {
   const { supabase } = await requireAdmin();
 
-  // Check if division has posts
-  const { count } = await supabase
-    .from("posts")
-    .select("*", { count: "exact", head: true })
-    .eq("division_id", id);
+  // Check if division has posts or departments
+  const [{ count: postCount }, { count: deptCount }] = await Promise.all([
+    supabase.from("posts").select("*", { count: "exact", head: true }).eq("division_id", id),
+    supabase.from("departments").select("*", { count: "exact", head: true }).eq("division_id", id),
+  ]);
 
-  if (count && count > 0) {
+  if ((postCount ?? 0) > 0) {
     return { error: "Cannot delete a division that has posts. Remove or reassign posts first." };
+  }
+  if ((deptCount ?? 0) > 0) {
+    return { error: "Cannot delete a division that has departments. Remove departments first." };
   }
 
   const { error } = await supabase.from("divisions").delete().eq("id", id);
   if (error) return { error: error.message };
 
   revalidatePath("/admin/employees");
+  revalidatePath("/admin/organization");
   revalidatePath("/dashboard");
   return { success: true };
 }
@@ -372,5 +376,137 @@ export async function removePostAssignment(assignmentId: string) {
   if (error) return { error: error.message };
 
   revalidatePath("/admin/employees");
+  return { success: true };
+}
+
+// ============================================================
+// Departments
+// ============================================================
+
+export async function getDepartments() {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("departments")
+    .select("*, sections(*, post:posts(id, title))")
+    .order("display_order")
+    .order("display_order", { referencedTable: "sections" });
+  return data ?? [];
+}
+
+export async function createDepartment(input: {
+  name: string;
+  director?: string | null;
+  division_id: string;
+  display_order?: number;
+}) {
+  const { supabase, practiceId } = await requireAdmin();
+  const parsed = departmentSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
+
+  const { error } = await supabase.from("departments").insert({
+    ...parsed.data,
+    practice_id: practiceId,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/organization");
+  revalidatePath("/dashboard");
+  return { success: true };
+}
+
+export async function updateDepartment(
+  id: string,
+  input: { name?: string; director?: string | null; division_id?: string; display_order?: number }
+) {
+  const { supabase } = await requireAdmin();
+  const { error } = await supabase
+    .from("departments")
+    .update({ ...input, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/organization");
+  revalidatePath("/dashboard");
+  return { success: true };
+}
+
+export async function deleteDepartment(id: string) {
+  const { supabase } = await requireAdmin();
+
+  // Check if department has sections
+  const { count } = await supabase
+    .from("sections")
+    .select("*", { count: "exact", head: true })
+    .eq("department_id", id);
+
+  if ((count ?? 0) > 0) {
+    return { error: "Cannot delete a department that has sections. Remove sections first." };
+  }
+
+  const { error } = await supabase.from("departments").delete().eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/organization");
+  revalidatePath("/dashboard");
+  return { success: true };
+}
+
+// ============================================================
+// Sections
+// ============================================================
+
+export async function createSection(input: {
+  name: string;
+  assignee?: string | null;
+  department_id: string;
+  post_id?: string | null;
+  responsibilities?: string[];
+  display_order?: number;
+}) {
+  const { supabase, practiceId } = await requireAdmin();
+  const parsed = sectionSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
+
+  const { error } = await supabase.from("sections").insert({
+    ...parsed.data,
+    practice_id: practiceId,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/organization");
+  revalidatePath("/dashboard");
+  return { success: true };
+}
+
+export async function updateSection(
+  id: string,
+  input: {
+    name?: string;
+    assignee?: string | null;
+    department_id?: string;
+    post_id?: string | null;
+    responsibilities?: string[];
+    display_order?: number;
+  }
+) {
+  const { supabase } = await requireAdmin();
+  const { error } = await supabase
+    .from("sections")
+    .update({ ...input, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/organization");
+  revalidatePath("/dashboard");
+  return { success: true };
+}
+
+export async function deleteSection(id: string) {
+  const { supabase } = await requireAdmin();
+  const { error } = await supabase.from("sections").delete().eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/organization");
+  revalidatePath("/dashboard");
   return { success: true };
 }

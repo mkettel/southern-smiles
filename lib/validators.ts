@@ -47,6 +47,25 @@ export function getValidatorForStatType(statType: "dollar" | "percentage" | "cou
 export const divisionSchema = z.object({
   number: z.number().int().min(1),
   name: z.string().min(1).max(100),
+  executive: z.string().max(100).nullable().optional(),
+  vfp: z.string().max(500).nullable().optional(),
+  color: z.string().max(20).optional(),
+});
+
+export const departmentSchema = z.object({
+  name: z.string().min(1).max(100),
+  director: z.string().max(100).nullable().optional(),
+  division_id: uuidLike,
+  display_order: z.number().int().min(0).default(0),
+});
+
+export const sectionSchema = z.object({
+  name: z.string().min(1).max(100),
+  assignee: z.string().max(100).nullable().optional(),
+  department_id: uuidLike,
+  post_id: uuidLike.nullable().optional(),
+  responsibilities: z.array(z.string().max(200)).max(20).default([]),
+  display_order: z.number().int().min(0).default(0),
 });
 
 export const postSchema = z.object({

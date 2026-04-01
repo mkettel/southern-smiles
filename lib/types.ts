@@ -11,8 +11,37 @@ export interface Division {
   id: string;
   number: number;
   name: string;
+  executive: string | null;
+  vfp: string | null;
+  color: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface Department {
+  id: string;
+  name: string;
+  director: string | null;
+  division_id: string;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  sections?: Section[];
+}
+
+export interface Section {
+  id: string;
+  name: string;
+  assignee: string | null;
+  department_id: string;
+  post_id: string | null;
+  responsibilities: string[];
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  post?: Post;
 }
 
 export interface Post {

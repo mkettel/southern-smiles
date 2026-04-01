@@ -510,3 +510,50 @@ export async function deleteSection(id: string) {
   revalidatePath("/dashboard");
   return { success: true };
 }
+
+// ============================================================
+// Reordering & Reparenting
+// ============================================================
+
+export async function reorderItems(
+  table: "departments" | "sections",
+  items: { id: string; display_order: number }[]
+) {
+  const { supabase } = await requireAdmin();
+
+  // Update each item's display_order
+  for (const item of items) {
+    const { error } = await supabase
+      .from(table)
+      .update({ display_order: item.display_order, updated_at: new Date().toISOString() })
+      .eq("id", item.id);
+    if (error) return { error: error.message };
+  }
+
+  revalidatePath("/admin/organization");
+  return { success: true };
+}
+
+export async function moveDepartment(departmentId: string, newDivisionId: string) {
+  const { supabase } = await requireAdmin();
+  const { error } = await supabase
+    .from("departments")
+    .update({ division_id: newDivisionId, updated_at: new Date().toISOString() })
+    .eq("id", departmentId);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/organization");
+  return { success: true };
+}
+
+export async function moveSection(sectionId: string, newDepartmentId: string) {
+  const { supabase } = await requireAdmin();
+  const { error } = await supabase
+    .from("sections")
+    .update({ department_id: newDepartmentId, updated_at: new Date().toISOString() })
+    .eq("id", sectionId);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/organization");
+  return { success: true };
+}

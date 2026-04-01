@@ -30,7 +30,7 @@ export const orgBoardData: OrgDivision[] = [
   {
     number: 7,
     name: "Executive",
-    color: "#6b7280",
+    color: "#000000",
     executive: "Monzer Shakally",
     vfp: "Viable, Solvent Dental Office & Its Product",
     stats: ["Cash vs Bills", "% of Rising Stats", "Profit", "Total Reserves", "# of Patients Reactivated"],
@@ -59,7 +59,7 @@ export const orgBoardData: OrgDivision[] = [
   {
     number: 1,
     name: "Communication",
-    color: "#eab308",
+    color: "#14719c",
     executive: "Lesley P",
     vfp: "Established, Secure, Productive Personnel",
     stats: ["# Staff in Normal or Above", "Letters In/Out", "Bulk Mail Out"],
@@ -95,7 +95,7 @@ export const orgBoardData: OrgDivision[] = [
   {
     number: 2,
     name: "Sales",
-    color: "#f97316",
+    color: "#c44c11",
     executive: "Lesley G",
     vfp: "1- Income Greater than Outflow + Reserves, 2- Sold and Delivered Products",
     stats: ["# Consults", "Close %"],
@@ -123,7 +123,7 @@ export const orgBoardData: OrgDivision[] = [
   {
     number: 3,
     name: "Treasury",
-    color: "#22c55e",
+    color: "#1e5346",
     executive: "Lesley G",
     vfp: "Preserved and Valuable Assets and Preserves",
     stats: ["Collections"],
@@ -159,7 +159,7 @@ export const orgBoardData: OrgDivision[] = [
   {
     number: 4,
     name: "Production",
-    color: "#3b82f6",
+    color: "#193a6a",
     executive: "Monzer Shakally",
     vfp: "Correctly Treated Patients Who are Healthy and Happy",
     stats: ["% Appt Kept", "% Recall Appt Kept", "Total Production $"],
@@ -195,7 +195,7 @@ export const orgBoardData: OrgDivision[] = [
   {
     number: 5,
     name: "Qualifications",
-    color: "#a855f7",
+    color: "#d5901b",
     executive: "TBD",
     vfp: "Corrected Organization Products",
     stats: ["Collections/Staff", "# Positive Patient Reviews", "# Tech Hub Articles", "# Admin Hub Articles", "Staff Training Progress"],
@@ -226,7 +226,7 @@ export const orgBoardData: OrgDivision[] = [
   {
     number: 6,
     name: "Public",
-    color: "#ef4444",
+    color: "#b31e31",
     executive: "Lesley Galindo",
     vfp: "Expanded Acceptance and Use of Practice Services",
     stats: ["# of New Reaches", "# of New Patients", "# of Events", "# of Reviews"],

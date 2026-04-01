@@ -46,6 +46,7 @@ interface OrgManagerProps {
   departments: Department[];
   statsByPost: Record<string, string[]>;
   employeesByPost: Record<string, string[]>;
+  employees: { id: string; full_name: string }[];
 }
 
 export function OrgManager({
@@ -54,6 +55,7 @@ export function OrgManager({
   departments,
   statsByPost,
   employeesByPost,
+  employees,
 }: OrgManagerProps) {
   const [isPending, startTransition] = useTransition();
 
@@ -385,12 +387,17 @@ export function OrgManager({
                     />
                   </div>
                   <div className="flex items-center gap-2">
-                    <Input
-                      value={editDivExec}
-                      onChange={(e) => setEditDivExec(e.target.value)}
-                      className="flex-1 text-sm"
-                      placeholder="Executive (optional)"
-                    />
+                    <Select value={editDivExec || "__none__"} onValueChange={(v) => v && setEditDivExec(v === "__none__" ? "" : v)}>
+                      <SelectTrigger className="flex-1 text-sm">
+                        <span>{editDivExec || "No executive"}</span>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">No executive</SelectItem>
+                        {employees.map((e) => (
+                          <SelectItem key={e.id} value={e.full_name}>{e.full_name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <Input
                       value={editDivVfp}
                       onChange={(e) => setEditDivVfp(e.target.value)}
@@ -478,12 +485,17 @@ export function OrgManager({
                                 className="flex-1 text-sm"
                                 placeholder="Department name"
                               />
-                              <Input
-                                value={editDeptDirector}
-                                onChange={(e) => setEditDeptDirector(e.target.value)}
-                                className="w-40 text-sm"
-                                placeholder="Director (optional)"
-                              />
+                              <Select value={editDeptDirector || "__none__"} onValueChange={(v) => v && setEditDeptDirector(v === "__none__" ? "" : v)}>
+                                <SelectTrigger className="w-48 text-sm">
+                                  <span>{editDeptDirector || "No director"}</span>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none__">No director</SelectItem>
+                                  {employees.map((e) => (
+                                    <SelectItem key={e.id} value={e.full_name}>{e.full_name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                               <Button size="sm" variant="ghost" onClick={() => handleSaveDept(dept.id)} disabled={isPending}>
                                 <Check className="h-3.5 w-3.5" />
                               </Button>
@@ -555,12 +567,17 @@ export function OrgManager({
                                                 className="flex-1 text-sm"
                                                 placeholder="Section name"
                                               />
-                                              <Input
-                                                value={editSectionAssignee}
-                                                onChange={(e) => setEditSectionAssignee(e.target.value)}
-                                                className="w-40 text-sm"
-                                                placeholder="Assignee (optional)"
-                                              />
+                                              <Select value={editSectionAssignee || "__none__"} onValueChange={(v) => v && setEditSectionAssignee(v === "__none__" ? "" : v)}>
+                                                <SelectTrigger className="w-48 text-sm">
+                                                  <span>{editSectionAssignee || "No assignee"}</span>
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                  <SelectItem value="__none__">No assignee</SelectItem>
+                                                  {employees.map((e) => (
+                                                    <SelectItem key={e.id} value={e.full_name}>{e.full_name}</SelectItem>
+                                                  ))}
+                                                </SelectContent>
+                                              </Select>
                                             </div>
                                             <div className="flex items-center gap-2">
                                               <Select
@@ -767,13 +784,17 @@ export function OrgManager({
                                     autoFocus
                                     onKeyDown={(e) => { if (e.key === "Enter") handleAddSection(dept.id); }}
                                   />
-                                  <Input
-                                    value={newSectionAssignee}
-                                    onChange={(e) => setNewSectionAssignee(e.target.value)}
-                                    placeholder="Assignee (optional)"
-                                    className="w-36 text-sm"
-                                    onKeyDown={(e) => { if (e.key === "Enter") handleAddSection(dept.id); }}
-                                  />
+                                  <Select value={newSectionAssignee || "__none__"} onValueChange={(v) => v && setNewSectionAssignee(v === "__none__" ? "" : v)}>
+                                    <SelectTrigger className="w-48 text-sm">
+                                      <span>{newSectionAssignee || "Assignee (optional)"}</span>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="__none__">No assignee</SelectItem>
+                                      {employees.map((e) => (
+                                        <SelectItem key={e.id} value={e.full_name}>{e.full_name}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
                                   <Button size="sm" variant="ghost" onClick={() => handleAddSection(dept.id)} disabled={isPending || !newSectionName.trim()}>
                                     <Check className="h-3.5 w-3.5" />
                                   </Button>
@@ -813,13 +834,17 @@ export function OrgManager({
                         autoFocus
                         onKeyDown={(e) => { if (e.key === "Enter") handleAddDept(div.id); }}
                       />
-                      <Input
-                        value={newDeptDirector}
-                        onChange={(e) => setNewDeptDirector(e.target.value)}
-                        placeholder="Director (optional)"
-                        className="w-40 text-sm"
-                        onKeyDown={(e) => { if (e.key === "Enter") handleAddDept(div.id); }}
-                      />
+                      <Select value={newDeptDirector || "__none__"} onValueChange={(v) => v && setNewDeptDirector(v === "__none__" ? "" : v)}>
+                        <SelectTrigger className="w-48 text-sm">
+                          <span>{newDeptDirector || "Director (optional)"}</span>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">No director</SelectItem>
+                          {employees.map((e) => (
+                            <SelectItem key={e.id} value={e.full_name}>{e.full_name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <Button size="sm" variant="ghost" onClick={() => handleAddDept(div.id)} disabled={isPending || !newDeptName.trim()}>
                         <Check className="h-3.5 w-3.5" />
                       </Button>

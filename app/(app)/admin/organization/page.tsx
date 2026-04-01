@@ -20,7 +20,7 @@ export default async function OrganizationPage() {
   const postIds = (posts as Post[]).map((p) => p.id);
   const safePostIds = postIds.length > 0 ? postIds : [""];
 
-  const [{ data: statData }, { data: assignData }] = await Promise.all([
+  const [{ data: statData }, { data: assignData }, { data: employeeList }] = await Promise.all([
     supabase
       .from("stats")
       .select("post_id, name")
@@ -30,6 +30,11 @@ export default async function OrganizationPage() {
       .from("employee_posts")
       .select("post_id, profile:profiles(full_name)")
       .in("post_id", safePostIds),
+    supabase
+      .from("profiles")
+      .select("id, full_name")
+      .eq("is_active", true)
+      .order("full_name"),
   ]);
 
   // Group stat names by post
@@ -63,6 +68,7 @@ export default async function OrganizationPage() {
         departments={departments as Department[]}
         statsByPost={statsByPost}
         employeesByPost={employeesByPost}
+        employees={employeeList ?? []}
       />
     </div>
   );

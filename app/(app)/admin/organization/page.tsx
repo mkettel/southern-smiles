@@ -1,22 +1,26 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "@/actions/auth";
-import { getDivisions, getPosts } from "@/actions/admin";
+import { getDivisions, getPosts, getDepartments } from "@/actions/admin";
 import { createClient } from "@/lib/supabase/server";
 import { OrgManager } from "@/components/admin/org-manager";
-import type { Division, Post } from "@/lib/types";
+import type { Division, Post, Department } from "@/lib/types";
 
 export default async function OrganizationPage() {
   const profile = await getProfile();
   if (!profile) redirect("/login");
   if (profile.role !== "admin") redirect("/dashboard");
 
-  const [divisions, posts] = await Promise.all([getDivisions(), getPosts()]);
+  const [divisions, posts, departments] = await Promise.all([
+    getDivisions(),
+    getPosts(),
+    getDepartments(),
+  ]);
 
   const supabase = await createClient();
   const postIds = (posts as Post[]).map((p) => p.id);
   const safePostIds = postIds.length > 0 ? postIds : [""];
 
-  const [{ data: statData }, { data: assignData }] = await Promise.all([
+  const [{ data: statData }, { data: assignData }, { data: employeeList }] = await Promise.all([
     supabase
       .from("stats")
       .select("post_id, name")
@@ -26,6 +30,11 @@ export default async function OrganizationPage() {
       .from("employee_posts")
       .select("post_id, profile:profiles(full_name)")
       .in("post_id", safePostIds),
+    supabase
+      .from("profiles")
+      .select("id, full_name")
+      .eq("is_active", true)
+      .order("full_name"),
   ]);
 
   // Group stat names by post
@@ -45,19 +54,21 @@ export default async function OrganizationPage() {
   });
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
+    <div className="space-y-6 max-w-4xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold">Organization</h1>
         <p className="text-muted-foreground">
-          View your org structure as a tree. Rename or renumber divisions, edit post names, or move posts between divisions
+          Manage your org structure: divisions, departments, sections, posts, and stats
         </p>
       </div>
 
       <OrgManager
         divisions={divisions as Division[]}
         posts={posts as Post[]}
+        departments={departments as Department[]}
         statsByPost={statsByPost}
         employeesByPost={employeesByPost}
+        employees={employeeList ?? []}
       />
     </div>
   );

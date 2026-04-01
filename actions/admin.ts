@@ -43,6 +43,7 @@ export async function createDivision(input: { number: number; name: string }) {
   if (error) return { error: error.message };
 
   revalidatePath("/admin/divisions");
+  revalidatePath("/admin/organization");
   return { success: true };
 }
 

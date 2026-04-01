@@ -12,6 +12,7 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import {
+  createDivision,
   updateDivision,
   deleteDivision,
   updatePost,
@@ -108,6 +109,11 @@ export function OrgManager({
   // Linking an unlinked post to a section
   const [linkingPostId, setLinkingPostId] = useState<string | null>(null);
 
+  // Adding new division
+  const [addingDiv, setAddingDiv] = useState(false);
+  const [newDivName, setNewDivName] = useState("");
+  const [newDivNumber, setNewDivNumber] = useState("");
+
   // Toggle helpers
   function toggle(set: Set<string>, setFn: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) {
     setFn((prev) => {
@@ -154,6 +160,24 @@ export function OrgManager({
         toast.error(typeof result.error === "string" ? result.error : "Failed");
       } else {
         toast.success("Division deleted");
+      }
+    });
+  }
+
+  function handleAddDiv() {
+    if (!newDivName.trim() || !newDivNumber.trim()) return;
+    startTransition(async () => {
+      const result = await createDivision({
+        number: parseInt(newDivNumber),
+        name: newDivName.trim(),
+      });
+      if (result.error) {
+        toast.error(typeof result.error === "string" ? result.error : "Failed");
+      } else {
+        toast.success("Division created");
+        setAddingDiv(false);
+        setNewDivName("");
+        setNewDivNumber("");
       }
     });
   }
@@ -1031,7 +1055,42 @@ export function OrgManager({
         );
       })}
 
-      {sortedDivisions.length === 0 && (
+      {/* Add division */}
+      {addingDiv ? (
+        <div className="flex items-center gap-2 py-2 px-2 rounded-md bg-muted/30">
+          <Input
+            value={newDivNumber}
+            onChange={(e) => setNewDivNumber(e.target.value)}
+            className="w-16 text-sm"
+            type="number"
+            min="1"
+            placeholder="#"
+            autoFocus
+          />
+          <Input
+            value={newDivName}
+            onChange={(e) => setNewDivName(e.target.value)}
+            className="flex-1 text-sm"
+            placeholder="Division name"
+            onKeyDown={(e) => { if (e.key === "Enter") handleAddDiv(); }}
+          />
+          <Button size="sm" variant="ghost" onClick={handleAddDiv} disabled={isPending || !newDivName.trim() || !newDivNumber.trim()}>
+            <Check className="h-3.5 w-3.5" />
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => { setAddingDiv(false); setNewDivName(""); setNewDivNumber(""); }}>
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setAddingDiv(true)}
+          className="py-2 px-2 text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+        >
+          <Plus className="h-3.5 w-3.5" /> Add division
+        </button>
+      )}
+
+      {sortedDivisions.length === 0 && !addingDiv && (
         <p className="text-center py-8 text-muted-foreground">
           No divisions configured.
         </p>

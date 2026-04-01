@@ -105,6 +105,9 @@ export function OrgManager({
   const [editPostTitle, setEditPostTitle] = useState("");
   const [editPostDivId, setEditPostDivId] = useState("");
 
+  // Linking an unlinked post to a section
+  const [linkingPostId, setLinkingPostId] = useState<string | null>(null);
+
   // Toggle helpers
   function toggle(set: Set<string>, setFn: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) {
     setFn((prev) => {
@@ -319,6 +322,20 @@ export function OrgManager({
     });
   }
 
+  // ── Link post to section handler ────────────────────────────
+
+  function handleLinkPostToSection(sectionId: string, postId: string) {
+    startTransition(async () => {
+      const result = await updateSection(sectionId, { post_id: postId });
+      if (result.error) {
+        toast.error(typeof result.error === "string" ? result.error : "Failed to link post");
+      } else {
+        toast.success("Post linked to section");
+        setLinkingPostId(null);
+      }
+    });
+  }
+
   // ── Derived data ───────────────────────────────────────────
 
   const sortedDivisions = [...divisions].sort((a, b) => a.number - b.number);
@@ -335,6 +352,18 @@ export function OrgManager({
   for (const dept of departments) {
     for (const sec of dept.sections ?? []) {
       if (sec.post_id) linkedPostIds.add(sec.post_id);
+    }
+  }
+
+  // Sections without a linked post, grouped by division
+  const unlinkedSectionsByDivision: Record<string, { id: string; name: string; deptName: string }[]> = {};
+  for (const dept of departments) {
+    for (const sec of dept.sections ?? []) {
+      if (!sec.post_id) {
+        const divId = dept.division_id;
+        if (!unlinkedSectionsByDivision[divId]) unlinkedSectionsByDivision[divId] = [];
+        unlinkedSectionsByDivision[divId].push({ id: sec.id, name: sec.name, deptName: dept.name });
+      }
     }
   }
 
@@ -878,6 +907,9 @@ export function OrgManager({
                         const postStats = statsByPost[post.id] ?? [];
                         const postEmployees = employeesByPost[post.id] ?? [];
 
+                        const availableSections = unlinkedSectionsByDivision[div.id] ?? [];
+                        const isLinkingThis = linkingPostId === post.id;
+
                         return (
                           <div key={post.id} className="group/post py-1.5 px-2 rounded-md hover:bg-muted/20 transition-colors">
                             {isEditingThisPost ? (
@@ -911,37 +943,80 @@ export function OrgManager({
                                 </Button>
                               </div>
                             ) : (
-                              <div className="flex items-start gap-2">
-                                <div className="flex-1 min-w-0">
-                                  <span className="text-sm font-medium">{post.title}</span>
-                                  {postEmployees.length > 0 && (
-                                    <div className="flex items-center gap-1 mt-0.5">
-                                      <User className="h-3 w-3 text-muted-foreground shrink-0" />
-                                      <span className="text-xs text-muted-foreground">{postEmployees.join(", ")}</span>
-                                    </div>
-                                  )}
-                                  {postStats.length > 0 && (
-                                    <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                                      <BarChart3 className="h-3 w-3 text-muted-foreground shrink-0" />
-                                      {postStats.map((s) => (
-                                        <Badge key={s} variant="outline" className="text-[9px] px-1.5 py-0">{s}</Badge>
-                                      ))}
-                                    </div>
-                                  )}
+                              <div>
+                                <div className="flex items-start gap-2">
+                                  <div className="flex-1 min-w-0">
+                                    <span className="text-sm font-medium">{post.title}</span>
+                                    {postEmployees.length > 0 && (
+                                      <div className="flex items-center gap-1 mt-0.5">
+                                        <User className="h-3 w-3 text-muted-foreground shrink-0" />
+                                        <span className="text-xs text-muted-foreground">{postEmployees.join(", ")}</span>
+                                      </div>
+                                    )}
+                                    {postStats.length > 0 && (
+                                      <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                                        <BarChart3 className="h-3 w-3 text-muted-foreground shrink-0" />
+                                        {postStats.map((s) => (
+                                          <Badge key={s} variant="outline" className="text-[9px] px-1.5 py-0">{s}</Badge>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-0.5 opacity-0 group-hover/post:opacity-100 transition-opacity shrink-0">
+                                    {availableSections.length > 0 && (
+                                      <button
+                                        onClick={() => setLinkingPostId(isLinkingThis ? null : post.id)}
+                                        className={cn(
+                                          "p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors",
+                                          isLinkingThis && "bg-muted text-foreground"
+                                        )}
+                                        title="Link to a section"
+                                      >
+                                        <Link2 className="h-3 w-3" />
+                                      </button>
+                                    )}
+                                    <button onClick={() => startEditPost(post)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+                                      <Pencil className="h-3 w-3" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeletePost(post.id)}
+                                      disabled={isPending || postStats.length > 0 || postEmployees.length > 0}
+                                      className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-destructive transition-colors disabled:opacity-30"
+                                      title={postStats.length > 0 || postEmployees.length > 0 ? "Remove stats and assignments first" : "Delete post"}
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </button>
+                                  </div>
                                 </div>
-                                <div className="flex items-center gap-0.5 opacity-0 group-hover/post:opacity-100 transition-opacity shrink-0">
-                                  <button onClick={() => startEditPost(post)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
-                                    <Pencil className="h-3 w-3" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeletePost(post.id)}
-                                    disabled={isPending || postStats.length > 0 || postEmployees.length > 0}
-                                    className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-destructive transition-colors disabled:opacity-30"
-                                    title={postStats.length > 0 || postEmployees.length > 0 ? "Remove stats and assignments first" : "Delete post"}
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </button>
-                                </div>
+
+                                {/* Link to section picker */}
+                                {isLinkingThis && (
+                                  <div className="mt-2 ml-0.5 flex items-center gap-2">
+                                    <Select
+                                      value="__pick__"
+                                      onValueChange={(v) => {
+                                        if (v && v !== "__pick__") {
+                                          handleLinkPostToSection(v, post.id);
+                                        }
+                                      }}
+                                    >
+                                      <SelectTrigger className="flex-1 text-sm">
+                                        <span className="text-muted-foreground">Select a section...</span>
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="__pick__" disabled>Select a section...</SelectItem>
+                                        {availableSections.map((sec) => (
+                                          <SelectItem key={sec.id} value={sec.id}>
+                                            {sec.deptName} &rarr; {sec.name}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <Button size="sm" variant="ghost" onClick={() => setLinkingPostId(null)}>
+                                      <X className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/actions/auth";
 import { getDivisions, getPosts, getDepartments } from "@/actions/admin";
 import { createClient } from "@/lib/supabase/server";
-import { OrgManager } from "@/components/admin/org-manager";
+import { OrgViewer } from "@/components/admin/org/org-viewer";
 import type { Division, Post, Department } from "@/lib/types";
 
 export default async function OrganizationPage() {
@@ -37,19 +37,16 @@ export default async function OrganizationPage() {
       .order("full_name"),
   ]);
 
-  // Group stat names by post
   const statsByPost: Record<string, string[]> = {};
   statData?.forEach((s) => {
     if (!statsByPost[s.post_id]) statsByPost[s.post_id] = [];
     statsByPost[s.post_id].push(s.name);
   });
 
-  // Group employee names by post
   const employeesByPost: Record<string, string[]> = {};
   assignData?.forEach((a) => {
     if (!employeesByPost[a.post_id]) employeesByPost[a.post_id] = [];
-    const name = (a.profile as unknown as { full_name: string } | null)
-      ?.full_name;
+    const name = (a.profile as unknown as { full_name: string } | null)?.full_name;
     if (name) employeesByPost[a.post_id].push(name);
   });
 
@@ -62,7 +59,8 @@ export default async function OrganizationPage() {
         </p>
       </div>
 
-      <OrgManager
+      <OrgViewer
+        isAdmin={true}
         divisions={divisions as Division[]}
         posts={posts as Post[]}
         departments={departments as Department[]}

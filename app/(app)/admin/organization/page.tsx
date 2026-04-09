@@ -67,6 +67,7 @@ export default async function OrganizationPage() {
         statsByPost={statsByPost}
         employeesByPost={employeesByPost}
         employees={employeeList ?? []}
+        currentUserName={profile.full_name}
       />
     </div>
   );

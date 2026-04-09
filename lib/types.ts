@@ -195,6 +195,11 @@ export interface ConversationListItem {
 // Composite / view types for the UI
 // ============================================================
 
+export interface ContributorEntry {
+  profileName: string;
+  value: number;
+}
+
 export interface DashboardStat {
   stat: Stat;
   post: Post;
@@ -203,6 +208,8 @@ export interface DashboardStat {
   currentEntry: StatEntry | null;
   previousEntry: StatEntry | null;
   sparklineData: { week: string; value: number }[];
+  /** Individual contributor values when multiple employees submit for the same week */
+  contributors?: ContributorEntry[];
 }
 
 export interface MyStatForEntry {

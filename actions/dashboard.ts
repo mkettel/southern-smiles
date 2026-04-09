@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentWeekStart, getLastNWeeks } from "@/lib/constants";
-import type { DashboardStat, Profile } from "@/lib/types";
+import type { ContributorEntry, DashboardStat, Profile } from "@/lib/types";
 
 /**
  * Get dashboard data: all stats with current/previous entries and sparklines.
@@ -105,6 +105,12 @@ export async function getAdminDashboard(
       }
     }
 
+    // Sync previous_value on the current entry to match the aggregated previous total
+    // so the stat card's % change calculation uses the correct base
+    if (currentEntry && previousEntry) {
+      currentEntry = { ...currentEntry, previous_value: previousEntry.value };
+    }
+
     // Sparkline: aggregate per week
     const sparklineData = sparklineWeeks.map((w) => {
       const weekEntries = statEntries.filter((e) => e.week_start === w);
@@ -120,6 +126,15 @@ export async function getAdminDashboard(
           full_name: employees.map((e) => e.full_name).join(", "),
         };
 
+    // Build contributor breakdown when multiple entries exist for the current week
+    let contributors: ContributorEntry[] | undefined;
+    if (currentWeekEntries.length > 1) {
+      contributors = currentWeekEntries.map((e) => ({
+        profileName: (e.profile as unknown as Profile)?.full_name ?? "Unknown",
+        value: Number(e.value),
+      }));
+    }
+
     return {
       stat,
       post: stat.post,
@@ -128,6 +143,7 @@ export async function getAdminDashboard(
       currentEntry,
       previousEntry,
       sparklineData,
+      contributors,
     } as DashboardStat;
   });
 }

@@ -16,7 +16,7 @@ interface StatCardProps {
 }
 
 export function StatCard({ data }: StatCardProps) {
-  const { stat, post, employee, currentEntry, previousEntry, sparklineData } =
+  const { stat, post, employee, currentEntry, previousEntry, sparklineData, contributors } =
     data;
 
   // If current week has no data, fall back to showing previous week's data
@@ -120,6 +120,15 @@ export function StatCard({ data }: StatCardProps) {
                   {formatDelta(delta, stat.stat_type)} vs prior week
                 </p>
               ) : null}
+              {contributors && contributors.length > 1 && (
+                <div className="mt-1 space-y-0.5">
+                  {contributors.map((c, i) => (
+                    <p key={i} className="text-xs text-muted-foreground">
+                      {c.profileName}: {formatStatValue(c.value, stat.stat_type)}
+                    </p>
+                  ))}
+                </div>
+              )}
             </>
           ) : (
             <div className="text-sm text-muted-foreground italic py-2">

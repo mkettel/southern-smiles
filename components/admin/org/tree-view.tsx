@@ -33,7 +33,7 @@ interface TreeViewProps extends OrgData {
   editing: OrgEditingState;
 }
 
-export function TreeView({ divisions, posts, departments, statsByPost, employeesByPost, employees, isEditing, editing }: TreeViewProps) {
+export function TreeView({ divisions, posts, departments, statsByPost, employeesByPost, employees, currentUserName, isEditing, editing }: TreeViewProps) {
   const [expandedDivs, setExpandedDivs] = useState<Set<string>>(new Set(divisions.map((d) => d.id)));
   const [expandedDepts, setExpandedDepts] = useState<Set<string>>(new Set(departments.map((d) => d.id)));
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
@@ -82,11 +82,12 @@ export function TreeView({ divisions, posts, departments, statsByPost, employees
         const isExpanded = expandedDivs.has(div.id);
         const isEditingThis = editing.editingDiv === div.id;
         const childCount = divDepts.length + divPosts.length;
+        const isCurrentUserDiv = !!currentUserName && div.executive === currentUserName;
 
         return (
           <div key={div.id}>
             {/* Division row */}
-            <div className="group flex items-center gap-1.5 py-2 px-2 rounded-md hover:bg-muted/50 transition-colors">
+            <div className={cn("group flex items-center gap-1.5 py-2 px-2 rounded-md hover:bg-muted/50 transition-colors", isCurrentUserDiv && "ring-1 ring-primary/40 bg-primary/5")}>
               <button
                 onClick={() => toggle(expandedDivs, setExpandedDivs, div.id)}
                 className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
@@ -155,6 +156,7 @@ export function TreeView({ divisions, posts, departments, statsByPost, employees
                     toggleSection={(id) => toggle(expandedSections, setExpandedSections, id)}
                     isEditing={isEditing}
                     editing={editing}
+                    currentUserName={currentUserName}
                   />
                 ))}
 
@@ -242,7 +244,7 @@ export function TreeView({ divisions, posts, departments, statsByPost, employees
 function DepartmentNode({
   dept, div, posts, employees, statsByPost, employeesByPost,
   expandedDepts, toggleDept, expandedSections, toggleSection,
-  isEditing, editing,
+  isEditing, editing, currentUserName,
 }: {
   dept: Department;
   div: Division;
@@ -256,17 +258,19 @@ function DepartmentNode({
   toggleSection: (id: string) => void;
   isEditing: boolean;
   editing: OrgEditingState;
+  currentUserName?: string;
 }) {
   const deptSections = dept.sections ?? [];
   const isDeptExpanded = expandedDepts.has(dept.id);
   const isEditingThisDept = editing.editingDept === dept.id;
+  const isCurrentUserDept = !!currentUserName && dept.director === currentUserName;
 
   return (
     <div className="relative">
       <div className="absolute left-0 top-[18px] w-4 border-t border-border" />
       <div className="ml-4">
         {/* Department row */}
-        <div className="group/dept flex items-center gap-1.5 py-2 px-2 rounded-md hover:bg-muted/30 transition-colors">
+        <div className={cn("group/dept flex items-center gap-1.5 py-2 px-2 rounded-md hover:bg-muted/30 transition-colors", isCurrentUserDept && "ring-1 ring-primary/40 bg-primary/5")}>
           <button onClick={() => toggleDept(dept.id)} className="text-muted-foreground hover:text-foreground transition-colors shrink-0">
             {isDeptExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
           </button>
@@ -318,6 +322,7 @@ function DepartmentNode({
                 toggleSection={toggleSection}
                 isEditing={isEditing}
                 editing={editing}
+                currentUserName={currentUserName}
               />
             ))}
 
@@ -359,7 +364,7 @@ function DepartmentNode({
 
 function SectionNode({
   sec, posts, employees, statsByPost, employeesByPost,
-  expandedSections, toggleSection, isEditing, editing,
+  expandedSections, toggleSection, isEditing, editing, currentUserName,
 }: {
   sec: Section;
   posts: Post[];
@@ -370,6 +375,7 @@ function SectionNode({
   toggleSection: (id: string) => void;
   isEditing: boolean;
   editing: OrgEditingState;
+  currentUserName?: string;
 }) {
   const isSectionExpanded = expandedSections.has(sec.id);
   const isEditingThisSection = editing.editingSection === sec.id;
@@ -377,12 +383,15 @@ function SectionNode({
   const linkedPost = sec.post_id ? posts.find((p) => p.id === sec.post_id) : null;
   const postStats = sec.post_id ? (statsByPost[sec.post_id] ?? []) : [];
   const postEmployees = sec.post_id ? (employeesByPost[sec.post_id] ?? []) : [];
+  const isCurrentUserSection = !!currentUserName && (
+    sec.assignee === currentUserName || postEmployees.includes(currentUserName)
+  );
 
   return (
     <div className="relative">
       <div className="absolute left-0 top-[18px] w-4 border-t border-border" />
       <div className="ml-4">
-        <div className="group/sec py-2 px-2 rounded-md hover:bg-muted/20 transition-colors">
+        <div className={cn("group/sec py-2 px-2 rounded-md hover:bg-muted/20 transition-colors", isCurrentUserSection && "ring-1 ring-primary/40 bg-primary/5")}>
           <div className="flex items-start gap-1.5">
             <button onClick={() => toggleSection(sec.id)} className="text-muted-foreground hover:text-foreground transition-colors shrink-0 mt-0.5">
               {isSectionExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { Fragment, useState, useMemo } from "react";
 import { StatHistoryChart } from "@/components/stats/stat-history-chart";
 import { ConditionDisplay } from "@/components/stats/condition-display";
 import { formatStatValue, formatPercentChange } from "@/lib/utils";
@@ -22,7 +22,9 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatName } from "@/components/stats/stat-name";
 import type { StatEntry, StatType, OicLogEntry } from "@/lib/types";
-import { ChevronRight, MessageSquareText } from "lucide-react";
+import { calculateCondition } from "@/lib/conditions";
+import type { ConditionName } from "@/lib/conditions";
+import { ChevronRight, MessageSquareText, Users } from "lucide-react";
 
 interface StatDetailViewProps {
   statName: string;
@@ -33,6 +35,16 @@ interface StatDetailViewProps {
   postTitle: string;
   entries: StatEntry[];
   oicEntries?: OicLogEntry[];
+}
+
+/** A single week's data: aggregated total + individual contributor entries */
+interface WeekGroup {
+  weekStart: string;
+  totalValue: number;
+  entries: StatEntry[];
+  condition: ConditionName | null;
+  percentChange: number | null;
+  playbookResponse: string | null;
 }
 
 export function StatDetailView({
@@ -57,12 +69,79 @@ export function StatDetailView({
 
   const hasMultipleEmployees = employees.length > 1;
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("all");
-  const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
+  const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set());
+  const [expandedPlaybooks, setExpandedPlaybooks] = useState<Set<string>>(
+    new Set()
+  );
 
   const filteredEntries = useMemo(() => {
     if (selectedEmployeeId === "all") return entries;
     return entries.filter((e) => e.profile_id === selectedEmployeeId);
   }, [entries, selectedEmployeeId]);
+
+  /** Group entries by week, aggregate values, and recompute % change from aggregated totals */
+  const weekGroups = useMemo((): WeekGroup[] => {
+    const byWeek = new Map<string, StatEntry[]>();
+    for (const entry of filteredEntries) {
+      const list = byWeek.get(entry.week_start) ?? [];
+      list.push(entry);
+      byWeek.set(entry.week_start, list);
+    }
+
+    // Sort weeks newest-first, but we need chronological order to compute % change
+    const weeksSorted = Array.from(byWeek.entries()).sort(([a], [b]) =>
+      a.localeCompare(b)
+    );
+
+    const groups: WeekGroup[] = [];
+    let previousTotal: number | null = null;
+
+    for (const [weekStart, weekEntries] of weeksSorted) {
+      const sorted = [...weekEntries].sort((a, b) =>
+        b.submitted_at.localeCompare(a.submitted_at)
+      );
+      const latest = sorted[0];
+      const totalValue = weekEntries.reduce(
+        (sum, e) => sum + Number(e.value),
+        0
+      );
+
+      // Recalculate % change and condition from aggregated totals
+      const result = calculateCondition(totalValue, previousTotal, goodDirection);
+
+      groups.push({
+        weekStart,
+        totalValue,
+        entries: weekEntries,
+        condition: previousTotal !== null ? result.condition : (latest.final_condition ?? latest.auto_condition ?? null),
+        percentChange: previousTotal !== null ? result.percentChange : null,
+        playbookResponse: latest.playbook_response ?? null,
+      });
+
+      previousTotal = totalValue;
+    }
+
+    // Return newest-first for display
+    return groups.reverse();
+  }, [filteredEntries, goodDirection]);
+
+  /** Aggregated data for the chart — one point per week with summed values */
+  const aggregatedChartEntries = useMemo((): StatEntry[] => {
+    return weekGroups
+      .map((wg) => {
+        const latest = [...wg.entries].sort((a, b) =>
+          b.submitted_at.localeCompare(a.submitted_at)
+        )[0];
+        return {
+          ...latest,
+          value: wg.totalValue,
+        };
+      })
+      .sort(
+        (a, b) =>
+          new Date(a.week_start).getTime() - new Date(b.week_start).getTime()
+      );
+  }, [weekGroups]);
 
   const currentEmployeeName =
     employees.length === 1
@@ -71,19 +150,32 @@ export function StatDetailView({
         ? employees.find((e) => e.id === selectedEmployeeId)?.name
         : null;
 
-  function toggleExpand(entryId: string) {
-    setExpandedEntries((prev) => {
+  function toggleWeekExpand(weekStart: string) {
+    setExpandedWeeks((prev) => {
       const next = new Set(prev);
-      if (next.has(entryId)) {
-        next.delete(entryId);
+      if (next.has(weekStart)) {
+        next.delete(weekStart);
       } else {
-        next.add(entryId);
+        next.add(weekStart);
       }
       return next;
     });
   }
 
-  const colCount = 4 + (hasMultipleEmployees ? 1 : 0);
+  function togglePlaybook(weekStart: string) {
+    setExpandedPlaybooks((prev) => {
+      const next = new Set(prev);
+      if (next.has(weekStart)) {
+        next.delete(weekStart);
+      } else {
+        next.add(weekStart);
+      }
+      return next;
+    });
+  }
+
+  const showingAllEmployees = selectedEmployeeId === "all";
+  const colCount = 6; // chevron, week, entered by, value, change, condition
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -130,9 +222,9 @@ export function StatDetailView({
           <CardTitle className="text-base">Trend</CardTitle>
         </CardHeader>
         <CardContent>
-          {filteredEntries.length > 0 ? (
+          {aggregatedChartEntries.length > 0 ? (
             <StatHistoryChart
-              entries={filteredEntries}
+              entries={aggregatedChartEntries}
               statType={statType}
               goodDirection={goodDirection}
               oicEntries={oicEntries}
@@ -146,7 +238,7 @@ export function StatDetailView({
       <Card>
         <CardHeader>
           <CardTitle className="text-base">
-            Weekly History ({filteredEntries.length} entries)
+            Weekly History ({weekGroups.length} weeks)
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -155,32 +247,45 @@ export function StatDetailView({
               <TableRow>
                 <TableHead className="w-8"></TableHead>
                 <TableHead>Week</TableHead>
-                {hasMultipleEmployees && <TableHead>Employee</TableHead>}
+                <TableHead>Entered by</TableHead>
                 <TableHead>Value</TableHead>
                 <TableHead>Change</TableHead>
                 <TableHead>Condition</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredEntries.map((entry) => {
-                const condition =
-                  entry.final_condition ?? entry.auto_condition;
-                const hasPlaybook = !!entry.playbook_response;
-                const isExpanded = expandedEntries.has(entry.id);
+              {weekGroups.map((wg) => {
+                const hasMultipleContributors =
+                  showingAllEmployees && wg.entries.length > 1;
+                const isWeekExpanded = expandedWeeks.has(wg.weekStart);
+                const hasPlaybook = !!wg.playbookResponse;
+                const isPlaybookExpanded = expandedPlaybooks.has(wg.weekStart);
+                const isExpandable = hasMultipleContributors || hasPlaybook;
 
                 return (
-                  <>
+                  <Fragment key={wg.weekStart}>
+                    {/* Aggregated week row */}
                     <TableRow
-                      key={entry.id}
-                      className={hasPlaybook ? "cursor-pointer hover:bg-muted/50" : ""}
-                      onClick={() => hasPlaybook && toggleExpand(entry.id)}
+                      className={
+                        isExpandable ? "cursor-pointer hover:bg-muted/50" : ""
+                      }
+                      onClick={() => {
+                        if (hasMultipleContributors) {
+                          toggleWeekExpand(wg.weekStart);
+                          if (hasPlaybook) togglePlaybook(wg.weekStart);
+                        } else if (hasPlaybook) {
+                          togglePlaybook(wg.weekStart);
+                        }
+                      }}
                     >
                       <TableCell className="w-8 pr-0">
-                        {hasPlaybook && (
+                        {isExpandable && (
                           <span className="text-muted-foreground">
                             <ChevronRight
-                              className={`h-4 w-4 transition-transform duration-200 ${
-                                isExpanded ? "rotate-90" : ""
+                              className={`h-4 w-4 transition-transform duration-300 ${
+                                isWeekExpanded || isPlaybookExpanded
+                                  ? "rotate-90"
+                                  : ""
                               }`}
                             />
                           </span>
@@ -188,47 +293,96 @@ export function StatDetailView({
                       </TableCell>
                       <TableCell>
                         {format(
-                          new Date(entry.week_start + "T00:00:00"),
+                          new Date(wg.weekStart + "T00:00:00"),
                           "MMM d, yyyy"
                         )}
                       </TableCell>
-                      {hasMultipleEmployees && (
-                        <TableCell className="text-muted-foreground">
-                          {entry.profile?.full_name ?? "—"}
-                        </TableCell>
-                      )}
+                      <TableCell className="text-muted-foreground">
+                        {hasMultipleContributors ? (
+                          <span className="inline-flex items-center gap-1 text-xs bg-muted px-1.5 py-0.5 rounded-full">
+                            <Users className="h-3 w-3" />
+                            {wg.entries.length} contributors
+                          </span>
+                        ) : (
+                          <span className="text-sm">
+                            {wg.entries[0]?.profile?.full_name ?? "—"}
+                          </span>
+                        )}
+                      </TableCell>
                       <TableCell className="font-medium">
-                        {formatStatValue(Number(entry.value), statType)}
+                        {formatStatValue(wg.totalValue, statType)}
                       </TableCell>
                       <TableCell>
-                        {entry.percent_change !== null
-                          ? formatPercentChange(Number(entry.percent_change))
+                        {wg.percentChange !== null
+                          ? formatPercentChange(wg.percentChange)
                           : "—"}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1.5">
-                          {condition ? (
-                            <ConditionDisplay condition={condition} size="sm" />
+                          {wg.condition ? (
+                            <ConditionDisplay
+                              condition={wg.condition}
+                              size="sm"
+                            />
                           ) : (
                             "—"
                           )}
-                          {hasPlaybook && !isExpanded && (
+                          {hasPlaybook && !isPlaybookExpanded && (
                             <MessageSquareText className="h-3.5 w-3.5 text-muted-foreground" />
                           )}
                         </div>
                       </TableCell>
                     </TableRow>
+
+                    {/* Contributor breakdown rows */}
+                    {hasMultipleContributors && isWeekExpanded &&
+                      wg.entries.map((entry) => (
+                        <TableRow key={entry.id} className="bg-muted/20">
+                          <TableCell className="w-8 pr-0" />
+                          <TableCell />
+                          <TableCell>
+                            <span className="text-sm text-muted-foreground">
+                              {entry.profile?.full_name ?? "Unknown"}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {formatStatValue(Number(entry.value), statType)}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {entry.percent_change !== null
+                              ? formatPercentChange(
+                                  Number(entry.percent_change)
+                                )
+                              : "—"}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {(entry.final_condition ??
+                              entry.auto_condition) ? (
+                              <ConditionDisplay
+                                condition={
+                                  (entry.final_condition ??
+                                    entry.auto_condition)!
+                                }
+                                size="sm"
+                              />
+                            ) : (
+                              "—"
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+
+                    {/* Playbook content */}
                     {hasPlaybook && (
-                      <TableRow key={`${entry.id}-playbook`}>
-                        <TableCell className="p-0" />
-                        <TableCell
-                          colSpan={colCount}
-                          className="p-0"
-                        >
+                      <TableRow className="border-0 hover:bg-transparent">
+                        <TableCell className="!p-0" />
+                        <TableCell colSpan={colCount - 1} className="!p-0">
                           <div
-                            className="grid transition-[grid-template-rows] duration-200 ease-in-out"
+                            className="grid transition-[grid-template-rows] duration-300 ease-in-out"
                             style={{
-                              gridTemplateRows: isExpanded ? "1fr" : "0fr",
+                              gridTemplateRows: isPlaybookExpanded
+                                ? "1fr"
+                                : "0fr",
                             }}
                           >
                             <div className="overflow-hidden">
@@ -237,7 +391,7 @@ export function StatDetailView({
                                   Action Plan
                                 </p>
                                 <p className="text-sm whitespace-pre-wrap">
-                                  {entry.playbook_response}
+                                  {wg.playbookResponse}
                                 </p>
                               </div>
                             </div>
@@ -245,13 +399,13 @@ export function StatDetailView({
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
-              {filteredEntries.length === 0 && (
+              {weekGroups.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={colCount + 1}
+                    colSpan={colCount}
                     className="text-center text-muted-foreground"
                   >
                     No entries yet.

@@ -7,6 +7,7 @@ export interface OrgData {
   statsByPost: Record<string, string[]>;
   employeesByPost: Record<string, string[]>;
   employees: { id: string; full_name: string }[];
+  currentUserName?: string;
 }
 
 export interface OrgViewerProps extends OrgData {

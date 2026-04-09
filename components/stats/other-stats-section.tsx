@@ -93,6 +93,36 @@ export function OtherStatsSection({
     [stats]
   );
 
+  const handleValueBlur = useCallback(
+    (statId: string) => {
+      setEntries((prev) => {
+        const entry = prev[statId];
+        if (!entry || entry.value.trim() === "") return prev;
+
+        const num = parseFloat(entry.value);
+        if (isNaN(num)) return prev;
+
+        const statItem = stats.find((s) => s.stat.id === statId);
+        let normalized = num;
+        if (statItem?.stat.stat_type === "percentage") {
+          normalized = Math.min(100, Math.max(0, num));
+        }
+        if (statItem?.stat.stat_type === "count") {
+          normalized = Math.round(normalized);
+        }
+
+        const displayValue = String(normalized);
+        if (displayValue === entry.value) return prev;
+
+        return {
+          ...prev,
+          [statId]: { ...entry, value: displayValue },
+        };
+      });
+    },
+    [stats]
+  );
+
   const handlePlaybookChange = useCallback(
     (statId: string, response: string) => {
       setEntries((prev) => ({
@@ -274,6 +304,7 @@ export function OtherStatsSection({
                               onChange={(e) =>
                                 handleValueChange(stat.id, e.target.value)
                               }
+                              onBlur={() => handleValueBlur(stat.id)}
                               className={stat.stat_type === "dollar" ? "pl-7" : ""}
                             />
                             {stat.stat_type === "percentage" && (

@@ -33,6 +33,8 @@ interface EntryState {
   value: string;
   conditionResult: ConditionResult | null;
   playbookResponse: string;
+  /** When a percentage value is between 0 and 1, ask the user to clarify */
+  percentageAmbiguity: { asTyped: number; asWhole: number } | null;
 }
 
 const TYPE_LABELS: Record<StatType, string> = {
@@ -81,6 +83,7 @@ export function StatEntryForm({
         value,
         conditionResult,
         playbookResponse: existing?.playbook_response ?? "",
+        percentageAmbiguity: null,
       };
     }
     return initial;
@@ -108,6 +111,7 @@ export function StatEntryForm({
           ...prev[statId],
           value: inputValue,
           conditionResult,
+          percentageAmbiguity: null,
         },
       }));
     },
@@ -124,12 +128,35 @@ export function StatEntryForm({
         const num = parseFloat(entry.value);
         if (isNaN(num)) return prev;
 
-        // Normalize: strip leading zeros, clamp percentage to 0-100
         const statItem = stats.find((s) => s.stat.id === statId);
         let normalized = num;
+
         if (statItem?.stat.stat_type === "percentage") {
           normalized = Math.min(100, Math.max(0, num));
+
+          // Detect ambiguous decimal percentages (e.g. 0.8 could mean 0.8% or 80%)
+          if (normalized > 0 && normalized < 1) {
+            const asWhole = Math.round(normalized * 100 * 100) / 100; // e.g. 0.8 → 80
+            if (asWhole <= 100) {
+              // Recalculate condition for the value as-typed
+              const conditionResult = calculateCondition(
+                normalized,
+                statItem.previousValue,
+                statItem.stat.good_direction
+              );
+              return {
+                ...prev,
+                [statId]: {
+                  ...entry,
+                  value: String(normalized),
+                  conditionResult,
+                  percentageAmbiguity: { asTyped: normalized, asWhole },
+                },
+              };
+            }
+          }
         }
+
         if (statItem?.stat.stat_type === "count") {
           normalized = Math.round(normalized);
         }
@@ -142,6 +169,31 @@ export function StatEntryForm({
           [statId]: { ...entry, value: displayValue },
         };
       });
+    },
+    [stats]
+  );
+
+  /** Resolve an ambiguous percentage — user picks either the decimal or whole-number interpretation */
+  const handleResolvePercentage = useCallback(
+    (statId: string, chosenValue: number) => {
+      const statItem = stats.find((s) => s.stat.id === statId);
+      if (!statItem) return;
+
+      const conditionResult = calculateCondition(
+        chosenValue,
+        statItem.previousValue,
+        statItem.stat.good_direction
+      );
+
+      setEntries((prev) => ({
+        ...prev,
+        [statId]: {
+          ...prev[statId],
+          value: String(chosenValue),
+          conditionResult,
+          percentageAmbiguity: null,
+        },
+      }));
     },
     [stats]
   );
@@ -161,6 +213,10 @@ export function StatEntryForm({
 
   async function handleSaveSingle(statId: string) {
     const entry = entries[statId];
+    if (entry.percentageAmbiguity) {
+      toast.error("Please confirm the percentage value first");
+      return;
+    }
     const val = parseFloat(entry.value);
     if (isNaN(val)) {
       toast.error("Please enter a value");
@@ -194,6 +250,15 @@ export function StatEntryForm({
   }
 
   async function handleSubmit() {
+    // Check for unresolved percentage ambiguities
+    const hasAmbiguity = stats.some(
+      (s) => entries[s.stat.id]?.percentageAmbiguity
+    );
+    if (hasAmbiguity) {
+      toast.error("Please confirm all percentage values before submitting");
+      return;
+    }
+
     // Validate all entries have values
     const entryData = stats
       .map((s) => {
@@ -339,6 +404,42 @@ export function StatEntryForm({
                   />
                 )}
               </div>
+
+              {entry.percentageAmbiguity && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-3">
+                  <p className="text-sm font-medium text-amber-800 dark:text-amber-300 mb-2">
+                    Did you mean{" "}
+                    <strong>{entry.percentageAmbiguity.asTyped}%</strong> or{" "}
+                    <strong>{entry.percentageAmbiguity.asWhole}%</strong>?
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        handleResolvePercentage(
+                          stat.id,
+                          entry.percentageAmbiguity!.asTyped
+                        )
+                      }
+                    >
+                      {entry.percentageAmbiguity.asTyped}%
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        handleResolvePercentage(
+                          stat.id,
+                          entry.percentageAmbiguity!.asWhole
+                        )
+                      }
+                    >
+                      {entry.percentageAmbiguity.asWhole}%
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {entry.conditionResult && (
                 <PlaybookPanel

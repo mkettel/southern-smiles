@@ -216,6 +216,7 @@ export interface MyStatForEntry {
   stat: Stat;
   post: Post;
   previousValue: number | null;
+  previousWeekStart: string | null;
   existingEntry: StatEntry | null;
 }
 
@@ -224,5 +225,6 @@ export interface OtherStatForEntry {
   post: Post;
   employee: Profile;
   previousValue: number | null;
+  previousWeekStart: string | null;
   existingEntry: StatEntry | null;
 }

@@ -15,6 +15,7 @@ import { StatName } from "./stat-name";
 import { PlaybookPanel } from "./playbook-panel";
 import { calculateCondition, type ConditionResult } from "@/lib/conditions";
 import { formatStatValue } from "@/lib/utils";
+import { formatWeekLabel, getPreviousWeekStart } from "@/lib/constants";
 import { submitWeeklyStats } from "@/actions/stat-entries";
 import type { MyStatForEntry, ConditionPlaybook, StatType } from "@/lib/types";
 
@@ -356,7 +357,19 @@ export function StatEntryForm({
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Week prior:{" "}
+                Week prior
+                {statItem.previousWeekStart && (
+                  <span className="text-xs">
+                    {" "}
+                    ({formatWeekLabel(statItem.previousWeekStart)}
+                    {statItem.previousWeekStart !==
+                      getPreviousWeekStart(weekStart) && (
+                      <span className="text-amber-500"> · gap</span>
+                    )}
+                    )
+                  </span>
+                )}
+                :{" "}
                 {statItem.previousValue !== null ? (
                   <span className="font-medium text-foreground">
                     {formatStatValue(statItem.previousValue, stat.stat_type)}

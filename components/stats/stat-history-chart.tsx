@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import type { StatEntry, StatType, OicLogEntry } from "@/lib/types";
 import { formatStatValue } from "@/lib/utils";
+import { formatWeekLabel } from "@/lib/constants";
 import { format, startOfWeek } from "date-fns";
 import { Activity } from "lucide-react";
 
@@ -65,6 +66,7 @@ export function StatHistoryChart({
 
   const data = sorted.map((e, i) => ({
     week: format(new Date(e.week_start + "T00:00:00"), "MMM d"),
+    weekIso: e.week_start,
     value: Number(e.value),
     avg: rolling[i],
   }));
@@ -167,6 +169,12 @@ export function StatHistoryChart({
               }}
               itemStyle={{
                 color: "var(--color-foreground, #000)",
+              }}
+              labelFormatter={(label, payload) => {
+                const iso = payload?.[0]?.payload?.weekIso as
+                  | string
+                  | undefined;
+                return iso ? formatWeekLabel(iso) : label;
               }}
               formatter={(value, name) => [
                 value != null ? formatStatValue(Number(value), statType) : "—",

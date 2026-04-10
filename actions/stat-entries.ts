@@ -62,21 +62,26 @@ export async function getMyStatsForWeek(
     .lt("week_start", week)
     .order("week_start", { ascending: false });
 
-  // Build a map of stat_id -> most recent prior value
-  const prevMap = new Map<string, number>();
+  // Build a map of stat_id -> most recent prior entry (value + week_start)
+  const prevMap = new Map<string, { value: number; weekStart: string }>();
   for (const e of prevEntries ?? []) {
     if (!prevMap.has(e.stat_id)) {
-      prevMap.set(e.stat_id, e.value);
+      prevMap.set(e.stat_id, { value: e.value, weekStart: e.week_start });
     }
   }
 
-  return stats.map((stat) => ({
-    stat,
-    post: stat.post,
-    previousValue: prevMap.get(stat.id) ?? null,
-    existingEntry:
-      (currentEntries?.find((e) => e.stat_id === stat.id) as StatEntry) ?? null,
-  }));
+  return stats.map((stat) => {
+    const prev = prevMap.get(stat.id) ?? null;
+    return {
+      stat,
+      post: stat.post,
+      previousValue: prev?.value ?? null,
+      previousWeekStart: prev?.weekStart ?? null,
+      existingEntry:
+        (currentEntries?.find((e) => e.stat_id === stat.id) as StatEntry) ??
+        null,
+    };
+  });
 }
 
 /**
@@ -150,17 +155,17 @@ export async function getOtherStatsForWeek(
   // Get most recent prior entries for condition calculation (not just immediate prior week)
   const { data: prevEntries } = await supabase
     .from("stat_entries")
-    .select("stat_id, value, profile_id")
+    .select("stat_id, value, profile_id, week_start")
     .in("stat_id", otherStatIds)
     .lt("week_start", week)
     .order("week_start", { ascending: false });
 
-  // Build map of (stat_id + profile_id) -> most recent prior value
-  const prevMap = new Map<string, number>();
+  // Build map of (stat_id + profile_id) -> most recent prior entry
+  const prevMap = new Map<string, { value: number; weekStart: string }>();
   for (const e of prevEntries ?? []) {
     const key = `${e.stat_id}:${e.profile_id}`;
     if (!prevMap.has(key)) {
-      prevMap.set(key, e.value);
+      prevMap.set(key, { value: e.value, weekStart: e.week_start });
     }
   }
 
@@ -185,14 +190,15 @@ export async function getOtherStatsForWeek(
         (e) => e.stat_id === stat.id && e.profile_id === employee.id
       ) ?? null;
 
-    // Most recent prior value from the assigned employee
-    const previousValue = prevMap.get(`${stat.id}:${employee.id}`) ?? null;
+    // Most recent prior entry from the assigned employee
+    const prev = prevMap.get(`${stat.id}:${employee.id}`) ?? null;
 
     return {
       stat,
       post: stat.post,
       employee,
-      previousValue,
+      previousValue: prev?.value ?? null,
+      previousWeekStart: prev?.weekStart ?? null,
       existingEntry: existingEntry as StatEntry | null,
     };
   });

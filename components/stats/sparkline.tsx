@@ -12,6 +12,7 @@ import {
 import { CONDITION_CONFIG, type ConditionName } from "@/lib/conditions";
 import type { StatType } from "@/lib/types";
 import { formatStatValue } from "@/lib/utils";
+import { formatWeekLabel } from "@/lib/constants";
 import { format } from "date-fns";
 
 interface SparklineProps {
@@ -34,6 +35,7 @@ export function Sparkline({
   const chartData = data.map((d) => ({
     ...d,
     label: format(new Date(d.week + "T00:00:00"), "MMM d"),
+    weekIso: d.week,
   }));
 
   return (
@@ -78,16 +80,31 @@ export function Sparkline({
             }}
           />
           <Tooltip
+            separator=""
             contentStyle={{
               backgroundColor: "var(--color-background, #fff)",
               borderColor: "var(--color-border, #e5e7eb)",
               borderRadius: "6px",
               color: "var(--color-foreground, #000)",
               fontSize: "11px",
-              padding: "4px 8px",
+              padding: "6px 10px",
             }}
-            labelStyle={{ color: "var(--color-foreground, #000)", fontWeight: 600 }}
-            itemStyle={{ color: "var(--color-foreground, #000)" }}
+            labelStyle={{
+              color: "var(--color-muted-foreground, #9ca3af)",
+              fontWeight: 500,
+              fontSize: "10px",
+              marginBottom: "2px",
+            }}
+            itemStyle={{
+              color: "var(--color-foreground, #000)",
+              fontSize: "15px",
+              fontWeight: 700,
+              padding: 0,
+            }}
+            labelFormatter={(label, payload) => {
+              const iso = payload?.[0]?.payload?.weekIso as string | undefined;
+              return iso ? formatWeekLabel(iso) : label;
+            }}
             formatter={(value) => [formatStatValue(Number(value), statType), ""]}
           />
           <Area

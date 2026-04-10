@@ -41,7 +41,8 @@ export function OicEntryCard({
   function findDivisionId(areaLabel: string | null): string {
     if (!areaLabel) return "";
     const div = divisions.find(
-      (d) => areaLabel.includes(`Div ${d.number}`) || areaLabel.includes(d.name)
+      (d) =>
+        areaLabel.includes(`Div ${d.number}`) || areaLabel.includes(d.name),
     );
     return div?.id ?? "";
   }
@@ -54,10 +55,10 @@ export function OicEntryCard({
   }
 
   const [selectedDivision, setSelectedDivision] = useState(
-    findDivisionId(entry.area)
+    findDivisionId(entry.area),
   );
   const [selectedPost, setSelectedPost] = useState(
-    findPostId(entry.post_affected)
+    findPostId(entry.post_affected),
   );
 
   const filteredPosts = selectedDivision
@@ -81,7 +82,7 @@ export function OicEntryCard({
       : null;
 
     const postLabel = selectedPost
-      ? posts.find((p) => p.id === selectedPost)?.title ?? null
+      ? (posts.find((p) => p.id === selectedPost)?.title ?? null)
       : null;
 
     startTransition(async () => {
@@ -94,7 +95,7 @@ export function OicEntryCard({
 
       if (result.error) {
         toast.error(
-          typeof result.error === "string" ? result.error : "Update failed"
+          typeof result.error === "string" ? result.error : "Update failed",
         );
       } else {
         toast.success("Entry updated");
@@ -143,7 +144,7 @@ export function OicEntryCard({
                     {selectedDivision
                       ? (() => {
                           const div = divisions.find(
-                            (d) => d.id === selectedDivision
+                            (d) => d.id === selectedDivision,
                           );
                           return div
                             ? `Div ${div.number} – ${div.name}`
@@ -177,8 +178,8 @@ export function OicEntryCard({
                 <SelectTrigger>
                   <span>
                     {selectedPost
-                      ? posts.find((p) => p.id === selectedPost)?.title ??
-                        "Select..."
+                      ? (posts.find((p) => p.id === selectedPost)?.title ??
+                        "Select...")
                       : "All / Multiple"}
                   </span>
                 </SelectTrigger>
@@ -215,7 +216,7 @@ export function OicEntryCard({
 
   return (
     <Card className="group">
-      <CardContent className="pt-4">
+      <CardContent className="pt-0">
         <div className="flex items-start justify-between gap-2">
           <div className="space-y-1 flex-1">
             <p className="text-sm">{entry.entry_text}</p>
@@ -223,7 +224,7 @@ export function OicEntryCard({
               <span>
                 {format(
                   new Date(entry.effective_date + "T00:00:00"),
-                  "MMM d, yyyy"
+                  "MMM d, yyyy",
                 )}
               </span>
               <span>&middot;</span>
@@ -268,7 +269,7 @@ export function OicEntryCard({
                       toast.error(
                         typeof result.error === "string"
                           ? result.error
-                          : "Delete failed"
+                          : "Delete failed",
                       );
                     } else {
                       toast.success("Entry deleted");

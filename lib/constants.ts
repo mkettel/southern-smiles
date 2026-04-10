@@ -1,4 +1,11 @@
-import { startOfWeek, format, subWeeks, addWeeks, addDays } from "date-fns";
+import {
+  startOfWeek,
+  format,
+  subWeeks,
+  addWeeks,
+  addDays,
+  differenceInCalendarWeeks,
+} from "date-fns";
 
 /**
  * Get the Monday of the current week (our standard week_start).
@@ -40,6 +47,16 @@ export function formatWeekLabel(weekStart: string): string {
   }
   // Different months: "Mar 30 - Apr 5, 2026"
   return `${format(monday, "MMM d")} - ${format(friday, "MMM d, yyyy")}`;
+}
+
+/**
+ * Number of whole weeks between two week_start dates (later - earlier).
+ * Returns 1 for adjacent weeks, 2 for a 1-week gap, etc.
+ */
+export function weeksBetween(earlier: string, later: string): number {
+  const a = new Date(earlier + "T00:00:00");
+  const b = new Date(later + "T00:00:00");
+  return differenceInCalendarWeeks(b, a, { weekStartsOn: 1 });
 }
 
 /**

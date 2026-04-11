@@ -408,6 +408,7 @@ export function StatEntryForm({
                         handleValueChange(stat.id, e.target.value)
                       }
                       onBlur={() => handleValueBlur(stat.id)}
+                      onWheel={(e) => e.currentTarget.blur()}
                       className={stat.stat_type === "dollar" ? "pl-7" : ""}
                     />
                     {stat.stat_type === "percentage" && (

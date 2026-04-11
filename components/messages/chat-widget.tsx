@@ -29,9 +29,13 @@ export function ChatWidget({
   const [open, setOpen] = useState(false);
   const [size, setSize] = useState<ChatSize>("md");
   const [unreadCount, setUnreadCount] = useState(unreadMessageCount);
+  const [shortcutLabel, setShortcutLabel] = useState<string | null>(null);
 
-  const isMac = typeof navigator !== "undefined" && navigator.userAgent.includes("Mac");
-  const shortcutLabel = isMac ? "\u2318B" : "Ctrl+B";
+  // Detect platform after mount so SSR and first client render match
+  useEffect(() => {
+    const isMac = navigator.userAgent.includes("Mac");
+    setShortcutLabel(isMac ? "\u2318B" : "Ctrl+B");
+  }, []);
 
   // Cmd+B / Ctrl+B to toggle
   useEffect(() => {
@@ -90,7 +94,11 @@ export function ChatWidget({
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
-        <kbd className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">{shortcutLabel}</kbd>
+        {shortcutLabel && (
+          <kbd className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+            {shortcutLabel}
+          </kbd>
+        )}
       </button>
     </>
   );

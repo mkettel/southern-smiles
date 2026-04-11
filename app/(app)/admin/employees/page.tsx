@@ -1,6 +1,7 @@
 import { getProfile } from "@/actions/auth";
 import { getEmployees, getPosts, getDivisions } from "@/actions/admin";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -106,7 +107,12 @@ export default async function ManageEmployeesPage() {
                     className={!emp.is_active ? "opacity-50" : ""}
                   >
                     <TableCell className="font-medium">
-                      {emp.full_name}
+                      <Link
+                        href={`/admin/employees/${emp.id}`}
+                        className="hover:underline"
+                      >
+                        {emp.full_name}
+                      </Link>
                       {emp.username && (
                         <span className="block text-xs text-muted-foreground font-normal">
                           @{emp.username}

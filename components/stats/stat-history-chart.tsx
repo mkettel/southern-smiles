@@ -14,7 +14,7 @@ import {
 import type { StatEntry, StatType, OicLogEntry } from "@/lib/types";
 import { formatStatValue } from "@/lib/utils";
 import { formatWeekLabel } from "@/lib/constants";
-import { format, startOfWeek } from "date-fns";
+import { addDays, format, startOfWeek } from "date-fns";
 import { Activity } from "lucide-react";
 
 interface StatHistoryChartProps {
@@ -35,11 +35,12 @@ function calcRollingAverage(
   });
 }
 
-/** Map an OIC entry's effective_date to the Monday week label used on the chart */
+/** Map an OIC entry's effective_date to the Friday (last day) week label used on the chart */
 function dateToWeekLabel(dateStr: string): string {
   const date = new Date(dateStr + "T00:00:00");
   const monday = startOfWeek(date, { weekStartsOn: 1 });
-  return format(monday, "MMM d");
+  const friday = addDays(monday, 4);
+  return format(friday, "MMM d");
 }
 
 interface WeekAnnotation {
@@ -65,7 +66,10 @@ export function StatHistoryChart({
   const rolling = calcRollingAverage(values, 4);
 
   const data = sorted.map((e, i) => ({
-    week: format(new Date(e.week_start + "T00:00:00"), "MMM d"),
+    week: format(
+      addDays(new Date(e.week_start + "T00:00:00"), 4),
+      "MMM d"
+    ),
     weekIso: e.week_start,
     value: Number(e.value),
     avg: rolling[i],

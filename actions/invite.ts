@@ -67,6 +67,5 @@ export async function inviteEmployee(input: {
   }
 
   revalidatePath("/admin/employees");
-  revalidatePath("/team");
   return { success: true, email: input.email.trim() };
 }

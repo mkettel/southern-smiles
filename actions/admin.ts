@@ -266,7 +266,6 @@ export async function updateProfile(
   if (error) return { error: error.message };
 
   revalidatePath("/admin/employees");
-  revalidatePath("/team");
   revalidatePath("/dashboard");
   return { success: true };
 }

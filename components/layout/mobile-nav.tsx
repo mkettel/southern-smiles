@@ -10,7 +10,6 @@ import {
   Menu,
   LayoutDashboard,
   ClipboardEdit,
-  Users,
   Settings,
   FileText,
   BarChart3,
@@ -42,7 +41,6 @@ const sharedLinks: NavLink[] = [
 ];
 
 const adminOnlyLinks: NavLink[] = [
-  { href: "/team", label: "Team", icon: Users },
   { href: "/admin/organization", label: "Organization", icon: Building2 },
   { href: "/admin/stats", label: "Manage Stats", icon: BarChart3 },
   { href: "/admin/employees", label: "Manage Team", icon: Settings },

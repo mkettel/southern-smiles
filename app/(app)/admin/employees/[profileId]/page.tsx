@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/actions/auth";
 import { redirect } from "next/navigation";
-import { getCurrentWeekStart, formatWeekLabel } from "@/lib/constants";
+import Link from "next/link";
 import { ConditionDisplay } from "@/components/stats/condition-display";
 import { formatStatValue, formatPercentChange } from "@/lib/utils";
 import { format } from "date-fns";
@@ -19,6 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ChevronLeft } from "lucide-react";
 import type { Profile } from "@/lib/types";
 
 export default async function EmployeeDetailPage({
@@ -70,6 +71,14 @@ export default async function EmployeeDetailPage({
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
+      <Link
+        href="/admin/employees"
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+      >
+        <ChevronLeft className="h-4 w-4" />
+        Manage Team
+      </Link>
+
       <div>
         <h1 className="text-2xl font-bold">{employee.full_name}</h1>
         <p className="text-muted-foreground">{employee.email}</p>

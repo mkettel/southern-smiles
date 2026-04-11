@@ -13,7 +13,7 @@ import { CONDITION_CONFIG, type ConditionName } from "@/lib/conditions";
 import type { StatType } from "@/lib/types";
 import { formatStatValue } from "@/lib/utils";
 import { formatWeekLabel } from "@/lib/constants";
-import { format } from "date-fns";
+import { addDays, format } from "date-fns";
 
 interface SparklineProps {
   data: { week: string; value: number }[];
@@ -34,7 +34,10 @@ export function Sparkline({
 
   const chartData = data.map((d) => ({
     ...d,
-    label: format(new Date(d.week + "T00:00:00"), "MMM d"),
+    label: format(
+      addDays(new Date(d.week + "T00:00:00"), 4),
+      "MMM d"
+    ),
     weekIso: d.week,
   }));
 

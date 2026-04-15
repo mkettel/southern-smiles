@@ -13,7 +13,7 @@ type ViewMode = "tree" | "board";
 const VIEW_STORAGE_KEY = "org-view-mode";
 
 export function OrgViewer({ isAdmin, ...data }: OrgViewerProps) {
-  const [view, setView] = useState<ViewMode>("tree");
+  const [view, setView] = useState<ViewMode>("board");
   const [isEditing, setIsEditing] = useState(false);
   const editing = useOrgEditing();
 
@@ -33,11 +33,8 @@ export function OrgViewer({ isAdmin, ...data }: OrgViewerProps) {
     } catch {
       // ignore
     }
-    // Editing only supported in tree view — exit edit mode on switch.
-    if (next !== "tree" && isEditing) {
-      editing.resetAll();
-      setIsEditing(false);
-    }
+    // Clear any open inline forms when switching views so they don't leak.
+    editing.resetAll();
   }
 
   function toggleEditing() {
@@ -65,7 +62,7 @@ export function OrgViewer({ isAdmin, ...data }: OrgViewerProps) {
           />
         </div>
 
-        {isAdmin && view === "tree" && (
+        {isAdmin && (
           <Button
             variant={isEditing ? "default" : "outline"}
             size="sm"
@@ -81,7 +78,7 @@ export function OrgViewer({ isAdmin, ...data }: OrgViewerProps) {
       {view === "tree" ? (
         <TreeView {...data} isEditing={isAdmin && isEditing} editing={editing} />
       ) : (
-        <BoardView {...data} />
+        <BoardView {...data} isEditing={isAdmin && isEditing} editing={editing} />
       )}
     </div>
   );

@@ -53,7 +53,7 @@ export default async function OrgBoardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="max-w-4xl mx-auto">
+      <div>
         <h1 className="text-2xl font-bold">Org Board</h1>
         <p className="text-muted-foreground">
           Organizational structure: divisions, departments, sections, and responsibilities

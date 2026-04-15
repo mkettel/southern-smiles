@@ -25,6 +25,7 @@ import type { StatEntry, StatType, OicLogEntry } from "@/lib/types";
 import { calculateCondition } from "@/lib/conditions";
 import type { ConditionName } from "@/lib/conditions";
 import { ChevronRight, MessageSquareText, Users } from "lucide-react";
+import { EntryRowActions } from "@/components/stats/entry-row-actions";
 
 interface StatDetailViewProps {
   statName: string;
@@ -35,6 +36,7 @@ interface StatDetailViewProps {
   postTitle: string;
   entries: StatEntry[];
   oicEntries?: OicLogEntry[];
+  isAdmin?: boolean;
 }
 
 /** A single week's data: aggregated total + individual contributor entries */
@@ -56,6 +58,7 @@ export function StatDetailView({
   postTitle,
   entries,
   oicEntries = [],
+  isAdmin = false,
 }: StatDetailViewProps) {
   const employees = useMemo(() => {
     const map = new Map<string, string>();
@@ -175,7 +178,7 @@ export function StatDetailView({
   }
 
   const showingAllEmployees = selectedEmployeeId === "all";
-  const colCount = 6; // chevron, week, entered by, value, change, condition
+  const colCount = isAdmin ? 7 : 6; // chevron, week, entered by, value, change, condition, [actions]
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -251,6 +254,7 @@ export function StatDetailView({
                 <TableHead>Value</TableHead>
                 <TableHead>Change</TableHead>
                 <TableHead>Condition</TableHead>
+                {isAdmin && <TableHead className="w-24 text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -332,6 +336,20 @@ export function StatDetailView({
                           )}
                         </div>
                       </TableCell>
+                      {isAdmin && (
+                        <TableCell className="text-right">
+                          {!hasMultipleContributors && wg.entries[0] && (
+                            <EntryRowActions
+                              entryId={wg.entries[0].id}
+                              currentValue={Number(wg.entries[0].value)}
+                              statType={statType}
+                              contributorName={
+                                wg.entries[0].profile?.full_name ?? "this user"
+                              }
+                            />
+                          )}
+                        </TableCell>
+                      )}
                     </TableRow>
 
                     {/* Contributor breakdown rows */}
@@ -369,6 +387,18 @@ export function StatDetailView({
                               "—"
                             )}
                           </TableCell>
+                          {isAdmin && (
+                            <TableCell className="text-right">
+                              <EntryRowActions
+                                entryId={entry.id}
+                                currentValue={Number(entry.value)}
+                                statType={statType}
+                                contributorName={
+                                  entry.profile?.full_name ?? "this user"
+                                }
+                              />
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))}
 

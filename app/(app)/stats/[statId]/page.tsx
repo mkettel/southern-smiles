@@ -1,7 +1,8 @@
 import { getStatHistory } from "@/actions/stat-entries";
+import { getProfile } from "@/actions/auth";
 import { createClient } from "@/lib/supabase/server";
 import { StatDetailView } from "@/components/stats/stat-detail-view";
-import type { Stat, OicLogEntry } from "@/lib/types";
+import type { Stat, OicLogEntry, Profile } from "@/lib/types";
 
 export default async function StatDetailPage({
   params,
@@ -31,11 +32,14 @@ export default async function StatDetailPage({
       ? `Div ${typedStat.post.division.number} - ${typedStat.post.division.name}`
       : "";
 
-  // Fetch stat history and relevant OIC entries in parallel
-  const [entries, oicEntries] = await Promise.all([
+  // Fetch stat history, OIC entries, and current user profile in parallel
+  const [entries, oicEntries, profile] = await Promise.all([
     getStatHistory(statId),
     getRelevantOicEntries(supabase, typedStat),
+    getProfile() as Promise<Profile | null>,
   ]);
+
+  const isAdmin = profile?.role === "admin";
 
   return (
     <StatDetailView
@@ -47,6 +51,7 @@ export default async function StatDetailPage({
       postTitle={typedStat.post?.title ?? ""}
       entries={entries}
       oicEntries={oicEntries}
+      isAdmin={isAdmin}
     />
   );
 }

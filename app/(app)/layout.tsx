@@ -7,6 +7,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { ChatWidget } from "@/components/messages/chat-widget";
 import { ThemeColorInjector } from "@/components/theme-color-injector";
+import { ToothMascot } from "@/components/tooth-mascot";
 import type { Profile } from "@/lib/types";
 
 export default async function AppLayout({
@@ -61,6 +62,7 @@ export default async function AppLayout({
         practiceMembers={practiceMembers}
         unreadMessageCount={unreadMessageCount}
       />
+      <ToothMascot />
     </div>
   );
 }

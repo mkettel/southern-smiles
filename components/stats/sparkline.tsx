@@ -21,6 +21,8 @@ interface SparklineProps {
   statType?: StatType;
   goodDirection?: "up" | "down";
   height?: number;
+  /** Hide axes + grid for dense layouts. Tooltip stays active on hover. */
+  compact?: boolean;
 }
 
 export function Sparkline({
@@ -29,6 +31,7 @@ export function Sparkline({
   statType = "count",
   goodDirection = "up",
   height = 100,
+  compact = false,
 }: SparklineProps) {
   const color = condition ? CONDITION_CONFIG[condition].color : "#6b7280";
 
@@ -44,46 +47,67 @@ export function Sparkline({
   return (
     <div style={{ width: "100%", minWidth: 60, height, minHeight: height }}>
       <ResponsiveContainer width="100%" height={height}>
-        <AreaChart data={chartData}>
+        <AreaChart
+          data={chartData}
+          margin={
+            compact
+              ? { top: 2, right: 2, bottom: 2, left: 2 }
+              : undefined
+          }
+        >
           <defs>
             <linearGradient id={`grad-${color.replace("#", "")}`} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={color} stopOpacity={0.2} />
               <stop offset="100%" stopColor={color} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid
-            strokeDasharray="3 3"
-            vertical={false}
-            stroke="var(--color-border, #e5e7eb)"
-            strokeOpacity={0.5}
-          />
-          <XAxis
-            dataKey="label"
-            tick={{ fontSize: 9, fill: "var(--color-muted-foreground, #9ca3af)" }}
-            axisLine={false}
-            tickLine={false}
-            interval="preserveStartEnd"
-          />
-          <YAxis
-            tick={{ fontSize: 9, fill: "var(--color-muted-foreground, #9ca3af)" }}
-            axisLine={false}
-            tickLine={false}
-            width={40}
-            domain={[0, "auto"]}
-            reversed={goodDirection === "down"}
-            allowDecimals={false}
-            tickCount={4}
-            tickFormatter={(v) => {
-              if (statType === "dollar") {
-                if (v >= 1000) return `$${(v / 1000).toFixed(0)}k`;
-                return `$${v}`;
-              }
-              if (statType === "percentage") return `${v}%`;
-              return String(v);
-            }}
-          />
+          {!compact && (
+            <CartesianGrid
+              strokeDasharray="3 3"
+              vertical={false}
+              stroke="var(--color-border, #e5e7eb)"
+              strokeOpacity={0.5}
+            />
+          )}
+          {!compact && (
+            <XAxis
+              dataKey="label"
+              tick={{ fontSize: 9, fill: "var(--color-muted-foreground, #9ca3af)" }}
+              axisLine={false}
+              tickLine={false}
+              interval="preserveStartEnd"
+            />
+          )}
+          {!compact ? (
+            <YAxis
+              tick={{ fontSize: 9, fill: "var(--color-muted-foreground, #9ca3af)" }}
+              axisLine={false}
+              tickLine={false}
+              width={40}
+              domain={[0, "auto"]}
+              reversed={goodDirection === "down"}
+              allowDecimals={false}
+              tickCount={4}
+              tickFormatter={(v) => {
+                if (statType === "dollar") {
+                  if (v >= 1000) return `$${(v / 1000).toFixed(0)}k`;
+                  return `$${v}`;
+                }
+                if (statType === "percentage") return `${v}%`;
+                return String(v);
+              }}
+            />
+          ) : (
+            <YAxis
+              hide
+              domain={["dataMin", "dataMax"]}
+              reversed={goodDirection === "down"}
+            />
+          )}
           <Tooltip
             separator=""
+            wrapperStyle={{ zIndex: 50, pointerEvents: "none" }}
+            allowEscapeViewBox={{ x: true, y: true }}
             contentStyle={{
               backgroundColor: "var(--color-background, #fff)",
               borderColor: "var(--color-border, #e5e7eb)",

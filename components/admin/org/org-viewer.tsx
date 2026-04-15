@@ -1,15 +1,44 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Pencil, PencilOff } from "lucide-react";
+import { LayoutGrid, ListTree, Pencil, PencilOff } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { TreeView } from "./tree-view";
+import { BoardView } from "./board-view";
 import { useOrgEditing } from "./use-org-editing";
 import type { OrgViewerProps } from "./types";
 
+type ViewMode = "tree" | "board";
+const VIEW_STORAGE_KEY = "org-view-mode";
+
 export function OrgViewer({ isAdmin, ...data }: OrgViewerProps) {
+  const [view, setView] = useState<ViewMode>("tree");
   const [isEditing, setIsEditing] = useState(false);
   const editing = useOrgEditing();
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(VIEW_STORAGE_KEY) as ViewMode | null;
+      if (saved === "tree" || saved === "board") setView(saved);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  function selectView(next: ViewMode) {
+    setView(next);
+    try {
+      window.localStorage.setItem(VIEW_STORAGE_KEY, next);
+    } catch {
+      // ignore
+    }
+    // Editing only supported in tree view — exit edit mode on switch.
+    if (next !== "tree" && isEditing) {
+      editing.resetAll();
+      setIsEditing(false);
+    }
+  }
 
   function toggleEditing() {
     if (isEditing) {
@@ -19,9 +48,24 @@ export function OrgViewer({ isAdmin, ...data }: OrgViewerProps) {
   }
 
   return (
-    <div className="space-y-4">
-      {isAdmin && (
-        <div className="flex justify-end">
+    <div className={cn("space-y-4", view === "tree" && "max-w-4xl mx-auto")}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="inline-flex rounded-md border bg-muted/30 p-0.5">
+          <ViewButton
+            active={view === "tree"}
+            onClick={() => selectView("tree")}
+            icon={<ListTree className="h-3.5 w-3.5" />}
+            label="Tree"
+          />
+          <ViewButton
+            active={view === "board"}
+            onClick={() => selectView("board")}
+            icon={<LayoutGrid className="h-3.5 w-3.5" />}
+            label="Board"
+          />
+        </div>
+
+        {isAdmin && view === "tree" && (
           <Button
             variant={isEditing ? "default" : "outline"}
             size="sm"
@@ -31,10 +75,41 @@ export function OrgViewer({ isAdmin, ...data }: OrgViewerProps) {
             {isEditing ? <PencilOff className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
             {isEditing ? "Done" : "Edit"}
           </Button>
-        </div>
-      )}
+        )}
+      </div>
 
-      <TreeView {...data} isEditing={isAdmin && isEditing} editing={editing} />
+      {view === "tree" ? (
+        <TreeView {...data} isEditing={isAdmin && isEditing} editing={editing} />
+      ) : (
+        <BoardView {...data} />
+      )}
     </div>
+  );
+}
+
+function ViewButton({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded transition-colors",
+        active
+          ? "bg-background shadow-sm text-foreground"
+          : "text-muted-foreground hover:text-foreground"
+      )}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }

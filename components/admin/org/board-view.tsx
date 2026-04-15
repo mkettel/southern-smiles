@@ -215,20 +215,24 @@ function DivisionColumn({
   isEditing: boolean;
   editing: OrgEditingState;
 }) {
-  const color = div.color || "#6b7280";
-  const isCurrentUserDiv =
-    !!currentUserName && div.executive === currentUserName;
   const isEditingThis = editing.editingDiv === div.id;
   const isAddingDept = editing.addingDeptToDivId === div.id;
+  // Live-preview the color while editing; revert to saved color on cancel.
+  const color =
+    (isEditingThis && editing.editDivColor) || div.color || "#6b7280";
+  const isCurrentUserDiv =
+    !!currentUserName && div.executive === currentUserName;
 
   return (
     <div
       className="w-80 shrink-0 flex flex-col text-white rounded-md overflow-hidden shadow-sm"
       style={{ backgroundColor: color }}
     >
-      {/* Division header */}
+      {/* Division header — fixed height when displaying; grows to fit form when editing */}
       <div
-        className="h-24 px-3 py-2.5 border-b-2 border-white/30 flex flex-col items-center justify-center text-center relative group/div"
+        className={`${
+          isEditingThis ? "px-3 py-3" : "h-24 px-3 py-2.5"
+        } border-b-2 border-white/30 flex flex-col items-center justify-center text-center relative group/div`}
         style={{
           boxShadow: isCurrentUserDiv
             ? "inset 0 0 0 3px rgba(255,255,255,0.7)"

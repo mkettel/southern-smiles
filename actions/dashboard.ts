@@ -17,7 +17,7 @@ export async function getAdminDashboard(
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
   const week = weekStart ?? getCurrentWeekStart();
-  const sparklineWeeks = getLastNWeeks(week, 4);
+  const sparklineWeeks = getLastNWeeks(week, 5);
 
   // Get all active stats with their post + division
   const { data: stats } = await supabase
@@ -161,7 +161,7 @@ export async function getEmployeeDashboard(
   if (!user) throw new Error("Unauthorized");
 
   const week = weekStart ?? getCurrentWeekStart();
-  const sparklineWeeks = getLastNWeeks(week, 4);
+  const sparklineWeeks = getLastNWeeks(week, 5);
 
   // Get assigned posts
   const { data: assignments } = await supabase

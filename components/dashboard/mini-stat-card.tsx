@@ -21,7 +21,8 @@ export function MiniStatCard({
   showSparkline = true,
   className,
 }: MiniStatCardProps) {
-  const { stat, currentEntry, previousEntry, sparklineData } = data;
+  const { stat, division, currentEntry, previousEntry, sparklineData } = data;
+  const divisionColor = division?.color ?? undefined;
 
   const hasCurrentData =
     currentEntry?.value !== null && currentEntry?.value !== undefined;
@@ -123,6 +124,7 @@ export function MiniStatCard({
             goodDirection={stat.good_direction}
             height={40}
             compact
+            color={divisionColor}
           />
         </div>
       )}

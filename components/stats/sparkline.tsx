@@ -23,6 +23,8 @@ interface SparklineProps {
   height?: number;
   /** Hide axes + grid for dense layouts. Tooltip stays active on hover. */
   compact?: boolean;
+  /** Overrides the condition-derived color (e.g. division color). */
+  color?: string;
 }
 
 export function Sparkline({
@@ -32,8 +34,10 @@ export function Sparkline({
   goodDirection = "up",
   height = 100,
   compact = false,
+  color: colorProp,
 }: SparklineProps) {
-  const color = condition ? CONDITION_CONFIG[condition].color : "#6b7280";
+  const color =
+    colorProp ?? (condition ? CONDITION_CONFIG[condition].color : "#6b7280");
 
   const chartData = data.map((d) => ({
     ...d,

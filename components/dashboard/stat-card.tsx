@@ -16,8 +16,9 @@ interface StatCardProps {
 }
 
 export function StatCard({ data }: StatCardProps) {
-  const { stat, post, employee, currentEntry, previousEntry, sparklineData, contributors } =
+  const { stat, post, division, employee, currentEntry, previousEntry, sparklineData, contributors } =
     data;
+  const divisionColor = division?.color ?? null;
 
   // If current week has no data, fall back to showing previous week's data
   const hasCurrentData = currentEntry?.value !== null && currentEntry?.value !== undefined;
@@ -141,6 +142,7 @@ export function StatCard({ data }: StatCardProps) {
             statType={stat.stat_type}
             goodDirection={stat.good_direction}
             height={120}
+            color={divisionColor ?? undefined}
           />
         </CardContent>
       </Card>

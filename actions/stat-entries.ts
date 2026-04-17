@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentPracticeId } from "@/lib/practice";
-import { calculateCondition } from "@/lib/conditions";
+import { calculateCondition, type ConditionName } from "@/lib/conditions";
 import { submitWeeklyStatsSchema } from "@/lib/validators";
 import { getCurrentWeekStart } from "@/lib/constants";
 import type { MyStatForEntry, OtherStatForEntry, StatEntry, Profile } from "@/lib/types";
@@ -394,6 +394,44 @@ export async function updateStatEntry(entryId: string, value: number) {
       value,
       percent_change: result.percentChange,
       auto_condition: result.condition,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", entryId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/dashboard");
+  revalidatePath("/stats/[statId]", "page");
+  return { success: true };
+}
+
+/**
+ * Admin-only: override the displayed condition for a stat entry. Pass `null`
+ * to clear the override and revert to the auto-calculated condition.
+ */
+export async function setEntryCondition(
+  entryId: string,
+  condition: ConditionName | null,
+) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (profile?.role !== "admin") {
+    return { error: "Only admins can override conditions" };
+  }
+
+  const { error } = await supabase
+    .from("stat_entries")
+    .update({
+      final_condition: condition,
       updated_at: new Date().toISOString(),
     })
     .eq("id", entryId);

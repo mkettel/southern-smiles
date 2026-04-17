@@ -26,6 +26,7 @@ import { calculateCondition } from "@/lib/conditions";
 import type { ConditionName } from "@/lib/conditions";
 import { ChevronRight, MessageSquareText, Users } from "lucide-react";
 import { EntryRowActions } from "@/components/stats/entry-row-actions";
+import { ConditionPicker } from "@/components/stats/condition-picker";
 
 interface StatDetailViewProps {
   statName: string;
@@ -44,7 +45,13 @@ interface WeekGroup {
   weekStart: string;
   totalValue: number;
   entries: StatEntry[];
+  /** Effective condition shown to the user — final override if set, else auto. */
   condition: ConditionName | null;
+  /** Auto-calculated condition from WoW % change, ignoring override. */
+  autoCondition: ConditionName | null;
+  /** Latest entry for this week — where the override is stored. */
+  latestEntryId: string;
+  hasOverride: boolean;
   percentChange: number | null;
   playbookResponse: string | null;
 }
@@ -112,11 +119,17 @@ export function StatDetailView({
       // Recalculate % change and condition from aggregated totals
       const result = calculateCondition(totalValue, previousTotal, goodDirection);
 
+      const autoCondition =
+        previousTotal !== null ? result.condition : (latest.auto_condition ?? null);
+
       groups.push({
         weekStart,
         totalValue,
         entries: weekEntries,
-        condition: previousTotal !== null ? result.condition : (latest.final_condition ?? latest.auto_condition ?? null),
+        condition: latest.final_condition ?? autoCondition,
+        autoCondition,
+        latestEntryId: latest.id,
+        hasOverride: latest.final_condition !== null,
         percentChange: previousTotal !== null ? result.percentChange : null,
         playbookResponse: latest.playbook_response ?? null,
       });
@@ -321,9 +334,17 @@ export function StatDetailView({
                           ? formatPercentChange(wg.percentChange)
                           : "—"}
                       </TableCell>
-                      <TableCell>
+                      <TableCell onClick={(e) => isAdmin && e.stopPropagation()}>
                         <div className="flex items-center gap-1.5">
-                          {wg.condition ? (
+                          {isAdmin ? (
+                            <ConditionPicker
+                              entryId={wg.latestEntryId}
+                              condition={wg.condition}
+                              autoCondition={wg.autoCondition}
+                              hasOverride={wg.hasOverride}
+                              size="sm"
+                            />
+                          ) : wg.condition ? (
                             <ConditionDisplay
                               condition={wg.condition}
                               size="sm"

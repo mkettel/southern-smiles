@@ -14,6 +14,8 @@ import {
   createSection,
   updateSection,
   deleteSection,
+  reorderDepartments,
+  reorderSections,
 } from "@/actions/admin";
 import type { Division, Post, Department, Section } from "@/lib/types";
 
@@ -297,6 +299,40 @@ export function useOrgEditing() {
     });
   }
 
+  // ── Reorder handlers ──────────────────────────────────────
+
+  function moveDepartment(deptId: string, siblings: Department[], direction: -1 | 1) {
+    const sorted = [...siblings].sort((a, b) => a.display_order - b.display_order);
+    const index = sorted.findIndex((d) => d.id === deptId);
+    if (index === -1) return;
+    const target = index + direction;
+    if (target < 0 || target >= sorted.length) return;
+    const reordered = [...sorted];
+    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    startTransition(async () => {
+      const result = await reorderDepartments(reordered.map((d) => d.id));
+      if (result.error) {
+        toast.error(typeof result.error === "string" ? result.error : "Failed to reorder");
+      }
+    });
+  }
+
+  function moveSection(sectionId: string, siblings: Section[], direction: -1 | 1) {
+    const sorted = [...siblings].sort((a, b) => a.display_order - b.display_order);
+    const index = sorted.findIndex((s) => s.id === sectionId);
+    if (index === -1) return;
+    const target = index + direction;
+    if (target < 0 || target >= sorted.length) return;
+    const reordered = [...sorted];
+    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    startTransition(async () => {
+      const result = await reorderSections(reordered.map((s) => s.id));
+      if (result.error) {
+        toast.error(typeof result.error === "string" ? result.error : "Failed to reorder");
+      }
+    });
+  }
+
   // ── Reset all editing state ───────────────────────────────
 
   function resetAll() {
@@ -336,6 +372,8 @@ export function useOrgEditing() {
     startEditPost, handleSavePost, handleDeletePost,
     // Link
     linkingPostId, setLinkingPostId, handleLinkPostToSection,
+    // Reorder
+    moveDepartment, moveSection,
     // Utility
     resetAll,
   } as const;

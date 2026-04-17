@@ -3,6 +3,8 @@
 import { useMemo } from "react";
 import {
   Check,
+  ChevronDown,
+  ChevronUp,
   Pencil,
   Plus,
   Trash2,
@@ -302,6 +304,7 @@ function DivisionColumn({
           <DepartmentBlock
             key={dept.id}
             dept={dept}
+            siblings={depts}
             postsById={postsById}
             statsByPost={statsByPost}
             employeesByPost={employeesByPost}
@@ -515,6 +518,7 @@ function AddDivisionColumn({ editing }: { editing: OrgEditingState }) {
 
 function DepartmentBlock({
   dept,
+  siblings,
   postsById,
   statsByPost,
   employeesByPost,
@@ -523,6 +527,7 @@ function DepartmentBlock({
   editing,
 }: {
   dept: Department;
+  siblings: Department[];
   postsById: Map<string, Post>;
   statsByPost: Record<string, string[]>;
   employeesByPost: Record<string, string[]>;
@@ -535,6 +540,10 @@ function DepartmentBlock({
   );
   const isEditingThis = editing.editingDept === dept.id;
   const isAddingSection = editing.addingSectionToDeptId === dept.id;
+  const sortedSiblings = [...siblings].sort((a, b) => a.display_order - b.display_order);
+  const deptIndex = sortedSiblings.findIndex((d) => d.id === dept.id);
+  const canMoveDeptUp = deptIndex > 0;
+  const canMoveDeptDown = deptIndex >= 0 && deptIndex < sortedSiblings.length - 1;
 
   return (
     <div className="group/dept">
@@ -556,6 +565,22 @@ function DepartmentBlock({
           </div>
           {isEditing && (
             <div className="flex gap-0.5 opacity-0 group-hover/dept:opacity-100 transition-opacity shrink-0">
+              <button
+                onClick={() => editing.moveDepartment(dept.id, siblings, -1)}
+                disabled={editing.isPending || !canMoveDeptUp}
+                className={iconBtnCls}
+                aria-label="Move department up"
+              >
+                <ChevronUp className="h-3 w-3" />
+              </button>
+              <button
+                onClick={() => editing.moveDepartment(dept.id, siblings, 1)}
+                disabled={editing.isPending || !canMoveDeptDown}
+                className={iconBtnCls}
+                aria-label="Move department down"
+              >
+                <ChevronDown className="h-3 w-3" />
+              </button>
               <button
                 onClick={() => editing.startEditDept(dept)}
                 className={iconBtnCls}
@@ -590,6 +615,7 @@ function DepartmentBlock({
             <SectionBlock
               key={sec.id}
               sec={sec}
+              siblings={sections}
               postsById={postsById}
               statsByPost={statsByPost}
               employeesByPost={employeesByPost}
@@ -732,6 +758,7 @@ function AddDepartmentForm({
 
 function SectionBlock({
   sec,
+  siblings,
   postsById,
   statsByPost,
   employeesByPost,
@@ -740,6 +767,7 @@ function SectionBlock({
   editing,
 }: {
   sec: Section;
+  siblings: Section[];
   postsById: Map<string, Post>;
   statsByPost: Record<string, string[]>;
   employeesByPost: Record<string, string[]>;
@@ -758,6 +786,10 @@ function SectionBlock({
 
   const isEditingThis = editing.editingSection === sec.id;
   const isEditingResp = editing.editingResponsibilities === sec.id;
+  const sortedSiblings = [...siblings].sort((a, b) => a.display_order - b.display_order);
+  const secIndex = sortedSiblings.findIndex((s) => s.id === sec.id);
+  const canMoveSecUp = secIndex > 0;
+  const canMoveSecDown = secIndex >= 0 && secIndex < sortedSiblings.length - 1;
 
   return (
     <div className="group/sec">
@@ -785,6 +817,22 @@ function SectionBlock({
           </div>
           {isEditing && (
             <div className="flex gap-0.5 opacity-0 group-hover/sec:opacity-100 transition-opacity shrink-0">
+              <button
+                onClick={() => editing.moveSection(sec.id, siblings, -1)}
+                disabled={editing.isPending || !canMoveSecUp}
+                className={iconBtnCls}
+                aria-label="Move section up"
+              >
+                <ChevronUp className="h-3 w-3" />
+              </button>
+              <button
+                onClick={() => editing.moveSection(sec.id, siblings, 1)}
+                disabled={editing.isPending || !canMoveSecDown}
+                className={iconBtnCls}
+                aria-label="Move section down"
+              >
+                <ChevronDown className="h-3 w-3" />
+              </button>
               <button
                 onClick={() => editing.startEditSection(sec)}
                 className={iconBtnCls}

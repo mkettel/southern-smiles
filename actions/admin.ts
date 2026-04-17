@@ -451,6 +451,24 @@ export async function deleteDepartment(id: string) {
   return { success: true };
 }
 
+export async function reorderDepartments(orderedIds: string[]) {
+  const { supabase } = await requireAdmin();
+
+  const updates = orderedIds.map((id, index) =>
+    supabase
+      .from("departments")
+      .update({ display_order: index, updated_at: new Date().toISOString() })
+      .eq("id", id)
+  );
+  const results = await Promise.all(updates);
+  const failed = results.find((r) => r.error);
+  if (failed?.error) return { error: failed.error.message };
+
+  revalidatePath("/admin/organization");
+  revalidatePath("/dashboard");
+  return { success: true };
+}
+
 // ============================================================
 // Sections
 // ============================================================
@@ -495,6 +513,24 @@ export async function updateSection(
     .update({ ...input, updated_at: new Date().toISOString() })
     .eq("id", id);
   if (error) return { error: error.message };
+
+  revalidatePath("/admin/organization");
+  revalidatePath("/dashboard");
+  return { success: true };
+}
+
+export async function reorderSections(orderedIds: string[]) {
+  const { supabase } = await requireAdmin();
+
+  const updates = orderedIds.map((id, index) =>
+    supabase
+      .from("sections")
+      .update({ display_order: index, updated_at: new Date().toISOString() })
+      .eq("id", id)
+  );
+  const results = await Promise.all(updates);
+  const failed = results.find((r) => r.error);
+  if (failed?.error) return { error: failed.error.message };
 
   revalidatePath("/admin/organization");
   revalidatePath("/dashboard");

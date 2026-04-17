@@ -17,6 +17,7 @@ import {
   X,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   User,
   BarChart3,
   Plus,
@@ -145,6 +146,7 @@ export function TreeView({ divisions, posts, departments, statsByPost, employees
                   <DepartmentNode
                     key={dept.id}
                     dept={dept}
+                    siblings={divDepts}
                     div={div}
                     posts={posts}
                     employees={employees}
@@ -242,11 +244,12 @@ export function TreeView({ divisions, posts, departments, statsByPost, employees
 // ── Department tree node ──────────────────────────────────
 
 function DepartmentNode({
-  dept, div, posts, employees, statsByPost, employeesByPost,
+  dept, siblings, div, posts, employees, statsByPost, employeesByPost,
   expandedDepts, toggleDept, expandedSections, toggleSection,
   isEditing, editing, currentUserName,
 }: {
   dept: Department;
+  siblings: Department[];
   div: Division;
   posts: Post[];
   employees: { id: string; full_name: string }[];
@@ -264,6 +267,10 @@ function DepartmentNode({
   const isDeptExpanded = expandedDepts.has(dept.id);
   const isEditingThisDept = editing.editingDept === dept.id;
   const isCurrentUserDept = !!currentUserName && dept.director === currentUserName;
+  const sortedDeptSiblings = [...siblings].sort((a, b) => a.display_order - b.display_order);
+  const deptIndex = sortedDeptSiblings.findIndex((d) => d.id === dept.id);
+  const canMoveDeptUp = deptIndex > 0;
+  const canMoveDeptDown = deptIndex >= 0 && deptIndex < sortedDeptSiblings.length - 1;
 
   return (
     <div className="relative">
@@ -297,6 +304,8 @@ function DepartmentNode({
               <span className="text-[10px] text-muted-foreground mr-1 shrink-0">{deptSections.length} sec{deptSections.length !== 1 ? "s" : ""}</span>
               {isEditing && (
                 <div className="flex items-center gap-0.5 opacity-0 group-hover/dept:opacity-100 transition-opacity shrink-0">
+                  <button onClick={() => editing.moveDepartment(dept.id, siblings, -1)} disabled={editing.isPending || !canMoveDeptUp} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30" title="Move up"><ChevronUp className="h-3 w-3" /></button>
+                  <button onClick={() => editing.moveDepartment(dept.id, siblings, 1)} disabled={editing.isPending || !canMoveDeptDown} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30" title="Move down"><ChevronDown className="h-3 w-3" /></button>
                   <button onClick={() => editing.startEditDept(dept)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"><Pencil className="h-3 w-3" /></button>
                   <button onClick={() => editing.handleDeleteDept(dept.id)} disabled={editing.isPending || deptSections.length > 0} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-destructive transition-colors disabled:opacity-30" title={deptSections.length > 0 ? "Remove sections first" : "Delete department"}>
                     <Trash2 className="h-3 w-3" />
@@ -310,10 +319,11 @@ function DepartmentNode({
         {/* Sections within department */}
         {isDeptExpanded && (
           <div className="ml-4 border-l border-border">
-            {deptSections.map((sec) => (
+            {[...deptSections].sort((a, b) => a.display_order - b.display_order).map((sec) => (
               <SectionNode
                 key={sec.id}
                 sec={sec}
+                siblings={deptSections}
                 posts={posts}
                 employees={employees}
                 statsByPost={statsByPost}
@@ -363,10 +373,11 @@ function DepartmentNode({
 // ── Section tree node ─────────────────────────────────────
 
 function SectionNode({
-  sec, posts, employees, statsByPost, employeesByPost,
+  sec, siblings, posts, employees, statsByPost, employeesByPost,
   expandedSections, toggleSection, isEditing, editing, currentUserName,
 }: {
   sec: Section;
+  siblings: Section[];
   posts: Post[];
   employees: { id: string; full_name: string }[];
   statsByPost: Record<string, string[]>;
@@ -386,6 +397,10 @@ function SectionNode({
   const isCurrentUserSection = !!currentUserName && (
     sec.assignee === currentUserName || postEmployees.includes(currentUserName)
   );
+  const sortedSecSiblings = [...siblings].sort((a, b) => a.display_order - b.display_order);
+  const secIndex = sortedSecSiblings.findIndex((s) => s.id === sec.id);
+  const canMoveSecUp = secIndex > 0;
+  const canMoveSecDown = secIndex >= 0 && secIndex < sortedSecSiblings.length - 1;
 
   return (
     <div className="relative">
@@ -457,6 +472,8 @@ function SectionNode({
                 </div>
                 {isEditing && (
                   <div className="flex items-center gap-0.5 opacity-0 group-hover/sec:opacity-100 transition-opacity shrink-0">
+                    <button onClick={() => editing.moveSection(sec.id, siblings, -1)} disabled={editing.isPending || !canMoveSecUp} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30" title="Move up"><ChevronUp className="h-3 w-3" /></button>
+                    <button onClick={() => editing.moveSection(sec.id, siblings, 1)} disabled={editing.isPending || !canMoveSecDown} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30" title="Move down"><ChevronDown className="h-3 w-3" /></button>
                     <button onClick={() => editing.startEditSection(sec)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"><Pencil className="h-3 w-3" /></button>
                     <button onClick={() => editing.handleDeleteSection(sec.id)} disabled={editing.isPending} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-destructive transition-colors disabled:opacity-30" title="Delete section">
                       <Trash2 className="h-3 w-3" />

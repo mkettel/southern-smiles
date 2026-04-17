@@ -7,13 +7,14 @@ import type { DashboardStat, Division } from "@/lib/types";
 
 interface CanvasViewProps {
   stats: DashboardStat[];
+  isAdmin?: boolean;
 }
 
 /**
  * Pan + zoom canvas of stat cards, grouped into division columns. Mirrors the
  * org board layout so the two views feel consistent.
  */
-export function CanvasView({ stats }: CanvasViewProps) {
+export function CanvasView({ stats, isAdmin = false }: CanvasViewProps) {
   const columns = useMemo(() => {
     const byDiv = new Map<
       string,
@@ -75,6 +76,7 @@ export function CanvasView({ stats }: CanvasViewProps) {
                     <MiniStatCard
                       key={data.stat.id}
                       data={data}
+                      isAdmin={isAdmin}
                       className="bg-background text-foreground"
                     />
                   ))}

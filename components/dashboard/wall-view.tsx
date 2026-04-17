@@ -6,6 +6,7 @@ import type { DashboardStat, Division } from "@/lib/types";
 
 interface WallViewProps {
   stats: DashboardStat[];
+  isAdmin?: boolean;
 }
 
 /**
@@ -13,7 +14,7 @@ interface WallViewProps {
  * vertically inside. Keeps all stats on screen while preserving division
  * grouping.
  */
-export function WallView({ stats }: WallViewProps) {
+export function WallView({ stats, isAdmin = false }: WallViewProps) {
   const columns = useMemo(() => {
     const byDiv = new Map<
       string,
@@ -66,7 +67,7 @@ export function WallView({ stats }: WallViewProps) {
             </div>
             <div className="flex flex-col gap-2">
               {col.stats.map((data) => (
-                <MiniStatCard key={data.stat.id} data={data} />
+                <MiniStatCard key={data.stat.id} data={data} isAdmin={isAdmin} />
               ))}
             </div>
           </div>

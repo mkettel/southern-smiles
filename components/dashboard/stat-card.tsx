@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ConditionDisplay } from "@/components/stats/condition-display";
+import { OverallConditionPicker } from "@/components/stats/overall-condition-picker";
 import { Sparkline } from "@/components/stats/sparkline";
 import { formatStatValue, formatPercentChange, formatDelta } from "@/lib/utils";
 import { StatName } from "@/components/stats/stat-name";
@@ -13,10 +14,11 @@ import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 interface StatCardProps {
   data: DashboardStat;
+  isAdmin?: boolean;
 }
 
-export function StatCard({ data }: StatCardProps) {
-  const { stat, post, division, employee, currentEntry, previousEntry, sparklineData, contributors } =
+export function StatCard({ data, isAdmin = false }: StatCardProps) {
+  const { stat, post, division, employee, currentEntry, previousEntry, sparklineData, contributors, overallAuto } =
     data;
   const divisionColor = division?.color ?? null;
 
@@ -27,10 +29,13 @@ export function StatCard({ data }: StatCardProps) {
   const displayEntry = hasCurrentData ? currentEntry : previousEntry;
   const displayValue = displayEntry?.value ?? null;
 
-  const condition =
+  const weeklyCondition =
     displayEntry?.final_condition ??
     displayEntry?.auto_condition ??
     null;
+  // Header badge: admin override > auto-calculated lifetime > latest weekly fallback.
+  const condition =
+    stat.overall_condition ?? overallAuto?.condition ?? weeklyCondition;
 
   // Compute delta and % change from the same stored previous_value
   // so they can never disagree
@@ -95,7 +100,18 @@ export function StatCard({ data }: StatCardProps) {
                 {employee.full_name} &middot; {post?.title}
               </p>
             </div>
-            {condition && <ConditionDisplay condition={condition} size="sm" />}
+            {isAdmin ? (
+              <OverallConditionPicker
+                statId={stat.id}
+                overallCondition={stat.overall_condition}
+                fallbackCondition={overallAuto?.condition ?? weeklyCondition}
+                autoBreakdown={overallAuto}
+                statType={stat.stat_type}
+                size="sm"
+              />
+            ) : (
+              condition && <ConditionDisplay condition={condition} size="sm" />
+            )}
           </div>
         </CardHeader>
         <CardContent className="space-y-2">

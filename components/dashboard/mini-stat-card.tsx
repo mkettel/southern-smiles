@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { Sparkline } from "@/components/stats/sparkline";
+import { ConditionDisplay } from "@/components/stats/condition-display";
+import { OverallConditionPicker } from "@/components/stats/overall-condition-picker";
 import { formatStatValue, formatPercentChange } from "@/lib/utils";
 import { calculateCondition, CONDITION_CONFIG } from "@/lib/conditions";
 import type { DashboardStat } from "@/lib/types";
@@ -14,14 +16,16 @@ interface MiniStatCardProps {
   showSparkline?: boolean;
   /** Override card height. Defaults vary by context. */
   className?: string;
+  isAdmin?: boolean;
 }
 
 export function MiniStatCard({
   data,
   showSparkline = true,
   className,
+  isAdmin = false,
 }: MiniStatCardProps) {
-  const { stat, division, currentEntry, previousEntry, sparklineData } = data;
+  const { stat, division, currentEntry, previousEntry, sparklineData, overallAuto } = data;
   const divisionColor = division?.color ?? undefined;
 
   const hasCurrentData =
@@ -89,13 +93,32 @@ export function MiniStatCard({
       )}
     >
       <div className="flex-1 p-2 min-w-0">
-        <div className="mb-0.5">
+        <div className="mb-0.5 flex items-start justify-between gap-1">
           <p
-            className="text-[11px] font-semibold leading-tight text-foreground line-clamp-2 pr-8"
+            className="text-[11px] font-semibold leading-tight text-foreground line-clamp-2"
             title={stat.name}
           >
             {stat.name}
           </p>
+          {isAdmin ? (
+            <OverallConditionPicker
+              statId={stat.id}
+              overallCondition={stat.overall_condition}
+              fallbackCondition={overallAuto?.condition ?? condition}
+              autoBreakdown={overallAuto}
+              statType={stat.stat_type}
+              size="sm"
+            />
+          ) : (
+            (stat.overall_condition ?? overallAuto?.condition ?? condition) && (
+              <ConditionDisplay
+                condition={
+                  (stat.overall_condition ?? overallAuto?.condition ?? condition)!
+                }
+                size="sm"
+              />
+            )
+          )}
         </div>
         {displayValue !== null ? (
           <div className="flex items-baseline gap-1.5">

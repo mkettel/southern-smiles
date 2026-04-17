@@ -88,6 +88,8 @@ export interface Stat {
   post_id: string;
   display_order: number;
   is_active: boolean;
+  /** Admin-assigned lifetime condition for this stat. Null = not set. */
+  overall_condition: import("./conditions").ConditionName | null;
   created_at: string;
   updated_at: string;
   // Joined
@@ -210,6 +212,20 @@ export interface DashboardStat {
   sparklineData: { week: string; value: number }[];
   /** Individual contributor values when multiple employees submit for the same week */
   contributors?: ContributorEntry[];
+  /**
+   * Auto-calculated lifetime condition + the math that produced it
+   * (latest week vs. all-time historical avg). Null when there isn't enough
+   * history. The admin override (stat.overall_condition) wins for display,
+   * but this is shown alongside in the picker so they can see what the
+   * computer would say.
+   */
+  overallAuto: {
+    condition: import("./conditions").ConditionName;
+    latest: number;
+    baseline: number;
+    percentChange: number;
+    baselineWeeks: number;
+  } | null;
 }
 
 export interface MyStatForEntry {

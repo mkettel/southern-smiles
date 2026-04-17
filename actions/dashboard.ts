@@ -2,7 +2,49 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentWeekStart, getLastNWeeks } from "@/lib/constants";
+import { calculateCondition, type ConditionName } from "@/lib/conditions";
 import type { ContributorEntry, DashboardStat, Profile } from "@/lib/types";
+
+interface OverallCalc {
+  condition: ConditionName;
+  latest: number;
+  baseline: number;
+  percentChange: number;
+  /** How many prior weeks went into the baseline average. */
+  baselineWeeks: number;
+}
+
+/**
+ * Compute the lifetime "overall" condition for a stat: how is the most
+ * recent week doing compared to the all-time historical average?
+ *
+ * Baseline = mean of every prior week's total (the latest week is excluded so
+ * it doesn't dilute its own baseline). Current = the latest week's total.
+ * Returns null when there's only one week of data — nothing to compare against.
+ */
+function computeOverall(
+  weekTotals: { week_start: string; total: number }[],
+  goodDirection: "up" | "down",
+): OverallCalc | null {
+  const sorted = [...weekTotals].sort((a, b) =>
+    a.week_start.localeCompare(b.week_start),
+  );
+  if (sorted.length < 2) return null;
+
+  const latest = sorted[sorted.length - 1].total;
+  const history = sorted.slice(0, -1);
+  const baseline =
+    history.reduce((sum, x) => sum + x.total, 0) / history.length;
+  const result = calculateCondition(latest, baseline, goodDirection);
+
+  return {
+    condition: result.condition,
+    latest,
+    baseline,
+    percentChange: result.percentChange,
+    baselineWeeks: history.length,
+  };
+}
 
 /**
  * Get dashboard data: all stats with current/previous entries and sparklines.
@@ -38,6 +80,24 @@ export async function getAdminDashboard(
     .gte("week_start", sparklineWeeks[0])
     .lte("week_start", week)
     .order("week_start", { ascending: true });
+
+  // Lightweight all-time fetch for the lifetime overall-condition calc.
+  // Only the columns we need to avoid hauling profiles + playbook text.
+  const { data: allTimeEntries } = await supabase
+    .from("stat_entries")
+    .select("stat_id, week_start, value")
+    .in("stat_id", statIds)
+    .lte("week_start", week);
+
+  // Pre-aggregate all-time entries: stat_id → [{ week_start, total }] (sum across contributors)
+  const allTimeByStat = new Map<string, { week_start: string; total: number }[]>();
+  for (const e of allTimeEntries ?? []) {
+    const list = allTimeByStat.get(e.stat_id) ?? [];
+    const existing = list.find((x) => x.week_start === e.week_start);
+    if (existing) existing.total += Number(e.value);
+    else list.push({ week_start: e.week_start, total: Number(e.value) });
+    allTimeByStat.set(e.stat_id, list);
+  }
 
   // Get employee assignments to map stats → employees
   const postIds = [...new Set(stats.map((s) => s.post_id))];
@@ -144,6 +204,10 @@ export async function getAdminDashboard(
       previousEntry,
       sparklineData,
       contributors,
+      overallAuto: computeOverall(
+        allTimeByStat.get(stat.id) ?? [],
+        stat.good_direction,
+      ),
     } as DashboardStat;
   });
 }
@@ -192,6 +256,22 @@ export async function getEmployeeDashboard(
     .lte("week_start", week)
     .order("week_start", { ascending: true });
 
+  // All-time, lightweight, for the overall-condition calc.
+  const { data: allTimeEntries } = await supabase
+    .from("stat_entries")
+    .select("stat_id, week_start, value")
+    .in("stat_id", statIds)
+    .lte("week_start", week);
+
+  const allTimeByStat = new Map<string, { week_start: string; total: number }[]>();
+  for (const e of allTimeEntries ?? []) {
+    const list = allTimeByStat.get(e.stat_id) ?? [];
+    const existing = list.find((x) => x.week_start === e.week_start);
+    if (existing) existing.total += Number(e.value);
+    else list.push({ week_start: e.week_start, total: Number(e.value) });
+    allTimeByStat.set(e.stat_id, list);
+  }
+
   // Get profile
   const { data: profile } = await supabase
     .from("profiles")
@@ -221,6 +301,10 @@ export async function getEmployeeDashboard(
       currentEntry,
       previousEntry,
       sparklineData,
+      overallAuto: computeOverall(
+        allTimeByStat.get(stat.id) ?? [],
+        stat.good_direction,
+      ),
     } as DashboardStat;
   });
 }

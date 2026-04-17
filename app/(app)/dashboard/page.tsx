@@ -62,7 +62,7 @@ export default async function DashboardPage({
       )}
 
       {stats.length > 0 ? (
-        <DashboardViewer stats={stats} />
+        <DashboardViewer stats={stats} isAdmin={isAdmin} />
       ) : (
         <div className="text-center py-12 text-muted-foreground">
           No stats data available for this week.

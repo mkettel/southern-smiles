@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { divisionSchema, postSchema, statDefinitionSchema, departmentSchema, sectionSchema } from "@/lib/validators";
+import type { ConditionName } from "@/lib/conditions";
 
 async function requireAdmin() {
   const supabase = await createClient();
@@ -211,6 +212,25 @@ export async function updateStat(
   revalidatePath("/admin/stats");
   revalidatePath("/dashboard");
   revalidatePath("/enter");
+  return { success: true };
+}
+
+export async function setStatOverallCondition(
+  id: string,
+  condition: ConditionName | null,
+) {
+  const { supabase } = await requireAdmin();
+  const { error } = await supabase
+    .from("stats")
+    .update({
+      overall_condition: condition,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/dashboard");
+  revalidatePath("/stats/[statId]", "page");
   return { success: true };
 }
 

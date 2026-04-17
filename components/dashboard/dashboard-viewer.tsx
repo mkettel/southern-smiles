@@ -13,9 +13,10 @@ const VIEW_STORAGE_KEY = "dashboard-view-mode";
 
 interface DashboardViewerProps {
   stats: DashboardStat[];
+  isAdmin?: boolean;
 }
 
-export function DashboardViewer({ stats }: DashboardViewerProps) {
+export function DashboardViewer({ stats, isAdmin = false }: DashboardViewerProps) {
   const [view, setView] = useState<ViewMode>("grouped");
 
   useEffect(() => {
@@ -65,14 +66,14 @@ export function DashboardViewer({ stats }: DashboardViewerProps) {
         </div>
       </div>
 
-      {view === "grouped" && <GroupedView stats={stats} />}
-      {view === "wall" && <WallView stats={stats} />}
-      {view === "canvas" && <CanvasView stats={stats} />}
+      {view === "grouped" && <GroupedView stats={stats} isAdmin={isAdmin} />}
+      {view === "wall" && <WallView stats={stats} isAdmin={isAdmin} />}
+      {view === "canvas" && <CanvasView stats={stats} isAdmin={isAdmin} />}
     </div>
   );
 }
 
-function GroupedView({ stats }: { stats: DashboardStat[] }) {
+function GroupedView({ stats, isAdmin }: { stats: DashboardStat[]; isAdmin: boolean }) {
   const grouped = new Map<
     string,
     { label: string; number: number; stats: DashboardStat[] }
@@ -100,7 +101,7 @@ function GroupedView({ stats }: { stats: DashboardStat[] }) {
           </h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {group.stats.map((statData) => (
-              <StatCard key={statData.stat.id} data={statData} />
+              <StatCard key={statData.stat.id} data={statData} isAdmin={isAdmin} />
             ))}
           </div>
         </div>

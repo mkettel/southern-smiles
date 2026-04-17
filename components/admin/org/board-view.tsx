@@ -117,9 +117,6 @@ export function BoardView({
       for (const dept of departments) {
         (deptsByDivision[dept.division_id] ??= []).push(dept);
       }
-      for (const list of Object.values(deptsByDivision)) {
-        list.sort((a, b) => a.display_order - b.display_order);
-      }
 
       const postsByDivision: Record<string, Post[]> = {};
       for (const post of posts) {
@@ -225,6 +222,8 @@ function DivisionColumn({
   const isCurrentUserDiv =
     !!currentUserName && div.executive === currentUserName;
 
+  const sortedDepts = editing.sortWithOverride(depts, editing.deptOrderOverride[div.id]);
+
   return (
     <div
       className="w-80 shrink-0 flex flex-col text-white rounded-md overflow-hidden shadow-sm"
@@ -300,11 +299,11 @@ function DivisionColumn({
 
       {/* Body */}
       <div className="flex-1 bg-white/5 px-3 py-4 space-y-5">
-        {depts.map((dept) => (
+        {sortedDepts.map((dept) => (
           <DepartmentBlock
             key={dept.id}
             dept={dept}
-            siblings={depts}
+            siblings={sortedDepts}
             postsById={postsById}
             statsByPost={statsByPost}
             employeesByPost={employeesByPost}
@@ -535,8 +534,9 @@ function DepartmentBlock({
   isEditing: boolean;
   editing: OrgEditingState;
 }) {
-  const sections = [...(dept.sections ?? [])].sort(
-    (a, b) => a.display_order - b.display_order,
+  const sections = editing.sortWithOverride(
+    dept.sections ?? [],
+    editing.sectionOrderOverride[dept.id],
   );
   const isEditingThis = editing.editingDept === dept.id;
   const isAddingSection = editing.addingSectionToDeptId === dept.id;
@@ -546,7 +546,10 @@ function DepartmentBlock({
   const canMoveDeptDown = deptIndex >= 0 && deptIndex < sortedSiblings.length - 1;
 
   return (
-    <div className="group/dept">
+    <div
+      className="group/dept"
+      style={{ viewTransitionName: `dept-${dept.id}` }}
+    >
       {/* Dept header — display or edit */}
       {isEditingThis ? (
         <DepartmentEditForm dept={dept} editing={editing} employees={employees} />
@@ -792,7 +795,10 @@ function SectionBlock({
   const canMoveSecDown = secIndex >= 0 && secIndex < sortedSiblings.length - 1;
 
   return (
-    <div className="group/sec">
+    <div
+      className="group/sec"
+      style={{ viewTransitionName: `sec-${sec.id}` }}
+    >
       {isEditingThis ? (
         <SectionEditForm sec={sec} editing={editing} employees={employees} />
       ) : (

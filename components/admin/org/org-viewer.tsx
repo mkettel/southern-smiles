@@ -17,6 +17,14 @@ export function OrgViewer({ isAdmin, ...data }: OrgViewerProps) {
   const [isEditing, setIsEditing] = useState(false);
   const editing = useOrgEditing();
 
+  // Drop optimistic reorder overrides once the server-revalidated props
+  // reflect the same order — prevents a flip back to stale display_order.
+  useEffect(() => {
+    editing.pruneStaleOverrides(data.departments);
+    // Intentionally only depend on departments — pruneStaleOverrides is stable enough.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.departments]);
+
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(VIEW_STORAGE_KEY) as ViewMode | null;

@@ -77,7 +77,10 @@ export function TreeView({ divisions, posts, departments, statsByPost, employees
   return (
     <div className="space-y-1">
       {sortedDivisions.map((div) => {
-        const divDepts = deptsByDivision[div.id] ?? [];
+        const divDepts = editing.sortWithOverride(
+          deptsByDivision[div.id] ?? [],
+          editing.deptOrderOverride[div.id],
+        );
         const divPosts = posts.filter((p) => p.division_id === div.id);
         const unlinkedPosts = divPosts.filter((p) => !linkedPostIds.has(p.id));
         const isExpanded = expandedDivs.has(div.id);
@@ -273,7 +276,7 @@ function DepartmentNode({
   const canMoveDeptDown = deptIndex >= 0 && deptIndex < sortedDeptSiblings.length - 1;
 
   return (
-    <div className="relative">
+    <div className="relative" style={{ viewTransitionName: `tree-dept-${dept.id}` }}>
       <div className="absolute left-0 top-[18px] w-4 border-t border-border" />
       <div className="ml-4">
         {/* Department row */}
@@ -319,7 +322,7 @@ function DepartmentNode({
         {/* Sections within department */}
         {isDeptExpanded && (
           <div className="ml-4 border-l border-border">
-            {[...deptSections].sort((a, b) => a.display_order - b.display_order).map((sec) => (
+            {editing.sortWithOverride(deptSections, editing.sectionOrderOverride[dept.id]).map((sec) => (
               <SectionNode
                 key={sec.id}
                 sec={sec}
@@ -403,7 +406,7 @@ function SectionNode({
   const canMoveSecDown = secIndex >= 0 && secIndex < sortedSecSiblings.length - 1;
 
   return (
-    <div className="relative">
+    <div className="relative" style={{ viewTransitionName: `tree-sec-${sec.id}` }}>
       <div className="absolute left-0 top-[18px] w-4 border-t border-border" />
       <div className="ml-4">
         <div className={cn("group/sec py-2 px-2 rounded-md hover:bg-muted/20 transition-colors", isCurrentUserSection && "ring-1 ring-primary/40 bg-primary/5")}>

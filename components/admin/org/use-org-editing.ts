@@ -300,8 +300,25 @@ export function useOrgEditing() {
   }
 
   // ── Reorder handlers ──────────────────────────────────────
+  // Optimistic overrides keyed by parent id. Cleared once the server action
+  // returns and the page revalidates with the new display_order.
+  const [deptOrderOverride, setDeptOrderOverride] = useState<Record<string, string[]>>({});
+  const [sectionOrderOverride, setSectionOrderOverride] = useState<Record<string, string[]>>({});
+
+  function applyWithViewTransition(fn: () => void) {
+    const doc = typeof document !== "undefined" ? document : null;
+    const startVT = (doc as Document & { startViewTransition?: (cb: () => void) => unknown } | null)
+      ?.startViewTransition;
+    if (startVT) {
+      startVT.call(doc, fn);
+    } else {
+      fn();
+    }
+  }
 
   function moveDepartment(deptId: string, siblings: Department[], direction: -1 | 1) {
+    if (siblings.length === 0) return;
+    const divisionId = siblings[0].division_id;
     const sorted = [...siblings].sort((a, b) => a.display_order - b.display_order);
     const index = sorted.findIndex((d) => d.id === deptId);
     if (index === -1) return;
@@ -309,15 +326,32 @@ export function useOrgEditing() {
     if (target < 0 || target >= sorted.length) return;
     const reordered = [...sorted];
     [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    const newOrder = reordered.map((d) => d.id);
+
+    applyWithViewTransition(() => {
+      setDeptOrderOverride((prev) => ({ ...prev, [divisionId]: newOrder }));
+    });
+
     startTransition(async () => {
-      const result = await reorderDepartments(reordered.map((d) => d.id));
+      const result = await reorderDepartments(newOrder);
       if (result.error) {
+        // Revert the optimistic override on failure.
+        setDeptOrderOverride((prev) => {
+          const next = { ...prev };
+          delete next[divisionId];
+          return next;
+        });
         toast.error(typeof result.error === "string" ? result.error : "Failed to reorder");
       }
+      // On success: keep the override until pruneStaleOverrides() sees the
+      // server data has caught up. This prevents a one-frame flip back to
+      // stale display_order values before revalidated props arrive.
     });
   }
 
   function moveSection(sectionId: string, siblings: Section[], direction: -1 | 1) {
+    if (siblings.length === 0) return;
+    const departmentId = siblings[0].department_id;
     const sorted = [...siblings].sort((a, b) => a.display_order - b.display_order);
     const index = sorted.findIndex((s) => s.id === sectionId);
     if (index === -1) return;
@@ -325,11 +359,83 @@ export function useOrgEditing() {
     if (target < 0 || target >= sorted.length) return;
     const reordered = [...sorted];
     [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    const newOrder = reordered.map((s) => s.id);
+
+    applyWithViewTransition(() => {
+      setSectionOrderOverride((prev) => ({ ...prev, [departmentId]: newOrder }));
+    });
+
     startTransition(async () => {
-      const result = await reorderSections(reordered.map((s) => s.id));
+      const result = await reorderSections(newOrder);
       if (result.error) {
+        setSectionOrderOverride((prev) => {
+          const next = { ...prev };
+          delete next[departmentId];
+          return next;
+        });
         toast.error(typeof result.error === "string" ? result.error : "Failed to reorder");
       }
+    });
+  }
+
+  /**
+   * Drop overrides whose ordering already matches the canonical display_order
+   * coming back from the server. Call this in an effect whenever the
+   * departments prop changes — it bridges the gap between the server action
+   * resolving and the revalidated props arriving.
+   */
+  function pruneStaleOverrides(departments: Department[]) {
+    setDeptOrderOverride((prev) => {
+      const next: Record<string, string[]> = {};
+      const byDivision: Record<string, Department[]> = {};
+      for (const d of departments) {
+        (byDivision[d.division_id] ??= []).push(d);
+      }
+      for (const [divId, override] of Object.entries(prev)) {
+        const sorted = [...(byDivision[divId] ?? [])]
+          .sort((a, b) => a.display_order - b.display_order)
+          .map((d) => d.id);
+        if (sorted.length !== override.length || sorted.some((id, i) => id !== override[i])) {
+          next[divId] = override;
+        }
+      }
+      return next;
+    });
+    setSectionOrderOverride((prev) => {
+      const next: Record<string, string[]> = {};
+      for (const dept of departments) {
+        const override = prev[dept.id];
+        if (!override) continue;
+        const sorted = [...(dept.sections ?? [])]
+          .sort((a, b) => a.display_order - b.display_order)
+          .map((s) => s.id);
+        if (sorted.length !== override.length || sorted.some((id, i) => id !== override[i])) {
+          next[dept.id] = override;
+        }
+      }
+      return next;
+    });
+  }
+
+  /**
+   * Sort a list of departments/sections, applying the optimistic override
+   * (if any) for that parent. Items not in the override fall to the end in
+   * their stable display_order — but in practice the override always covers
+   * all current siblings so this only matters during a brief mismatch.
+   */
+  function sortWithOverride<T extends { id: string; display_order: number }>(
+    items: T[],
+    override: string[] | undefined,
+  ): T[] {
+    if (!override) return [...items].sort((a, b) => a.display_order - b.display_order);
+    const indexById = new Map(override.map((id, i) => [id, i]));
+    return [...items].sort((a, b) => {
+      const ai = indexById.get(a.id);
+      const bi = indexById.get(b.id);
+      if (ai !== undefined && bi !== undefined) return ai - bi;
+      if (ai !== undefined) return -1;
+      if (bi !== undefined) return 1;
+      return a.display_order - b.display_order;
     });
   }
 
@@ -373,7 +479,7 @@ export function useOrgEditing() {
     // Link
     linkingPostId, setLinkingPostId, handleLinkPostToSection,
     // Reorder
-    moveDepartment, moveSection,
+    moveDepartment, moveSection, deptOrderOverride, sectionOrderOverride, sortWithOverride, pruneStaleOverrides,
     // Utility
     resetAll,
   } as const;

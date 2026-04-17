@@ -4,11 +4,7 @@ import { useTransition } from "react";
 import { toast } from "sonner";
 import { Select as SelectPrimitive } from "@base-ui/react/select";
 import { ChevronDown } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem } from "@/components/ui/select";
 import { ConditionDisplay } from "@/components/stats/condition-display";
 import { CONDITION_CONFIG, type ConditionName } from "@/lib/conditions";
 import { setStatOverallCondition } from "@/actions/admin";
@@ -95,9 +91,12 @@ export function OverallConditionPicker({
               set condition
             </span>
           )}
-          <ChevronDown className="h-3 w-3 text-muted-foreground/60" aria-hidden />
+          <ChevronDown
+            className="h-3 w-3 text-muted-foreground/60"
+            aria-hidden
+          />
         </SelectPrimitive.Trigger>
-        <SelectContent>
+        <SelectContent className="!w-56">
           {/* Calculation breakdown — non-interactive header that shows admins
               exactly how the auto condition was derived. */}
           {autoBreakdown && (

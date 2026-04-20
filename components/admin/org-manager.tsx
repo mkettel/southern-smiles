@@ -20,6 +20,7 @@ import {
   createDepartment,
   updateDepartment,
   deleteDepartment,
+  toggleDivisionPrivacy,
   createSection,
   updateSection,
   deleteSection,
@@ -37,6 +38,8 @@ import {
   Link2,
   Unlink,
   ListChecks,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Division, Post, Department, Section } from "@/lib/types";
@@ -491,7 +494,37 @@ export function OrgManager({
                   <span className="text-[10px] text-muted-foreground mr-1 shrink-0">
                     {divDepts.length} dept{divDepts.length !== 1 ? "s" : ""}
                   </span>
+                  {div.is_private && (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground shrink-0"
+                      title="Hidden from non-admin users"
+                    >
+                      <EyeOff className="h-3 w-3" />
+                      Admin only
+                    </span>
+                  )}
                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                    <button
+                      onClick={() =>
+                        startTransition(async () => {
+                          const r = await toggleDivisionPrivacy(div.id, !div.is_private);
+                          if (r.error) {
+                            toast.error(typeof r.error === "string" ? r.error : "Failed to update");
+                          } else {
+                            toast.success(
+                              !div.is_private
+                                ? `${div.name} hidden from non-admins`
+                                : `${div.name} visible to everyone`,
+                            );
+                          }
+                        })
+                      }
+                      disabled={isPending}
+                      className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
+                      title={div.is_private ? "Make visible to everyone" : "Hide from non-admins"}
+                    >
+                      {div.is_private ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                    </button>
                     <button onClick={() => startEditDiv(div)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
                       <Pencil className="h-3 w-3" />
                     </button>

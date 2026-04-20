@@ -41,6 +41,14 @@ export default async function StatDetailPage({
 
   const isAdmin = profile?.role === "admin";
 
+  if (!isAdmin && (typedStat.is_private || typedStat.post?.division?.is_private)) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        Stat not found.
+      </div>
+    );
+  }
+
   return (
     <StatDetailView
       statName={stat.name}

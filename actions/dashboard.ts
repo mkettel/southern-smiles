@@ -61,12 +61,25 @@ export async function getAdminDashboard(
   const week = weekStart ?? getCurrentWeekStart();
   const sparklineWeeks = getLastNWeeks(week, 5);
 
+  const { data: callerProfile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  const isAdmin = callerProfile?.role === "admin";
+
   // Get all active stats with their post + division
-  const { data: stats } = await supabase
+  const { data: rawStats } = await supabase
     .from("stats")
     .select("*, post:posts(*, division:divisions(*))")
     .eq("is_active", true)
     .order("display_order");
+
+  const stats = isAdmin
+    ? rawStats
+    : rawStats?.filter(
+        (s) => !s.is_private && !s.post?.division?.is_private,
+      );
 
   if (!stats?.length) return [];
 
@@ -237,12 +250,18 @@ export async function getEmployeeDashboard(
   const postIds = assignments.map((a) => a.post_id);
 
   // Get stats for those posts
-  const { data: stats } = await supabase
+  const { data: rawStats } = await supabase
     .from("stats")
     .select("*, post:posts(*, division:divisions(*))")
     .in("post_id", postIds)
     .eq("is_active", true)
     .order("display_order");
+
+  // Employees assigned to a post still need to submit entries for private
+  // stats on /enter — but the dashboard hides them to match what admins control.
+  const stats = rawStats?.filter(
+    (s) => !s.is_private && !s.post?.division?.is_private,
+  );
 
   if (!stats?.length) return [];
   const statIds = stats.map((s) => s.id);

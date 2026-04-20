@@ -14,6 +14,7 @@ export interface Division {
   executive: string | null;
   vfp: string | null;
   color: string;
+  is_private: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -88,6 +89,7 @@ export interface Stat {
   post_id: string;
   display_order: number;
   is_active: boolean;
+  is_private: boolean;
   /** Admin-assigned lifetime condition for this stat. Null = not set. */
   overall_condition: import("./conditions").ConditionName | null;
   created_at: string;

@@ -50,7 +50,7 @@ export async function createDivision(input: { number: number; name: string }) {
 
 export async function updateDivision(
   id: string,
-  input: { number?: number; name?: string; executive?: string | null; vfp?: string | null; color?: string }
+  input: { number?: number; name?: string; executive?: string | null; vfp?: string | null; color?: string; is_private?: boolean }
 ) {
   const { supabase } = await requireAdmin();
   const { error } = await supabase
@@ -243,6 +243,32 @@ export async function toggleStat(id: string, isActive: boolean) {
   if (error) return { error: error.message };
 
   revalidatePath("/admin/stats");
+  revalidatePath("/dashboard");
+  return { success: true };
+}
+
+export async function toggleStatPrivacy(id: string, isPrivate: boolean) {
+  const { supabase } = await requireAdmin();
+  const { error } = await supabase
+    .from("stats")
+    .update({ is_private: isPrivate, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/stats");
+  revalidatePath("/dashboard");
+  return { success: true };
+}
+
+export async function toggleDivisionPrivacy(id: string, isPrivate: boolean) {
+  const { supabase } = await requireAdmin();
+  const { error } = await supabase
+    .from("divisions")
+    .update({ is_private: isPrivate, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/organization");
   revalidatePath("/dashboard");
   return { success: true };
 }

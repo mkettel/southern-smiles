@@ -23,7 +23,11 @@ import {
   Plus,
   Link2,
   ListChecks,
+  Eye,
+  EyeOff,
 } from "lucide-react";
+import { toast } from "sonner";
+import { toggleDivisionPrivacy } from "@/actions/admin";
 import { cn } from "@/lib/utils";
 import type { OrgData } from "./types";
 import type { OrgEditingState } from "./use-org-editing";
@@ -130,8 +134,28 @@ export function TreeView({ divisions, posts, departments, statsByPost, employees
                     {div.vfp && <p className="text-[10px] text-muted-foreground truncate mt-0.5">VFP: {div.vfp}</p>}
                   </div>
                   <span className="text-[10px] text-muted-foreground mr-1 shrink-0">{divDepts.length} dept{divDepts.length !== 1 ? "s" : ""}</span>
+                  {div.is_private && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground shrink-0" title="Hidden from non-admin users">
+                      <EyeOff className="h-3 w-3" />
+                      Admin only
+                    </span>
+                  )}
                   {isEditing && (
                     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      <button
+                        onClick={async () => {
+                          const r = await toggleDivisionPrivacy(div.id, !div.is_private);
+                          if (r.error) {
+                            toast.error(typeof r.error === "string" ? r.error : "Failed to update");
+                          } else {
+                            toast.success(!div.is_private ? `${div.name} hidden from non-admins` : `${div.name} visible to everyone`);
+                          }
+                        }}
+                        className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        title={div.is_private ? "Make visible to everyone" : "Hide from non-admins"}
+                      >
+                        {div.is_private ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                      </button>
                       <button onClick={() => editing.startEditDiv(div)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"><Pencil className="h-3 w-3" /></button>
                       <button onClick={() => editing.handleDeleteDiv(div.id)} disabled={editing.isPending || childCount > 0} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-destructive transition-colors disabled:opacity-30" title={childCount > 0 ? "Remove departments and posts first" : "Delete division"}>
                         <Trash2 className="h-3 w-3" />

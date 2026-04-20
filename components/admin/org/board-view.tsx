@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useTransition } from "react";
 import {
   Check,
   ChevronDown,
@@ -12,7 +12,11 @@ import {
   GripVertical,
   Link2,
   ListChecks,
+  Eye,
+  EyeOff,
 } from "lucide-react";
+import { toast } from "sonner";
+import { toggleDivisionPrivacy } from "@/actions/admin";
 import { PanContainer } from "./pan-container";
 import type { OrgData } from "./types";
 import type { OrgEditingState } from "./use-org-editing";
@@ -216,6 +220,7 @@ function DivisionColumn({
 }) {
   const isEditingThis = editing.editingDiv === div.id;
   const isAddingDept = editing.addingDeptToDivId === div.id;
+  const [privacyPending, startPrivacyTransition] = useTransition();
   // Live-preview the color while editing; revert to saved color on cancel.
   const color =
     (isEditingThis && editing.editDivColor) || div.color || "#6b7280";
@@ -267,8 +272,39 @@ function DivisionColumn({
               </div>
             )}
 
+            {div.is_private && (
+              <div
+                className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded-full bg-black/30 px-1.5 py-0.5 text-[9px] uppercase tracking-wider"
+                title="Hidden from non-admin users"
+              >
+                <EyeOff className="h-2.5 w-2.5" />
+                Admin only
+              </div>
+            )}
             {isEditing && (
               <div className="absolute top-1.5 right-1.5 flex gap-0.5 opacity-0 group-hover/div:opacity-100 transition-opacity">
+                <button
+                  onClick={() =>
+                    startPrivacyTransition(async () => {
+                      const r = await toggleDivisionPrivacy(div.id, !div.is_private);
+                      if (r.error) {
+                        toast.error(typeof r.error === "string" ? r.error : "Failed to update");
+                      } else {
+                        toast.success(
+                          !div.is_private
+                            ? `${div.name} hidden from non-admins`
+                            : `${div.name} visible to everyone`,
+                        );
+                      }
+                    })
+                  }
+                  disabled={privacyPending}
+                  className={iconBtnCls}
+                  aria-label={div.is_private ? "Make division visible" : "Hide division from non-admins"}
+                  title={div.is_private ? "Make visible to everyone" : "Hide from non-admins"}
+                >
+                  {div.is_private ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                </button>
                 <button
                   onClick={() => editing.startEditDiv(div)}
                   className={iconBtnCls}

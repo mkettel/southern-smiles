@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/table";
 import { StatFormDialog } from "@/components/admin/stat-form-dialog";
 import { StatToggleButton } from "@/components/admin/stat-toggle-button";
+import { PrivacyToggleButton } from "@/components/admin/privacy-toggle-button";
 import { StatName } from "@/components/stats/stat-name";
 import { Plus, Pencil } from "lucide-react";
 import type { Profile, Post } from "@/lib/types";
@@ -63,6 +64,7 @@ export default async function ManageStatsPage() {
                 <TableHead>Post</TableHead>
                 <TableHead>Division</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Visibility</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -105,6 +107,11 @@ export default async function ManageStatsPage() {
                       {stat.is_active ? "Active" : "Inactive"}
                     </Badge>
                   </TableCell>
+                  <TableCell>
+                    <Badge variant={stat.is_private ? "secondary" : "outline"}>
+                      {stat.is_private ? "Admin only" : "Everyone"}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
                       <StatFormDialog
@@ -123,6 +130,12 @@ export default async function ManageStatsPage() {
                           <Pencil className="h-3 w-3" />
                         }
                       />
+                      <PrivacyToggleButton
+                        id={stat.id}
+                        isPrivate={stat.is_private}
+                        target="stat"
+                        label={stat.name}
+                      />
                       <StatToggleButton
                         statId={stat.id}
                         isActive={stat.is_active}
@@ -134,7 +147,7 @@ export default async function ManageStatsPage() {
               {stats.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="text-center text-muted-foreground py-8"
                   >
                     No stats defined yet. Click "Add Stat" to create one.

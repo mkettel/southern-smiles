@@ -234,6 +234,24 @@ export async function setStatOverallCondition(
   return { success: true };
 }
 
+export async function reorderStats(orderedIds: string[]) {
+  const { supabase } = await requireAdmin();
+
+  const updates = orderedIds.map((id, index) =>
+    supabase
+      .from("stats")
+      .update({ display_order: index, updated_at: new Date().toISOString() })
+      .eq("id", id)
+  );
+  const results = await Promise.all(updates);
+  const failed = results.find((r) => r.error);
+  if (failed?.error) return { error: failed.error.message };
+
+  revalidatePath("/admin/stats");
+  revalidatePath("/dashboard");
+  return { success: true };
+}
+
 export async function toggleStat(id: string, isActive: boolean) {
   const { supabase } = await requireAdmin();
   const { error } = await supabase

@@ -3,6 +3,7 @@ import { getProfile } from "@/actions/auth";
 import { getOpenRequestCount, getNewRequestCount } from "@/actions/requests";
 import { getPracticeSettings } from "@/actions/settings";
 import { getConversations, getUnreadMessageCount, getPracticeMembers } from "@/actions/messages";
+import { getUnreadChangelogCount } from "@/actions/changelog";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { ChatWidget } from "@/components/messages/chat-widget";
@@ -21,7 +22,7 @@ export default async function AppLayout({
     redirect("/login");
   }
 
-  const [requestCounts, settings, conversations, unreadMessageCount, practiceMembers] =
+  const [requestCounts, settings, conversations, unreadMessageCount, practiceMembers, unreadChangelogCount] =
     await Promise.all([
       profile.role === "admin"
         ? Promise.all([getOpenRequestCount(), getNewRequestCount()])
@@ -30,6 +31,7 @@ export default async function AppLayout({
       getConversations(),
       getUnreadMessageCount(),
       getPracticeMembers(),
+      getUnreadChangelogCount(),
     ]);
 
   const [openRequestCount, newRequestCount] = requestCounts;
@@ -53,6 +55,7 @@ export default async function AppLayout({
           openRequestCount={openRequestCount}
           newRequestCount={newRequestCount}
           practiceName={practiceName}
+          unreadChangelogCount={unreadChangelogCount}
         />
         <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
       </div>

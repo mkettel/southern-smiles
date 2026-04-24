@@ -18,6 +18,7 @@ import {
   Building2,
   Network,
   Wrench,
+  Bell,
 } from "lucide-react";
 
 interface MobileNavProps {
@@ -44,6 +45,7 @@ const adminOnlyLinks: NavLink[] = [
   { href: "/admin/organization", label: "Organization", icon: Building2 },
   { href: "/admin/stats", label: "Manage Stats", icon: BarChart3 },
   { href: "/admin/employees", label: "Manage Team", icon: Settings },
+  { href: "/admin/updates", label: "Updates", icon: Bell },
   { href: "/requests", label: "Requests", icon: MessageSquarePlus },
   { href: "/admin/settings", label: "Settings", icon: Wrench },
 ];

@@ -132,3 +132,51 @@
     @apply font-sans;
   }
 }
+
+/* Tiptap content styling — used by ChangelogContent (read-only) and the editor. */
+.changelog-prose .ProseMirror {
+  @apply outline-none text-sm leading-relaxed text-foreground;
+}
+.changelog-prose .ProseMirror > * + * {
+  @apply mt-2;
+}
+.changelog-prose .ProseMirror h1 {
+  @apply text-lg font-semibold mt-3;
+}
+.changelog-prose .ProseMirror h2 {
+  @apply text-base font-semibold mt-3;
+}
+.changelog-prose .ProseMirror h3 {
+  @apply text-sm font-semibold mt-2;
+}
+.changelog-prose .ProseMirror p {
+  @apply text-sm;
+}
+.changelog-prose .ProseMirror ul {
+  @apply list-disc pl-5 space-y-1;
+}
+.changelog-prose .ProseMirror ol {
+  @apply list-decimal pl-5 space-y-1;
+}
+.changelog-prose .ProseMirror code {
+  @apply rounded bg-muted px-1 py-0.5 font-mono text-[0.85em];
+}
+.changelog-prose .ProseMirror pre {
+  @apply rounded-md bg-muted p-3 font-mono text-xs overflow-x-auto;
+}
+.changelog-prose .ProseMirror pre code {
+  @apply bg-transparent p-0;
+}
+.changelog-prose .ProseMirror blockquote {
+  @apply border-l-2 border-border pl-3 text-muted-foreground;
+}
+.changelog-prose .ProseMirror a {
+  @apply text-primary underline underline-offset-2;
+}
+.changelog-prose .ProseMirror img {
+  @apply rounded-md my-2 max-w-full h-auto;
+}
+.changelog-prose .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  @apply text-muted-foreground float-left h-0 pointer-events-none;
+}

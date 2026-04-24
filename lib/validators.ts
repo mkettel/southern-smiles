@@ -90,6 +90,14 @@ export const oicLogSchema = z.object({
   entry_text: z.string().min(1).max(2000),
 });
 
+export const changelogEntrySchema = z.object({
+  title: z.string().min(1, "Title is required").max(200),
+  body: z.unknown(),
+  image_url: z.string().url().nullable().optional(),
+  tags: z.array(z.string().max(40)).max(8).default([]),
+  visibility: z.enum(["admin", "everyone"]).default("admin"),
+});
+
 export const messageSchema = z.object({
   content: z.string().min(1, "Message cannot be empty").max(4000),
   mentions: z.array(uuidLike).default([]),

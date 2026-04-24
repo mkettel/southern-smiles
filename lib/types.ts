@@ -117,6 +117,25 @@ export interface StatEntry {
   profile?: Profile;
 }
 
+export type ChangelogVisibility = "admin" | "everyone";
+
+export interface ChangelogEntry {
+  id: string;
+  practice_id: string;
+  author_id: string;
+  title: string;
+  /** Tiptap JSON document */
+  body: unknown;
+  image_url: string | null;
+  tags: string[];
+  visibility: ChangelogVisibility;
+  created_at: string;
+  updated_at: string;
+  // Joined / computed
+  author?: Pick<Profile, "id" | "full_name" | "avatar_url" | "avatar_color">;
+  is_unread?: boolean;
+}
+
 export interface ConditionPlaybook {
   id: string;
   condition: ConditionName;

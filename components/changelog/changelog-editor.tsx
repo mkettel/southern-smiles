@@ -83,7 +83,7 @@ export function ChangelogEditor({
     const fd = new FormData();
     fd.append("image", file);
     const res = await uploadChangelogImage(fd);
-    if (res.error || !res.url) {
+    if ("error" in res) {
       console.error("Image upload failed", res.error);
       return;
     }

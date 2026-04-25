@@ -11,6 +11,7 @@
  *   tags: [feature]                # any of: feature, fix, headsup, note
  *   visibility: admin              # admin | everyone (default: admin)
  *   image_url: https://...         # optional header image
+ *   video_url: https://...         # optional header video (use one or the other)
  *   ---
  *
  *   Body in markdown. Supports headings, bold/italic, lists, links,
@@ -231,6 +232,7 @@ async function main() {
     const tags = Array.isArray(fm.tags) ? (fm.tags as string[]) : [];
     const visibility = (fm.visibility as string | undefined) ?? "admin";
     const image_url = (fm.image_url as string | undefined) ?? null;
+    const video_url = (fm.video_url as string | undefined) ?? null;
 
     if (!title) {
       console.error(`✗ ${file}: missing 'title' in frontmatter — skipped`);
@@ -253,6 +255,7 @@ async function main() {
         title,
         body,
         image_url,
+        video_url,
         tags,
         visibility,
       })

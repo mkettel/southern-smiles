@@ -128,6 +128,7 @@ export interface ChangelogEntry {
   /** Tiptap JSON document */
   body: unknown;
   image_url: string | null;
+  video_url: string | null;
   tags: string[];
   visibility: ChangelogVisibility;
   created_at: string;

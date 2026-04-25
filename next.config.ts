@@ -8,7 +8,9 @@ const supabaseHostname = supabaseUrl
 const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
-      bodySizeLimit: "4mb",
+      // Headroom over the 25 MB video cap enforced in uploadChangelogMedia
+      // (FormData multipart adds a small overhead).
+      bodySizeLimit: "30mb",
     },
   },
   images: {

@@ -95,6 +95,7 @@ export const changelogEntrySchema = z.object({
   title: z.string().min(1, "Title is required").max(200),
   body: z.unknown(),
   image_url: z.string().url().nullable().optional(),
+  video_url: z.string().url().nullable().optional(),
   tags: z.array(z.string().max(40)).max(8).default([]),
   visibility: z.enum(["admin", "everyone"]).default("admin"),
 });

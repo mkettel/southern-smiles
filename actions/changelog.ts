@@ -72,6 +72,7 @@ export async function createChangelogEntry(input: {
   title: string;
   body: unknown;
   image_url?: string | null;
+  video_url?: string | null;
   tags?: string[];
   visibility?: "admin" | "everyone";
 }) {
@@ -87,6 +88,7 @@ export async function createChangelogEntry(input: {
       title: parsed.data.title.trim(),
       body: parsed.data.body,
       image_url: parsed.data.image_url ?? null,
+      video_url: parsed.data.video_url ?? null,
       tags: parsed.data.tags ?? [],
       visibility: parsed.data.visibility ?? "admin",
     })
@@ -111,6 +113,7 @@ export async function updateChangelogEntry(
     title?: string;
     body?: unknown;
     image_url?: string | null;
+    video_url?: string | null;
     tags?: string[];
     visibility?: "admin" | "everyone";
   }
@@ -121,6 +124,7 @@ export async function updateChangelogEntry(
   if (input.title !== undefined) update.title = input.title.trim();
   if (input.body !== undefined) update.body = input.body;
   if (input.image_url !== undefined) update.image_url = input.image_url;
+  if (input.video_url !== undefined) update.video_url = input.video_url;
   if (input.tags !== undefined) update.tags = input.tags;
   if (input.visibility !== undefined) update.visibility = input.visibility;
 
@@ -189,20 +193,37 @@ export async function markAllChangelogRead() {
   return markChangelogRead(entries.map((e) => e.id));
 }
 
-export async function uploadChangelogImage(formData: FormData) {
+const IMAGE_EXTS = ["png", "jpg", "jpeg", "gif", "webp", "svg"] as const;
+const VIDEO_EXTS = ["mp4", "webm", "mov", "m4v"] as const;
+const IMAGE_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+const VIDEO_MAX_BYTES = 25 * 1024 * 1024; // 25 MB
+
+export async function uploadChangelogMedia(
+  formData: FormData,
+): Promise<
+  | { success: true; url: string; type: "image" | "video" }
+  | { error: string }
+> {
   const { supabase } = await requireAdmin();
 
-  const file = formData.get("image") as File;
+  // Accept either field name for backwards compatibility with older callers.
+  const file = (formData.get("media") ?? formData.get("image")) as File | null;
   if (!file || file.size === 0) return { error: "No file provided" };
 
-  if (file.size > 5 * 1024 * 1024) {
-    return { error: "Image must be under 5MB" };
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  const isImage = (IMAGE_EXTS as readonly string[]).includes(ext);
+  const isVideo = (VIDEO_EXTS as readonly string[]).includes(ext);
+
+  if (!isImage && !isVideo) {
+    return {
+      error: "File must be an image (PNG, JPG, GIF, WebP, SVG) or video (MP4, WebM, MOV)",
+    };
   }
 
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "png";
-  const allowed = ["png", "jpg", "jpeg", "gif", "webp", "svg"];
-  if (!allowed.includes(ext)) {
-    return { error: "Image must be PNG, JPG, GIF, WebP, or SVG" };
+  const maxBytes = isImage ? IMAGE_MAX_BYTES : VIDEO_MAX_BYTES;
+  if (file.size > maxBytes) {
+    const limit = isImage ? "5MB" : "25MB";
+    return { error: `File must be under ${limit}` };
   }
 
   const filename = `changelog-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
@@ -217,5 +238,16 @@ export async function uploadChangelogImage(formData: FormData) {
     .from("changelog-images")
     .getPublicUrl(filename);
 
-  return { success: true, url: urlData.publicUrl };
+  return { success: true, url: urlData.publicUrl, type: isImage ? "image" : "video" };
+}
+
+/**
+ * @deprecated Use {@link uploadChangelogMedia}. Kept for callers that only
+ * expect images and don't care about the media type in the result.
+ */
+export async function uploadChangelogImage(formData: FormData) {
+  const result = await uploadChangelogMedia(formData);
+  if ("error" in result) return result;
+  if (result.type !== "image") return { error: "Only images are accepted here" };
+  return { success: true as const, url: result.url };
 }

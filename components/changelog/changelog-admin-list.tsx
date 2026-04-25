@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Pencil, Trash2, Plus, Lock, Globe } from "lucide-react";
+import { Pencil, Trash2, Plus, Lock, Globe, Upload } from "lucide-react";
 import { ChangelogEditor } from "./changelog-editor";
 import { ChangelogContent } from "./changelog-content";
 import { CHANGELOG_TAGS, TagChip } from "./tags";
@@ -9,7 +9,7 @@ import {
   createChangelogEntry,
   deleteChangelogEntry,
   updateChangelogEntry,
-  uploadChangelogImage,
+  uploadChangelogMedia,
 } from "@/actions/changelog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,7 @@ type FormState = {
   title: string;
   body: unknown;
   image_url: string | null;
+  video_url: string | null;
   tags: string[];
   visibility: "admin" | "everyone";
 };
@@ -34,6 +35,7 @@ const EMPTY_FORM: FormState = {
   title: "",
   body: { type: "doc", content: [{ type: "paragraph" }] },
   image_url: null,
+  video_url: null,
   tags: [],
   visibility: "admin",
 };
@@ -67,6 +69,7 @@ export function ChangelogAdminList({ entries }: ChangelogAdminListProps) {
       title: entry.title,
       body: entry.body,
       image_url: entry.image_url,
+      video_url: entry.video_url,
       tags: entry.tags,
       visibility: entry.visibility,
     });
@@ -87,17 +90,27 @@ export function ChangelogAdminList({ entries }: ChangelogAdminListProps) {
     });
   }
 
-  async function handleHeaderImage(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !form) return;
+  async function uploadHeaderFile(file: File) {
+    if (!form) return;
+    setError(null);
     const fd = new FormData();
-    fd.append("image", file);
-    const res = await uploadChangelogImage(fd);
-    if (res.error || !res.url) {
-      setError(res.error ?? "Upload failed");
+    fd.append("media", file);
+    const res = await uploadChangelogMedia(fd);
+    if ("error" in res) {
+      setError(res.error);
       return;
     }
-    setForm({ ...form, image_url: res.url });
+    setForm({
+      ...form,
+      image_url: res.type === "image" ? res.url : null,
+      video_url: res.type === "video" ? res.url : null,
+    });
+  }
+
+  async function handleHeaderMedia(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await uploadHeaderFile(file);
     e.target.value = "";
   }
 
@@ -116,6 +129,7 @@ export function ChangelogAdminList({ entries }: ChangelogAdminListProps) {
         title: form.title,
         body: form.body,
         image_url: form.image_url,
+        video_url: form.video_url,
         tags: form.tags,
         visibility: form.visibility,
       };
@@ -173,7 +187,8 @@ export function ChangelogAdminList({ entries }: ChangelogAdminListProps) {
               pending={pending}
               onChange={setForm}
               onTagToggle={toggleTag}
-              onHeaderImage={handleHeaderImage}
+              onHeaderMedia={handleHeaderMedia}
+              onDropFile={uploadHeaderFile}
               onCancel={close}
               onSubmit={handleSubmit}
             />
@@ -208,7 +223,8 @@ export function ChangelogAdminList({ entries }: ChangelogAdminListProps) {
                   pending={pending}
                   onChange={setForm}
                   onTagToggle={toggleTag}
-                  onHeaderImage={handleHeaderImage}
+                  onHeaderMedia={handleHeaderMedia}
+                  onDropFile={uploadHeaderFile}
                   onCancel={close}
                   onSubmit={handleSubmit}
                 />
@@ -253,13 +269,22 @@ export function ChangelogAdminList({ entries }: ChangelogAdminListProps) {
                     {new Date(entry.created_at).toLocaleString()}
                     {entry.author?.full_name && ` · ${entry.author.full_name}`}
                   </p>
-                  {entry.image_url && (
+                  {entry.video_url ? (
+                    <video
+                      src={entry.video_url}
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                      className="mt-2 max-h-64 w-full rounded-md border object-cover"
+                    />
+                  ) : entry.image_url ? (
                     <img
                       src={entry.image_url}
                       alt=""
                       className="mt-2 max-h-64 w-full rounded-md border object-cover"
                     />
-                  )}
+                  ) : null}
                   <div className="mt-2">
                     <ChangelogContent body={entry.body} />
                   </div>
@@ -279,7 +304,8 @@ interface FormCardProps {
   pending: boolean;
   onChange: (next: FormState) => void;
   onTagToggle: (id: string) => void;
-  onHeaderImage: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onHeaderMedia: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onDropFile: (file: File) => void | Promise<void>;
   onCancel: () => void;
   onSubmit: (e: React.FormEvent) => void;
 }
@@ -290,15 +316,51 @@ function FormCard({
   pending,
   onChange,
   onTagToggle,
-  onHeaderImage,
+  onHeaderMedia,
+  onDropFile,
   onCancel,
   onSubmit,
 }: FormCardProps) {
+  const [isDragging, setIsDragging] = useState(false);
+
+  function handleDragOver(e: React.DragEvent) {
+    if (!Array.from(e.dataTransfer.types).includes("Files")) return;
+    e.preventDefault();
+    setIsDragging(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    // Only un-highlight when actually leaving the form (not entering a child).
+    if (e.currentTarget === e.target) setIsDragging(false);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    void onDropFile(file);
+  }
+
   return (
     <form
       onSubmit={onSubmit}
-      className="space-y-3 rounded-lg border bg-card p-4 ring-2 ring-primary/20"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={cn(
+        "relative space-y-3 rounded-lg border bg-card p-4 ring-2 ring-primary/20 transition-colors",
+        isDragging && "border-primary bg-primary/5",
+      )}
     >
+      {isDragging && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary/60 bg-background/80">
+          <div className="flex items-center gap-2 text-sm font-medium text-primary">
+            <Upload className="h-4 w-4" />
+            Drop image or video to set as header
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold">
           {form.id ? "Edit entry" : "New entry"}
@@ -356,9 +418,27 @@ function FormCard({
 
       <div>
         <label className="mb-1 block text-[11px] uppercase tracking-wider text-muted-foreground">
-          Header image (optional)
+          Header media (optional) — image or video
         </label>
-        {form.image_url ? (
+        {form.video_url ? (
+          <div className="relative inline-block">
+            <video
+              src={form.video_url}
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="max-h-40 rounded-md border"
+            />
+            <button
+              type="button"
+              onClick={() => onChange({ ...form, video_url: null })}
+              className="absolute right-1 top-1 rounded bg-background/90 px-2 py-0.5 text-[10px] hover:bg-background"
+            >
+              Remove
+            </button>
+          </div>
+        ) : form.image_url ? (
           <div className="relative inline-block">
             <img
               src={form.image_url}
@@ -374,12 +454,21 @@ function FormCard({
             </button>
           </div>
         ) : (
-          <input
-            type="file"
-            accept="image/*"
-            onChange={onHeaderImage}
-            className="text-xs"
-          />
+          <label className="block cursor-pointer">
+            <input
+              type="file"
+              accept="image/*,video/*"
+              onChange={onHeaderMedia}
+              className="sr-only"
+            />
+            <div className="flex flex-col items-center justify-center gap-1.5 rounded-md border-2 border-dashed border-muted-foreground/30 bg-muted/20 px-4 py-5 text-xs text-muted-foreground transition-colors hover:border-primary/60 hover:bg-primary/5 hover:text-foreground">
+              <Upload className="h-5 w-5" />
+              <div className="font-medium">Click to upload or drag and drop</div>
+              <div className="text-[10px] text-muted-foreground/80">
+                Images up to 5MB · Videos up to 25MB
+              </div>
+            </div>
+          </label>
         )}
       </div>
 

@@ -16,6 +16,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ChangelogContent } from "./changelog-content";
+import { ChangelogMedia } from "./changelog-media";
 import { TagChip } from "./tags";
 import {
   listChangelog,
@@ -168,22 +169,11 @@ export function ChangelogBell({ initialUnreadCount }: ChangelogBellProps) {
                       {formatTimestamp(entry.created_at)}
                       {entry.author?.full_name && ` · ${entry.author.full_name}`}
                     </p>
-                    {entry.video_url ? (
-                      <video
-                        src={entry.video_url}
-                        autoPlay
-                        loop
-                        muted
-                        playsInline
-                        className="mt-2 rounded-md border max-h-64 w-full object-cover"
-                      />
-                    ) : entry.image_url ? (
-                      <img
-                        src={entry.image_url}
-                        alt=""
-                        className="mt-2 rounded-md border max-h-64 w-full object-cover"
-                      />
-                    ) : null}
+                    <ChangelogMedia
+                      imageUrl={entry.image_url}
+                      videoUrl={entry.video_url}
+                      className="mt-2"
+                    />
                     <div className="mt-2">
                       <ChangelogContent body={entry.body} />
                     </div>

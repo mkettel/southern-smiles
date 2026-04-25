@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Pencil, Trash2, Plus, Lock, Globe, Upload } from "lucide-react";
 import { ChangelogEditor } from "./changelog-editor";
 import { ChangelogContent } from "./changelog-content";
+import { ChangelogMedia } from "./changelog-media";
 import { CHANGELOG_TAGS, TagChip } from "./tags";
 import {
   createChangelogEntry,
@@ -269,22 +270,11 @@ export function ChangelogAdminList({ entries }: ChangelogAdminListProps) {
                     {new Date(entry.created_at).toLocaleString()}
                     {entry.author?.full_name && ` · ${entry.author.full_name}`}
                   </p>
-                  {entry.video_url ? (
-                    <video
-                      src={entry.video_url}
-                      autoPlay
-                      loop
-                      muted
-                      playsInline
-                      className="mt-2 max-h-64 w-full rounded-md border object-cover"
-                    />
-                  ) : entry.image_url ? (
-                    <img
-                      src={entry.image_url}
-                      alt=""
-                      className="mt-2 max-h-64 w-full rounded-md border object-cover"
-                    />
-                  ) : null}
+                  <ChangelogMedia
+                    imageUrl={entry.image_url}
+                    videoUrl={entry.video_url}
+                    className="mt-2"
+                  />
                   <div className="mt-2">
                     <ChangelogContent body={entry.body} />
                   </div>

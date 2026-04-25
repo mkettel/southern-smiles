@@ -58,6 +58,7 @@ export function AddPostWizard({ divisions, employees, trigger }: AddPostWizardPr
 
   // Step 1
   const [postTitle, setPostTitle] = useState("");
+  const [postVfp, setPostVfp] = useState("");
   const [divisionId, setDivisionId] = useState("");
   const [creatingDivision, setCreatingDivision] = useState(false);
   const [newDivName, setNewDivName] = useState("");
@@ -81,6 +82,7 @@ export function AddPostWizard({ divisions, employees, trigger }: AddPostWizardPr
   function reset() {
     setStep(1);
     setPostTitle("");
+    setPostVfp("");
     setDivisionId("");
     setCreatingDivision(false);
     setNewDivName("");
@@ -181,6 +183,7 @@ export function AddPostWizard({ divisions, employees, trigger }: AddPostWizardPr
     startTransition(async () => {
       const result = await createPostWithStats({
         postTitle: postTitle.trim(),
+        postVfp: postVfp.trim() || null,
         divisionId,
         stats: stats.map((s) => ({
           name: s.name,
@@ -265,6 +268,20 @@ export function AddPostWizard({ divisions, employees, trigger }: AddPostWizardPr
                     onChange={(e) => setPostTitle(e.target.value)}
                     placeholder="e.g., New Patient Scheduling Coordinator"
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label>
+                    VFP <span className="text-muted-foreground font-normal">(optional)</span>
+                  </Label>
+                  <Input
+                    value={postVfp}
+                    onChange={(e) => setPostVfp(e.target.value)}
+                    placeholder="e.g., A well-maintained reception area and a quickly checked-in patient"
+                    maxLength={500}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    The Valuable Final Product — what this post is responsible for producing.
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label>Division</Label>

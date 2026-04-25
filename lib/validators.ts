@@ -70,6 +70,7 @@ export const sectionSchema = z.object({
 
 export const postSchema = z.object({
   title: z.string().min(1).max(100),
+  vfp: z.string().max(500).nullable().optional(),
   division_id: uuidLike,
 });
 

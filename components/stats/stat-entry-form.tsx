@@ -354,6 +354,11 @@ export function StatEntryForm({
                   {stat.post?.title}
                 </Badge>
               </div>
+              {stat.post?.vfp && (
+                <p className="text-xs text-muted-foreground italic mt-1">
+                  VFP: {stat.post.vfp}
+                </p>
+              )}
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground">

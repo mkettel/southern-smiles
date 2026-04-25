@@ -48,6 +48,7 @@ export interface Section {
 export interface Post {
   id: string;
   title: string;
+  vfp: string | null;
   division_id: string;
   created_at: string;
   updated_at: string;

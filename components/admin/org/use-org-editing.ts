@@ -58,6 +58,7 @@ export function useOrgEditing() {
   // ── Post editing ──────────────────────────────────────────
   const [editingPost, setEditingPost] = useState<string | null>(null);
   const [editPostTitle, setEditPostTitle] = useState("");
+  const [editPostVfp, setEditPostVfp] = useState("");
   const [editPostDivId, setEditPostDivId] = useState("");
 
   // ── Linking post to section ───────────────────────────────
@@ -256,6 +257,7 @@ export function useOrgEditing() {
   function startEditPost(post: Post) {
     setEditingPost(post.id);
     setEditPostTitle(post.title);
+    setEditPostVfp(post.vfp ?? "");
     setEditPostDivId(post.division_id);
   }
 
@@ -263,6 +265,7 @@ export function useOrgEditing() {
     startTransition(async () => {
       const result = await updatePost(id, {
         title: editPostTitle.trim(),
+        vfp: editPostVfp.trim() || null,
         division_id: editPostDivId,
       });
       if (result.error) {
@@ -474,7 +477,8 @@ export function useOrgEditing() {
     newResponsibility, setNewResponsibility,
     startEditResponsibilities, handleSaveResponsibilities,
     // Post
-    editingPost, editPostTitle, setEditPostTitle, editPostDivId, setEditPostDivId,
+    editingPost, editPostTitle, setEditPostTitle, editPostVfp, setEditPostVfp,
+    editPostDivId, setEditPostDivId,
     startEditPost, handleSavePost, handleDeletePost,
     // Link
     linkingPostId, setLinkingPostId, handleLinkPostToSection,

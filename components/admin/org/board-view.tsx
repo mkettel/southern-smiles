@@ -843,18 +843,68 @@ function SectionBlock({
             <div className="text-[10.5px] font-bold uppercase tracking-wider">
               {sec.name} Section
             </div>
-            {(linkedPost?.title || assignee) && (
-              <div className="text-[11px] mt-0.5">
-                {linkedPost?.title && (
-                  <span className="italic opacity-90">{linkedPost.title}</span>
-                )}
-                {assignee && (
-                  <span className="font-medium">
-                    {linkedPost?.title ? " · " : ""}
-                    {assignee}
-                  </span>
-                )}
+            {linkedPost && isEditing && editing.editingPost === linkedPost.id ? (
+              <div className="mt-1 space-y-1.5 group/postedit">
+                <input
+                  value={editing.editPostTitle}
+                  onChange={(e) => editing.setEditPostTitle(e.target.value)}
+                  className={whiteInputCls}
+                  placeholder="Post title"
+                />
+                <input
+                  value={editing.editPostVfp}
+                  onChange={(e) => editing.setEditPostVfp(e.target.value)}
+                  className={whiteInputCls}
+                  placeholder="VFP — what this post produces"
+                  maxLength={500}
+                />
+                <div className="flex justify-end gap-1">
+                  <button
+                    onClick={() => editing.handleSavePost(linkedPost.id)}
+                    disabled={editing.isPending || !editing.editPostTitle.trim()}
+                    className={iconBtnCls}
+                    aria-label="Save post"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => editing.resetAll()}
+                    className={iconBtnCls}
+                    aria-label="Cancel"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
+            ) : (
+              (linkedPost?.title || assignee) && (
+                <div className="text-[11px] mt-0.5 group/linkedpost">
+                  {linkedPost?.title && (
+                    <span className="italic opacity-90">{linkedPost.title}</span>
+                  )}
+                  {assignee && (
+                    <span className="font-medium">
+                      {linkedPost?.title ? " · " : ""}
+                      {assignee}
+                    </span>
+                  )}
+                  {linkedPost && isEditing && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); editing.startEditPost(linkedPost); }}
+                      className="ml-1 opacity-0 group-hover/linkedpost:opacity-100 inline-flex items-center align-middle transition-opacity"
+                      aria-label="Edit post"
+                      title="Edit post"
+                    >
+                      <Pencil className="h-2.5 w-2.5" />
+                    </button>
+                  )}
+                  {linkedPost?.vfp && (
+                    <div className="italic opacity-75 leading-tight mt-0.5">
+                      VFP: {linkedPost.vfp}
+                    </div>
+                  )}
+                </div>
+              )
             )}
           </div>
           {isEditing && (
@@ -1187,6 +1237,15 @@ function PostBlock({
               className={whiteInputCls}
             />
           </LabeledField>
+          <LabeledField label="VFP">
+            <input
+              value={editing.editPostVfp}
+              onChange={(e) => editing.setEditPostVfp(e.target.value)}
+              className={whiteInputCls}
+              placeholder="What this post produces"
+              maxLength={500}
+            />
+          </LabeledField>
           <div className="flex justify-end gap-1">
             <button
               onClick={() => editing.handleSavePost(post.id)}
@@ -1212,6 +1271,11 @@ function PostBlock({
               <Link2 className="h-2.5 w-2.5 opacity-60" />
               {post.title}
             </div>
+            {post.vfp && (
+              <div className="text-[10.5px] mt-0.5 italic opacity-80 leading-tight">
+                VFP: {post.vfp}
+              </div>
+            )}
             {employees.length > 0 && (
               <div className="text-[11px] mt-0.5 font-medium">
                 {employees.join(", ")}

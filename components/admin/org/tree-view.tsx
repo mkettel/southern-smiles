@@ -176,6 +176,7 @@ export function TreeView({ divisions, posts, departments, statsByPost, employees
                     siblings={divDepts}
                     div={div}
                     posts={posts}
+                    divisions={divisions}
                     employees={employees}
                     statsByPost={statsByPost}
                     employeesByPost={employeesByPost}
@@ -271,7 +272,7 @@ export function TreeView({ divisions, posts, departments, statsByPost, employees
 // ── Department tree node ──────────────────────────────────
 
 function DepartmentNode({
-  dept, siblings, div, posts, employees, statsByPost, employeesByPost,
+  dept, siblings, div, posts, divisions, employees, statsByPost, employeesByPost,
   expandedDepts, toggleDept, expandedSections, toggleSection,
   isEditing, editing, currentUserName,
 }: {
@@ -279,6 +280,7 @@ function DepartmentNode({
   siblings: Department[];
   div: Division;
   posts: Post[];
+  divisions: Division[];
   employees: { id: string; full_name: string }[];
   statsByPost: Record<string, string[]>;
   employeesByPost: Record<string, string[]>;
@@ -352,6 +354,7 @@ function DepartmentNode({
                 sec={sec}
                 siblings={deptSections}
                 posts={posts}
+                divisions={divisions}
                 employees={employees}
                 statsByPost={statsByPost}
                 employeesByPost={employeesByPost}
@@ -400,12 +403,13 @@ function DepartmentNode({
 // ── Section tree node ─────────────────────────────────────
 
 function SectionNode({
-  sec, siblings, posts, employees, statsByPost, employeesByPost,
+  sec, siblings, posts, divisions, employees, statsByPost, employeesByPost,
   expandedSections, toggleSection, isEditing, editing, currentUserName,
 }: {
   sec: Section;
   siblings: Section[];
   posts: Post[];
+  divisions: Division[];
   employees: { id: string; full_name: string }[];
   statsByPost: Record<string, string[]>;
   employeesByPost: Record<string, string[]>;
@@ -473,10 +477,49 @@ function SectionNode({
                   <span className="text-sm">{sec.name}</span>
                   {sec.assignee && <span className="text-xs text-muted-foreground ml-2">({sec.assignee})</span>}
                   {linkedPost && (
-                    <div className="mt-1 flex items-center gap-1">
-                      <Link2 className="h-3 w-3 text-muted-foreground shrink-0" />
-                      <span className="text-xs text-muted-foreground">{linkedPost.title}</span>
-                    </div>
+                    isEditing && editing.editingPost === linkedPost.id ? (
+                      <div className="mt-1 flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                          <Input value={editing.editPostTitle} onChange={(e) => editing.setEditPostTitle(e.target.value)} className="flex-1 text-sm" />
+                          <Select value={editing.editPostDivId} onValueChange={(v) => v && editing.setEditPostDivId(v)}>
+                            <SelectTrigger className="w-[160px] text-sm">
+                              <span>{divisions.find((d) => d.id === editing.editPostDivId) ? `Div ${divisions.find((d) => d.id === editing.editPostDivId)!.number}` : "Division"}</span>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {divisions.map((d) => <SelectItem key={d.id} value={d.id}>Div {d.number} – {d.name}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                          <Button size="sm" variant="ghost" onClick={() => editing.handleSavePost(linkedPost.id)} disabled={editing.isPending}><Check className="h-3.5 w-3.5" /></Button>
+                          <Button size="sm" variant="ghost" onClick={() => editing.resetAll()}><X className="h-3.5 w-3.5" /></Button>
+                        </div>
+                        <Input
+                          value={editing.editPostVfp}
+                          onChange={(e) => editing.setEditPostVfp(e.target.value)}
+                          className="text-sm"
+                          placeholder="VFP — what this post produces (optional)"
+                          maxLength={500}
+                        />
+                      </div>
+                    ) : (
+                      <div className="mt-1 group/linkedpost">
+                        <div className="flex items-center gap-1">
+                          <Link2 className="h-3 w-3 text-muted-foreground shrink-0" />
+                          <span className="text-xs text-muted-foreground">{linkedPost.title}</span>
+                          {isEditing && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); editing.startEditPost(linkedPost); }}
+                              className="opacity-0 group-hover/linkedpost:opacity-100 p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
+                              title="Edit post"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                        {linkedPost.vfp && (
+                          <p className="text-[11px] text-muted-foreground/70 italic ml-4 mt-0.5">VFP: {linkedPost.vfp}</p>
+                        )}
+                      </div>
+                    )
                   )}
                   {postEmployees.length > 0 && (
                     <div className="flex items-center gap-1 mt-0.5">
@@ -610,24 +653,36 @@ function UnlinkedPostNode({
   return (
     <div className="group/post py-1.5 px-2 rounded-md hover:bg-muted/20 transition-colors">
       {isEditing && isEditingThisPost ? (
-        <div className="flex items-center gap-2">
-          <Input value={editing.editPostTitle} onChange={(e) => editing.setEditPostTitle(e.target.value)} className="flex-1 text-sm" />
-          <Select value={editing.editPostDivId} onValueChange={(v) => v && editing.setEditPostDivId(v)}>
-            <SelectTrigger className="w-[160px] text-sm">
-              <span>{divisions.find((d) => d.id === editing.editPostDivId) ? `Div ${divisions.find((d) => d.id === editing.editPostDivId)!.number}` : "Division"}</span>
-            </SelectTrigger>
-            <SelectContent>
-              {divisions.map((d) => <SelectItem key={d.id} value={d.id}>Div {d.number} – {d.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Button size="sm" variant="ghost" onClick={() => editing.handleSavePost(post.id)} disabled={editing.isPending}><Check className="h-3.5 w-3.5" /></Button>
-          <Button size="sm" variant="ghost" onClick={() => editing.resetAll()}><X className="h-3.5 w-3.5" /></Button>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <Input value={editing.editPostTitle} onChange={(e) => editing.setEditPostTitle(e.target.value)} className="flex-1 text-sm" />
+            <Select value={editing.editPostDivId} onValueChange={(v) => v && editing.setEditPostDivId(v)}>
+              <SelectTrigger className="w-[160px] text-sm">
+                <span>{divisions.find((d) => d.id === editing.editPostDivId) ? `Div ${divisions.find((d) => d.id === editing.editPostDivId)!.number}` : "Division"}</span>
+              </SelectTrigger>
+              <SelectContent>
+                {divisions.map((d) => <SelectItem key={d.id} value={d.id}>Div {d.number} – {d.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Button size="sm" variant="ghost" onClick={() => editing.handleSavePost(post.id)} disabled={editing.isPending}><Check className="h-3.5 w-3.5" /></Button>
+            <Button size="sm" variant="ghost" onClick={() => editing.resetAll()}><X className="h-3.5 w-3.5" /></Button>
+          </div>
+          <Input
+            value={editing.editPostVfp}
+            onChange={(e) => editing.setEditPostVfp(e.target.value)}
+            className="text-sm"
+            placeholder="VFP — what this post produces (optional)"
+            maxLength={500}
+          />
         </div>
       ) : (
         <div>
           <div className="flex items-start gap-2">
             <div className="flex-1 min-w-0">
               <span className="text-sm font-medium">{post.title}</span>
+              {post.vfp && (
+                <p className="text-[11px] text-muted-foreground italic mt-0.5">VFP: {post.vfp}</p>
+              )}
               {postEmployees.length > 0 && (
                 <div className="flex items-center gap-1 mt-0.5">
                   <User className="h-3 w-3 text-muted-foreground shrink-0" />

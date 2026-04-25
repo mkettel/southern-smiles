@@ -97,7 +97,17 @@ export function StatCard({ data, isAdmin = false }: StatCardProps) {
                 <StatName name={stat.name} description={stat.description} />
               </CardTitle>
               <p className="text-xs text-muted-foreground/70 mt-0.5">
-                {employee.full_name} &middot; {post?.title}
+                {employee.full_name} &middot;{" "}
+                {post?.vfp ? (
+                  <span
+                    className="underline decoration-dotted underline-offset-2 cursor-help"
+                    title={`VFP: ${post.vfp}`}
+                  >
+                    {post.title}
+                  </span>
+                ) : (
+                  post?.title
+                )}
               </p>
             </div>
             {isAdmin ? (

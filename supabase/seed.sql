@@ -13,7 +13,8 @@ insert into condition_playbooks (condition, display_name, color, description, st
 ('danger', 'Danger', '#f97316', 'Significant decline (-15% to -40%)',
  '["Handle the specific situation causing the drop", "Assign specific conditions by area to each sub-function", "Tighten up ethics and discipline", "Get external help or training if needed"]'::jsonb),
 ('non_existence', 'Non-Existence', '#ef4444', 'Severe decline (>40% drop)',
- '["Find a communication line — who do you report to?", "Make yourself known — communicate your presence and willingness", "Discover what is needed and wanted", "Do it, produce it, and/or present it", "Don''t wait — take immediate massive action"]'::jsonb);
+ '["Find a communication line — who do you report to?", "Make yourself known — communicate your presence and willingness", "Discover what is needed and wanted", "Do it, produce it, and/or present it", "Don''t wait — take immediate massive action"]'::jsonb)
+on conflict (condition) do nothing;
 
 -- ============================================================
 -- SEED DATA: Divisions

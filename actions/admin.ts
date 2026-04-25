@@ -104,6 +104,7 @@ export async function getPosts() {
 
 export async function createPost(input: {
   title: string;
+  vfp?: string | null;
   division_id: string;
 }) {
   const { supabase, practiceId } = await requireAdmin();
@@ -113,13 +114,15 @@ export async function createPost(input: {
   const { error } = await supabase.from("posts").insert({ ...parsed.data, practice_id: practiceId });
   if (error) return { error: error.message };
 
-  revalidatePath("/admin/posts");
+  revalidatePath("/admin/organization");
+  revalidatePath("/org-board");
+  revalidatePath("/admin/employees");
   return { success: true };
 }
 
 export async function updatePost(
   id: string,
-  input: { title?: string; division_id?: string }
+  input: { title?: string; vfp?: string | null; division_id?: string }
 ) {
   const { supabase } = await requireAdmin();
   const { error } = await supabase
@@ -128,6 +131,8 @@ export async function updatePost(
     .eq("id", id);
   if (error) return { error: error.message };
 
+  revalidatePath("/admin/organization");
+  revalidatePath("/org-board");
   revalidatePath("/admin/employees");
   revalidatePath("/dashboard");
   revalidatePath("/enter");
@@ -154,6 +159,8 @@ export async function deletePost(id: string) {
   const { error } = await supabase.from("posts").delete().eq("id", id);
   if (error) return { error: error.message };
 
+  revalidatePath("/admin/organization");
+  revalidatePath("/org-board");
   revalidatePath("/admin/employees");
   revalidatePath("/dashboard");
   return { success: true };
@@ -353,6 +360,7 @@ export async function assignPost(profileId: string, postId: string) {
  */
 export async function createPostWithStats(input: {
   postTitle: string;
+  postVfp?: string | null;
   divisionId: string;
   stats: {
     name: string;
@@ -382,7 +390,12 @@ export async function createPostWithStats(input: {
   // 1. Create the post
   const { data: post, error: postError } = await supabase
     .from("posts")
-    .insert({ title: input.postTitle.trim(), division_id: input.divisionId, practice_id: practiceId })
+    .insert({
+      title: input.postTitle.trim(),
+      vfp: input.postVfp?.trim() || null,
+      division_id: input.divisionId,
+      practice_id: practiceId,
+    })
     .select("id")
     .single();
 
@@ -423,6 +436,8 @@ export async function createPostWithStats(input: {
     }
   }
 
+  revalidatePath("/admin/organization");
+  revalidatePath("/org-board");
   revalidatePath("/admin/employees");
   revalidatePath("/admin/stats");
   revalidatePath("/dashboard");

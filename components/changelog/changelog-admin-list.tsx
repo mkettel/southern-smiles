@@ -158,7 +158,7 @@ export function ChangelogAdminList({ entries }: ChangelogAdminListProps) {
               "absolute -left-[31px] top-2 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full ring-4 ring-background transition-colors",
               isCreating
                 ? "bg-primary"
-                : "bg-background border-2 border-dashed border-muted-foreground/40"
+                : "bg-background border-2 border-dashed border-muted-foreground/40",
             )}
           >
             {!isCreating && (
@@ -198,7 +198,7 @@ export function ChangelogAdminList({ entries }: ChangelogAdminListProps) {
               <span
                 className={cn(
                   "absolute -left-[31px] top-3 inline-block h-3 w-3 rounded-full ring-4 ring-background",
-                  dotColorForEntry(entry)
+                  dotColorForEntry(entry),
                 )}
               />
               {isEditing ? (
@@ -340,7 +340,7 @@ function FormCard({
               className={cn(
                 "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide transition-opacity",
                 t.className,
-                !active && "opacity-40 hover:opacity-100"
+                !active && "opacity-40 hover:opacity-100",
               )}
             >
               {t.label}
@@ -416,7 +416,7 @@ function VisibilityButton({
         "inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] transition-colors",
         active
           ? "bg-background text-foreground shadow-sm"
-          : "text-muted-foreground hover:text-foreground"
+          : "text-muted-foreground hover:text-foreground",
       )}
     >
       {icon}

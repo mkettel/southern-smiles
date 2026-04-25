@@ -34,6 +34,7 @@ interface OverallConditionPickerProps {
 
 const CLEAR_VALUE = "__clear__";
 const ORDER: ConditionName[] = [
+  "power",
   "affluence",
   "normal",
   "emergency",

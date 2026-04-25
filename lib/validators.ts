@@ -11,7 +11,7 @@ export const statEntrySchema = z.object({
   stat_id: uuidLike,
   value: z.number().finite(),
   self_condition: z
-    .enum(["affluence", "normal", "emergency", "danger", "non_existence"])
+    .enum(["power", "affluence", "normal", "emergency", "danger", "non_existence"])
     .nullable()
     .optional(),
   playbook_response: z.string().max(2000).nullable().optional(),

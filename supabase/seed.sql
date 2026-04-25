@@ -2,7 +2,9 @@
 -- SEED DATA: Condition Playbooks
 -- ============================================================
 insert into condition_playbooks (condition, display_name, color, description, steps) values
-('affluence', 'Affluence', '#22c55e', 'Steep upward trend (>20% increase)',
+('power', 'Power', '#a855f7', 'Massive upward trend (>50% increase)',
+ '["Don''t disconnect — keep every line and connection that got you here", "List everything you''re doing that''s working — write it all down", "Write up your hat so the role can be replicated and protected", "Reinforce successful actions — do more of what produced the win", "Don''t change what''s working; protect the win, then build on it"]'::jsonb),
+('affluence', 'Affluence', '#22c55e', 'Steep upward trend (20-50% increase)',
  '["Economize — identify areas needing better financial control", "Pay every bill you can", "Invest the remainder into service facilities and growth", "Prepare for future delivery", "Analyze what caused the uptrend — how can we strengthen it?"]'::jsonb),
 ('normal', 'Normal', '#3b82f6', 'Slight upward trend (1-20% increase)',
  '["Don''t change anything that''s working", "Apply mild ethics — don''t overreact to small fluctuations", "If a stat increased, what caused it? How can we reinforce it?", "If a stat decreased, why? How can we fix it?", "Continue steady operations"]'::jsonb),

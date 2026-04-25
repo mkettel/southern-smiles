@@ -25,6 +25,7 @@ interface ConditionPickerProps {
 
 const AUTO_VALUE = "__auto__";
 const ORDER: ConditionName[] = [
+  "power",
   "affluence",
   "normal",
   "emergency",

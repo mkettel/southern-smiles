@@ -1,4 +1,5 @@
 export type ConditionName =
+  | "power"
   | "affluence"
   | "normal"
   | "emergency"
@@ -17,7 +18,8 @@ export interface ConditionResult {
  * Calculate the condition for a stat based on week-over-week change.
  *
  * Thresholds (applied to "effective change" — inverted for good_direction='down'):
- *   > +20%        → Affluence
+ *   > +50%        → Power
+ *   > +20% to +50% → Affluence
  *   > 0% to +20%  → Normal
  *   0% to -15%    → Emergency
  *   -15% to -40%  → Danger
@@ -48,7 +50,7 @@ export function calculateCondition(
       (goodDirection === "up" && currentValue > 0) ||
       (goodDirection === "down" && currentValue < 0);
     return {
-      condition: isGood ? "affluence" : "non_existence",
+      condition: isGood ? "power" : "non_existence",
       percentChange: currentValue > 0 ? 100 : -100,
       direction,
     };
@@ -64,7 +66,9 @@ export function calculateCondition(
 
   let condition: ConditionName;
 
-  if (effectiveChange > 20) {
+  if (effectiveChange > 50) {
+    condition = "power";
+  } else if (effectiveChange > 20) {
     condition = "affluence";
   } else if (effectiveChange > 0) {
     condition = "normal";
@@ -89,6 +93,12 @@ export const CONDITION_CONFIG: Record<
   ConditionName,
   { label: string; color: string; bgClass: string; textClass: string }
 > = {
+  power: {
+    label: "Power",
+    color: "#a855f7",
+    bgClass: "bg-purple-100 dark:bg-purple-950",
+    textClass: "text-purple-700 dark:text-purple-400",
+  },
   affluence: {
     label: "Affluence",
     color: "#22c55e",

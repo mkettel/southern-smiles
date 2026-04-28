@@ -19,6 +19,7 @@ import {
   Network,
   Wrench,
   Bell,
+  CheckSquare,
 } from "lucide-react";
 
 interface MobileNavProps {
@@ -37,11 +38,13 @@ interface NavLink {
 const sharedLinks: NavLink[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/enter", label: "Enter Stats", icon: ClipboardEdit },
+  { href: "/tasks", label: "My Tasks", icon: CheckSquare },
   { href: "/oic-log", label: "OIC Log", icon: FileText },
   { href: "/org-board", label: "Org Board", icon: Network },
 ];
 
 const adminOnlyLinks: NavLink[] = [
+  { href: "/admin/tasks", label: "Command Center", icon: CheckSquare },
   { href: "/admin/organization", label: "Organization", icon: Building2 },
   { href: "/admin/stats", label: "Manage Stats", icon: BarChart3 },
   { href: "/admin/employees", label: "Manage Team", icon: Settings },

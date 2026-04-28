@@ -217,6 +217,66 @@ export interface ConversationListItem {
 }
 
 // ============================================================
+// Tasks (Command Center)
+// ============================================================
+
+export type TaskPriority = "low" | "normal" | "high";
+export type TaskStatus = "assigned" | "in_progress" | "submitted" | "approved";
+
+export interface Task {
+  id: string;
+  practice_id: string;
+  created_by: string;
+  title: string;
+  description: string | null;
+  due_date: string | null;
+  priority: TaskPriority;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  creator?: Pick<Profile, "id" | "full_name" | "avatar_url" | "avatar_color">;
+  assignments?: TaskAssignment[];
+  comment_count?: number;
+}
+
+export interface TaskAssignment {
+  id: string;
+  task_id: string;
+  profile_id: string;
+  practice_id: string;
+  status: TaskStatus;
+  completed_at: string | null;
+  approved_at: string | null;
+  review_note: string | null;
+  assigned_at: string;
+  updated_at: string;
+  // Joined
+  profile?: Pick<Profile, "id" | "full_name" | "avatar_url" | "avatar_color">;
+}
+
+export interface TaskComment {
+  id: string;
+  task_id: string;
+  profile_id: string;
+  practice_id: string;
+  message: string;
+  created_at: string;
+  // Joined
+  profile?: Pick<Profile, "id" | "full_name" | "avatar_url" | "avatar_color">;
+}
+
+/**
+ * View model used by /tasks (per-employee view): the task plus the
+ * caller's own assignment row pulled out for convenience.
+ */
+export interface MyTaskItem {
+  task: Task;
+  assignment: TaskAssignment;
+  coAssignees: TaskAssignment[];
+  comment_count: number;
+}
+
+// ============================================================
 // Composite / view types for the UI
 // ============================================================
 

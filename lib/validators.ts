@@ -108,3 +108,19 @@ export const messageSchema = z.object({
 export const channelSchema = z.object({
   name: z.string().min(1, "Channel name is required").max(50),
 });
+
+export const taskSchema = z.object({
+  title: z.string().min(1, "Title is required").max(200),
+  description: z.string().max(4000).nullable().optional(),
+  due_date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date")
+    .nullable()
+    .optional(),
+  priority: z.enum(["low", "normal", "high"]).default("normal"),
+  assignee_ids: z.array(uuidLike).min(1, "Pick at least one assignee").max(20),
+});
+
+export const taskCommentSchema = z.object({
+  message: z.string().min(1, "Message cannot be empty").max(4000),
+});

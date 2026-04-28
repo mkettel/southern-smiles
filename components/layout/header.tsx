@@ -15,6 +15,7 @@ import type { Profile } from "@/lib/types";
 import { MobileNav } from "./mobile-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ChangelogBell } from "@/components/changelog/changelog-bell";
+import { TasksBell } from "@/components/tasks/tasks-bell";
 
 interface HeaderProps {
   profile: Profile;
@@ -22,6 +23,7 @@ interface HeaderProps {
   newRequestCount?: number;
   practiceName?: string;
   unreadChangelogCount?: number;
+  activeTaskCount?: number;
 }
 
 export function Header({
@@ -30,6 +32,7 @@ export function Header({
   newRequestCount = 0,
   practiceName,
   unreadChangelogCount = 0,
+  activeTaskCount = 0,
 }: HeaderProps) {
   const router = useRouter();
   const [imgError, setImgError] = useState(false);
@@ -47,6 +50,7 @@ export function Header({
       <MobileNav role={profile.role} openRequestCount={openRequestCount} newRequestCount={newRequestCount} practiceName={practiceName} />
       <div className="flex items-center gap-1">
         <ThemeToggle />
+        <TasksBell initialActiveCount={activeTaskCount} />
         <ChangelogBell initialUnreadCount={unreadChangelogCount} />
       <DropdownMenu>
         <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-muted transition-colors outline-none">

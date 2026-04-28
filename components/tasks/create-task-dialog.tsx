@@ -29,6 +29,8 @@ interface CreateTaskDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   members: Profile[];
+  /** Current user's profile id — pinned to the top of the picker as "Me". */
+  viewerId?: string;
   /** When set, dialog acts as edit form. */
   editing?: Task;
   onCreated?: (task: Task) => void;
@@ -39,6 +41,7 @@ export function CreateTaskDialog({
   open,
   onOpenChange,
   members,
+  viewerId,
   editing,
   onCreated,
   onUpdated,
@@ -182,48 +185,65 @@ export function CreateTaskDialog({
 
           <div>
             <Label className="text-xs">
-              Assign to {assigneeIds.length > 0 && (
+              Assign to{" "}
+              {assigneeIds.length > 0 && (
                 <span className="text-muted-foreground">({assigneeIds.length})</span>
               )}
             </Label>
             <div className="mt-1 max-h-48 overflow-y-auto rounded-lg border">
-              {members.map((m) => {
-                const checked = assigneeIds.includes(m.id);
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => toggleAssignee(m.id)}
-                    className={cn(
-                      "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-muted",
-                      checked && "bg-primary/5"
-                    )}
-                  >
-                    <span
+              {(() => {
+                const me = viewerId
+                  ? members.find((m) => m.id === viewerId)
+                  : undefined;
+                const others = members.filter((m) => m.id !== viewerId);
+                const ordered: Array<{ member: Profile; label: string }> = [];
+                if (me) ordered.push({ member: me, label: "Me" });
+                for (const m of others) ordered.push({ member: m, label: m.full_name });
+                return ordered.map(({ member: m, label }, idx) => {
+                  const checked = assigneeIds.includes(m.id);
+                  const showDivider = me && idx === 1;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => toggleAssignee(m.id)}
                       className={cn(
-                        "flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 transition-colors",
-                        checked
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-muted-foreground/40"
+                        "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-muted",
+                        showDivider && "border-t",
+                        checked && "bg-primary/5"
                       )}
                     >
-                      {checked && <Check className="h-3 w-3" strokeWidth={3} />}
-                    </span>
-                    <span
-                      className="h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-medium text-white"
-                      style={{ backgroundColor: m.avatar_color ?? "#6b7280" }}
-                    >
-                      {(m.full_name ?? "?")
-                        .split(" ")
-                        .map((n) => n[0] ?? "")
-                        .join("")
-                        .slice(0, 2)
-                        .toUpperCase()}
-                    </span>
-                    <span>{m.full_name}</span>
-                  </button>
-                );
-              })}
+                      <span
+                        className={cn(
+                          "flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 transition-colors",
+                          checked
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-muted-foreground/40"
+                        )}
+                      >
+                        {checked && <Check className="h-3 w-3" strokeWidth={3} />}
+                      </span>
+                      <span
+                        className="h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-medium text-white"
+                        style={{ backgroundColor: m.avatar_color ?? "#6b7280" }}
+                      >
+                        {(m.full_name ?? "?")
+                          .split(" ")
+                          .map((n) => n[0] ?? "")
+                          .join("")
+                          .slice(0, 2)
+                          .toUpperCase()}
+                      </span>
+                      <span className="flex-1">{label}</span>
+                      {label === "Me" && (
+                        <span className="text-[10px] text-muted-foreground">
+                          {m.full_name}
+                        </span>
+                      )}
+                    </button>
+                  );
+                });
+              })()}
             </div>
           </div>
         </div>

@@ -6,6 +6,7 @@ import { getCurrentPracticeId } from "@/lib/practice";
 import { taskSchema, taskCommentSchema } from "@/lib/validators";
 import type {
   MyTaskItem,
+  Profile,
   Task,
   TaskAssignment,
   TaskComment,
@@ -34,6 +35,30 @@ async function requireAdmin() {
 // ============================================================
 // Read
 // ============================================================
+
+/**
+ * Members who can be assigned tasks. Unlike `getPracticeMembers` (messaging),
+ * this INCLUDES the caller — admins routinely assign work to themselves as
+ * their own todo list.
+ */
+export async function getAssignableMembers(): Promise<Profile[]> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const practiceId = await getCurrentPracticeId(supabase);
+
+  const { data } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("practice_id", practiceId)
+    .eq("is_active", true)
+    .order("full_name");
+
+  return (data as Profile[]) ?? [];
+}
 
 /** Tasks assigned to the current user, with their own assignment row pulled out. */
 export async function getMyTasks(): Promise<MyTaskItem[]> {

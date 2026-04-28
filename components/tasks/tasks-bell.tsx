@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
-import { ArrowRight, Calendar, CheckSquare, ListTodo } from "lucide-react";
+import { ArrowRight, Calendar, Check, CheckSquare, ListTodo } from "lucide-react";
 import { toast } from "sonner";
 import {
   Sheet,
@@ -47,61 +47,91 @@ export function TasksBell({ initialActiveCount }: TasksBellProps) {
   const [open, setOpen] = useState(false);
   const [count, setCount] = useState(initialActiveCount);
   const [items, setItems] = useState<MyTaskItem[] | null>(null);
+  const [completingIds, setCompletingIds] = useState<Set<string>>(new Set());
   const [, startTransition] = useTransition();
 
   useEffect(() => {
     setCount(initialActiveCount);
+    // If the badge moves while the sheet is already open, the cached items
+    // list is stale — refetch so the content reflects the new state.
+    if (open) {
+      getMyTasks().then((data) => setItems(data));
+    }
+    // Intentionally only depend on the badge count: we want to react to
+    // server-driven changes, not to local `open` toggles.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialActiveCount]);
 
   function handleOpenChange(next: boolean) {
     setOpen(next);
-    if (next && items === null) {
+    // Refetch on every open so the list is fresh after server-side changes
+    // (e.g. an admin sent a task back, a teammate added a comment, etc).
+    // The previous `items` stay rendered while the new fetch is in flight.
+    if (next) {
       getMyTasks().then((data) => setItems(data));
     }
   }
 
+  // Items still showing in the active list. Includes those mid-animation
+  // so they don't pop out before the cross-off finishes.
   const active =
     items?.filter(
       (i) =>
-        i.assignment.status === "assigned" || i.assignment.status === "in_progress"
+        i.assignment.status === "assigned" ||
+        i.assignment.status === "in_progress" ||
+        completingIds.has(i.assignment.id)
     ) ?? null;
 
   function handleQuickComplete(item: MyTaskItem) {
+    if (completingIds.has(item.assignment.id)) return;
     triggerHaptic("success");
-    setItems((prev) =>
-      prev
-        ? prev.map((i) =>
-            i.assignment.id === item.assignment.id
-              ? {
-                  ...i,
-                  assignment: {
-                    ...i.assignment,
-                    status: "submitted",
-                    completed_at: new Date().toISOString(),
-                  },
-                }
+
+    // Phase 1: mark as completing — checkbox fills, ping ripple, row starts to fade.
+    setCompletingIds((prev) => new Set(prev).add(item.assignment.id));
+
+    // Phase 2 (after 320ms): apply optimistic status change so the row drops out.
+    window.setTimeout(() => {
+      setItems((prev) =>
+        prev
+          ? prev.map((i) =>
+              i.assignment.id === item.assignment.id
+                ? {
+                    ...i,
+                    assignment: {
+                      ...i.assignment,
+                      status: "submitted",
+                      completed_at: new Date().toISOString(),
+                    },
+                  }
               : i
-          )
-        : prev
-    );
-    setCount((c) => Math.max(0, c - 1));
-    toast.success("Submitted", { description: item.task.title });
-    startTransition(async () => {
-      const r = await setAssignmentStatus(item.assignment.id, "submitted");
-      if (r?.error) {
-        toast.error("Couldn't save");
-        // Refresh to authoritative state
-        const fresh = await getMyTasks();
-        setItems(fresh);
-        setCount(
-          fresh.filter(
-            (i) =>
-              i.assignment.status === "assigned" ||
-              i.assignment.status === "in_progress"
-          ).length
-        );
-      }
-    });
+            )
+          : prev
+      );
+      setCount((c) => Math.max(0, c - 1));
+      setCompletingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(item.assignment.id);
+        return next;
+      });
+      toast.success("Submitted", { description: item.task.title });
+
+      startTransition(async () => {
+        const r = await setAssignmentStatus(item.assignment.id, "submitted");
+        if (r?.error) {
+          toast.error("Couldn't save");
+          // Refresh to authoritative state
+          const fresh = await getMyTasks();
+          setItems(fresh);
+          setCount(
+            fresh.filter(
+              (i) =>
+                i.assignment.status === "assigned" ||
+                i.assignment.status === "in_progress"
+            ).length
+          );
+        }
+      });
+    }, 320);
   }
 
   return (
@@ -165,22 +195,53 @@ export function TasksBell({ initialActiveCount }: TasksBellProps) {
             <ul className="space-y-1.5">
               {active.map((item) => {
                 const due = dueLabel(item.task.due_date);
+                const isCompleting = completingIds.has(item.assignment.id);
                 return (
                   <li
                     key={item.assignment.id}
-                    className="group/row flex items-start gap-2 rounded-lg border bg-card p-2.5 hover:border-foreground/20 transition-colors"
+                    className={cn(
+                      "group/row flex items-start gap-2 rounded-lg border bg-card p-2.5 transition-all duration-300",
+                      "hover:border-foreground/20",
+                      isCompleting && "translate-x-1 opacity-0"
+                    )}
                   >
                     <button
                       type="button"
-                      onClick={() => handleQuickComplete(item)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleQuickComplete(item);
+                      }}
                       aria-label="Mark done"
-                      className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 border-muted-foreground/40 transition-all active:scale-90 hover:border-primary hover:bg-primary/10"
+                      className={cn(
+                        "relative mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-200 active:scale-90",
+                        isCompleting
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-muted-foreground/40 hover:border-primary hover:bg-primary/10"
+                      )}
                     >
-                      <span className="block h-2 w-2 rounded-full bg-primary opacity-0 group-hover/row:opacity-30 transition-opacity" />
+                      <Check
+                        className={cn(
+                          "h-3 w-3 transition-all duration-200",
+                          isCompleting
+                            ? "scale-100 opacity-100"
+                            : "scale-0 opacity-0 group-hover/row:scale-75 group-hover/row:opacity-30"
+                        )}
+                        strokeWidth={3}
+                      />
+                      {isCompleting && (
+                        <span className="absolute inset-0 rounded-full bg-primary/30 animate-ping" />
+                      )}
                     </button>
                     <Link
                       href="/tasks"
-                      onClick={() => setOpen(false)}
+                      onClick={(e) => {
+                        // Don't navigate while a cross-off is animating
+                        if (isCompleting) {
+                          e.preventDefault();
+                          return;
+                        }
+                        setOpen(false);
+                      }}
                       className="flex-1 min-w-0"
                     >
                       <div className="text-sm font-medium leading-snug line-clamp-2">

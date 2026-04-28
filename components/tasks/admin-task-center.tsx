@@ -34,6 +34,7 @@ type Filter = "all" | "active" | "submitted" | "approved" | "overdue";
 interface AdminTaskCenterProps {
   initialTasks: Task[];
   members: Profile[];
+  viewerId: string;
 }
 
 const STATUS_TONE: Record<TaskStatus, { dot: string; pill: string; label: string }> = {
@@ -115,7 +116,11 @@ interface Group {
   counts: { active: number; submitted: number; overdue: number; total: number };
 }
 
-export function AdminTaskCenter({ initialTasks, members }: AdminTaskCenterProps) {
+export function AdminTaskCenter({
+  initialTasks,
+  members,
+  viewerId,
+}: AdminTaskCenterProps) {
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [filter, setFilter] = useState<Filter>("all");
   const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
@@ -381,6 +386,11 @@ export function AdminTaskCenter({ initialTasks, members }: AdminTaskCenterProps)
                 <div className="min-w-0 flex-1">
                   <h2 className="text-sm font-semibold leading-tight">
                     {group.profile.full_name}
+                    {group.profileId === viewerId && (
+                      <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">
+                        (You)
+                      </span>
+                    )}
                   </h2>
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
                     <span>
@@ -591,6 +601,7 @@ export function AdminTaskCenter({ initialTasks, members }: AdminTaskCenterProps)
         open={createOpen}
         onOpenChange={setCreateOpen}
         members={members}
+        viewerId={viewerId}
         onCreated={(task) => setTasks((prev) => [task, ...prev])}
       />
 
@@ -599,6 +610,7 @@ export function AdminTaskCenter({ initialTasks, members }: AdminTaskCenterProps)
           open
           onOpenChange={(v) => !v && setEditingTask(null)}
           members={members}
+          viewerId={viewerId}
           editing={editingTask}
           onUpdated={(updated) =>
             setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))

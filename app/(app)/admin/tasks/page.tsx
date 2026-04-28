@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "@/actions/auth";
-import { getAllTasks } from "@/actions/tasks";
-import { getPracticeMembers } from "@/actions/messages";
+import { getAllTasks, getAssignableMembers } from "@/actions/tasks";
 import { AdminTaskCenter } from "@/components/tasks/admin-task-center";
 
 export default async function AdminTasksPage() {
@@ -9,7 +8,10 @@ export default async function AdminTasksPage() {
   if (!profile) redirect("/login");
   if (profile.role !== "admin") redirect("/tasks");
 
-  const [tasks, members] = await Promise.all([getAllTasks(), getPracticeMembers()]);
+  const [tasks, members] = await Promise.all([
+    getAllTasks(),
+    getAssignableMembers(),
+  ]);
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -19,10 +21,7 @@ export default async function AdminTasksPage() {
           Assign work, review submissions, and see what's outstanding.
         </p>
       </div>
-      <AdminTaskCenter
-        initialTasks={tasks}
-        members={members.filter((m) => m.is_active)}
-      />
+      <AdminTaskCenter initialTasks={tasks} members={members} viewerId={profile.id} />
     </div>
   );
 }

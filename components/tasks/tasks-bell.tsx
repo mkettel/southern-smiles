@@ -89,6 +89,9 @@ export function TasksBell({ initialActiveCount }: TasksBellProps) {
     // Phase 1: mark as completing — checkbox fills, ping ripple, row starts to fade.
     setCompletingIds((prev) => new Set(prev).add(item.assignment.id));
 
+    const autoApprove = !item.task.requires_approval;
+    const effectiveStatus = autoApprove ? "approved" : "submitted";
+
     // Phase 2 (after 320ms): apply optimistic status change so the row drops out.
     window.setTimeout(() => {
       setItems((prev) =>
@@ -99,8 +102,9 @@ export function TasksBell({ initialActiveCount }: TasksBellProps) {
                     ...i,
                     assignment: {
                       ...i.assignment,
-                      status: "submitted",
+                      status: effectiveStatus,
                       completed_at: new Date().toISOString(),
+                      approved_at: autoApprove ? new Date().toISOString() : null,
                     },
                   }
               : i
@@ -113,7 +117,9 @@ export function TasksBell({ initialActiveCount }: TasksBellProps) {
         next.delete(item.assignment.id);
         return next;
       });
-      toast.success("Submitted", { description: item.task.title });
+      toast.success(autoApprove ? "Done" : "Submitted for review", {
+        description: item.task.title,
+      });
 
       startTransition(async () => {
         const r = await setAssignmentStatus(item.assignment.id, "submitted");

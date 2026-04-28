@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import type { Profile, Task, TaskPriority } from "@/lib/types";
 import { createTask, getAllTasks, updateTask } from "@/actions/tasks";
-import { Check } from "lucide-react";
+import { Check, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface CreateTaskDialogProps {
@@ -50,6 +50,7 @@ export function CreateTaskDialog({
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] = useState<TaskPriority>("normal");
+  const [requiresApproval, setRequiresApproval] = useState(false);
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [isSubmitting, startTransition] = useTransition();
 
@@ -60,12 +61,14 @@ export function CreateTaskDialog({
       setDescription(editing.description ?? "");
       setDueDate(editing.due_date ?? "");
       setPriority(editing.priority);
+      setRequiresApproval(editing.requires_approval ?? false);
       setAssigneeIds((editing.assignments ?? []).map((a) => a.profile_id));
     } else {
       setTitle("");
       setDescription("");
       setDueDate("");
       setPriority("normal");
+      setRequiresApproval(false);
       setAssigneeIds([]);
     }
   }, [open, editing]);
@@ -90,6 +93,7 @@ export function CreateTaskDialog({
       description: description.trim() || null,
       due_date: dueDate || null,
       priority,
+      requires_approval: requiresApproval,
       assignee_ids: assigneeIds,
     };
     startTransition(async () => {
@@ -246,6 +250,47 @@ export function CreateTaskDialog({
               })()}
             </div>
           </div>
+
+          {/* Approval toggle */}
+          <button
+            type="button"
+            onClick={() => setRequiresApproval((v) => !v)}
+            className={cn(
+              "flex w-full items-start gap-3 rounded-lg border p-2.5 text-left transition-colors",
+              requiresApproval
+                ? "border-amber-500/40 bg-amber-500/5"
+                : "border-border hover:bg-muted/50"
+            )}
+          >
+            <span
+              className={cn(
+                "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 transition-colors",
+                requiresApproval
+                  ? "border-amber-600 bg-amber-600 text-white"
+                  : "border-muted-foreground/40"
+              )}
+            >
+              {requiresApproval && <Check className="h-3 w-3" strokeWidth={3} />}
+            </span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 text-sm font-medium">
+                <ShieldCheck
+                  className={cn(
+                    "h-3.5 w-3.5",
+                    requiresApproval
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-muted-foreground"
+                  )}
+                />
+                Require my approval before completing
+              </div>
+              <p className="mt-0.5 text-[11px] text-muted-foreground leading-snug">
+                {requiresApproval
+                  ? "Assignee submits for review. You approve or send back."
+                  : "Assignee marks done and the task closes immediately."}
+              </p>
+            </div>
+          </button>
         </div>
 
         <DialogFooter>

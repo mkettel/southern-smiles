@@ -118,6 +118,7 @@ export const taskSchema = z.object({
     .nullable()
     .optional(),
   priority: z.enum(["low", "normal", "high"]).default("normal"),
+  requires_approval: z.boolean().default(false),
   assignee_ids: z.array(uuidLike).min(1, "Pick at least one assignee").max(20),
 });
 

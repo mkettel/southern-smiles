@@ -82,6 +82,12 @@ export function TaskListClient({ initialItems }: TaskListClientProps) {
 
     triggerHaptic(nextStatus === "submitted" ? "success" : "tick");
 
+    // For "submitted", auto-approve tasks skip the review step locally too,
+    // matching what the server will do.
+    const autoApprove =
+      nextStatus === "submitted" && !target.task.requires_approval;
+    const effectiveStatus: TaskStatus = autoApprove ? "approved" : nextStatus;
+
     // Optimistic update
     setItems((prev) =>
       prev.map((i) =>
@@ -90,9 +96,14 @@ export function TaskListClient({ initialItems }: TaskListClientProps) {
               ...i,
               assignment: {
                 ...i.assignment,
-                status: nextStatus,
+                status: effectiveStatus,
                 completed_at:
-                  nextStatus === "submitted" || nextStatus === "approved"
+                  effectiveStatus === "submitted" ||
+                  effectiveStatus === "approved"
+                    ? new Date().toISOString()
+                    : null,
+                approved_at:
+                  effectiveStatus === "approved"
                     ? new Date().toISOString()
                     : null,
               },
@@ -114,9 +125,11 @@ export function TaskListClient({ initialItems }: TaskListClientProps) {
           description: "All tasks knocked out.",
           icon: <Sparkles className="h-4 w-4" />,
         });
+      } else if (autoApprove) {
+        toast.success("Done", { description: target.task.title });
       } else {
-        toast.success("Task submitted", {
-          description: `${target.task.title}`,
+        toast.success("Submitted for review", {
+          description: target.task.title,
         });
       }
     } else if (nextStatus === "in_progress") {

@@ -186,6 +186,7 @@ export async function createTask(input: {
   description?: string | null;
   due_date?: string | null;
   priority: TaskPriority;
+  requires_approval?: boolean;
   assignee_ids: string[];
 }) {
   const { supabase, user, isAdmin } = await requireAdmin();
@@ -205,6 +206,7 @@ export async function createTask(input: {
       description: parsed.data.description?.trim() || null,
       due_date: parsed.data.due_date || null,
       priority: parsed.data.priority,
+      requires_approval: parsed.data.requires_approval,
       created_by: user.id,
       practice_id: practiceId,
     })
@@ -243,6 +245,7 @@ export async function updateTask(
     description?: string | null;
     due_date?: string | null;
     priority: TaskPriority;
+    requires_approval?: boolean;
     assignee_ids: string[];
   }
 ) {
@@ -263,6 +266,7 @@ export async function updateTask(
       description: parsed.data.description?.trim() || null,
       due_date: parsed.data.due_date || null,
       priority: parsed.data.priority,
+      requires_approval: parsed.data.requires_approval,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
@@ -343,6 +347,20 @@ export async function setAssignmentStatus(
   if (status === "submitted") {
     // Stamp the moment the assignee finishes. Preserved on later approve.
     update.completed_at = new Date().toISOString();
+
+    // If the task doesn't require admin approval, skip the review step
+    // and jump straight to approved. RLS allows this for the assignee
+    // when task.requires_approval = false (see migration 031).
+    const { data: assignment } = await supabase
+      .from("task_assignments")
+      .select("task:tasks(requires_approval)")
+      .eq("id", assignmentId)
+      .single<{ task: { requires_approval: boolean } | null }>();
+
+    if (assignment?.task && !assignment.task.requires_approval) {
+      update.status = "approved";
+      update.approved_at = new Date().toISOString();
+    }
   } else if (status === "approved") {
     // Approval doesn't touch completed_at — that records when the work
     // was finished, not when admin signed off (approved_at).

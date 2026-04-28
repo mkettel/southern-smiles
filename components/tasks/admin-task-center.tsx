@@ -12,6 +12,7 @@ import {
   Pencil,
   AlertTriangle,
   Users,
+  ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -463,6 +464,15 @@ export function AdminTaskCenter({
                           >
                             {task.title}
                           </h3>
+                          {task.requires_approval && (
+                            <span
+                              className="shrink-0 inline-flex items-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300"
+                              title="Requires your approval before it's marked complete"
+                            >
+                              <ShieldCheck className="h-3 w-3" />
+                              Review
+                            </span>
+                          )}
                           {task.priority === "high" && (
                             <span className="shrink-0 rounded border border-red-500/20 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-red-700 dark:text-red-300">
                               High

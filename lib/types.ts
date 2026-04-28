@@ -231,6 +231,12 @@ export interface Task {
   description: string | null;
   due_date: string | null;
   priority: TaskPriority;
+  /**
+   * When false (default), the assignee marking a task "done" jumps
+   * straight to approved — no admin review step. When true, it goes
+   * to 'submitted' and waits for an admin approval.
+   */
+  requires_approval: boolean;
   created_at: string;
   updated_at: string;
   // Joined

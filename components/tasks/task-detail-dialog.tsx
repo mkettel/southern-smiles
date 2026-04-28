@@ -206,7 +206,7 @@ export function TaskDetailDialog({
                 }}
               >
                 <Check className="h-3.5 w-3.5" />
-                Submit for review
+                {task.requires_approval ? "Submit for review" : "Mark done"}
               </Button>
             )}
             {assignment.status === "submitted" && (

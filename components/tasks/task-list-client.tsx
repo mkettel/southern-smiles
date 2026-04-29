@@ -2,12 +2,22 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { CheckCircle2, ListTodo, Sparkles } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  ListTodo,
+  Sparkles,
+} from "lucide-react";
 import type { MyTaskItem, TaskStatus } from "@/lib/types";
 import { setAssignmentStatus } from "@/actions/tasks";
 import { TaskCard } from "./task-card";
 import { TaskDetailDialog } from "./task-detail-dialog";
 import { triggerHaptic } from "./haptics";
+import { cn } from "@/lib/utils";
+
+const COMPLETED_VISIBLE_MS = 24 * 60 * 60 * 1000; // 24 hours
+const COMPLETED_AUTO_COLLAPSE = 10;
 
 type Tab = "active" | "submitted" | "approved";
 
@@ -27,6 +37,8 @@ export function TaskListClient({ initialItems }: TaskListClientProps) {
   const [items, setItems] = useState<MyTaskItem[]>(initialItems);
   const [tab, setTab] = useState<Tab>("active");
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  // null = "use the auto-collapse default based on count"; true/false = user override
+  const [completedExpanded, setCompletedExpanded] = useState<boolean | null>(null);
   const [, startTransition] = useTransition();
 
   const counts = useMemo(() => {
@@ -48,33 +60,64 @@ export function TaskListClient({ initialItems }: TaskListClientProps) {
     return { active, submitted, approved, doneToday };
   }, [items]);
 
-  const filtered = useMemo(() => {
-    return items
-      .filter((item) => {
+  /**
+   * For the Active tab we keep recently-completed tasks visible for 24 hours
+   * with strikethrough styling, then they fall away into the Submitted /
+   * Approved buckets. The visible-but-done pile gives a satisfying sense of
+   * accomplishment without cluttering the long-term archive.
+   */
+  const { activeRows, completedRecently, filteredFlat } = useMemo(() => {
+    const now = Date.now();
+    const priOrder = { high: 0, normal: 1, low: 2 } as const;
+
+    if (tab === "active") {
+      const active: MyTaskItem[] = [];
+      const recent: MyTaskItem[] = [];
+      for (const item of items) {
         const s = item.assignment.status;
-        if (tab === "active") return s === "assigned" || s === "in_progress";
-        if (tab === "submitted") return s === "submitted";
-        return s === "approved";
-      })
-      .sort((a, b) => {
-        // Active: by due date asc (nulls last), then priority high first.
-        // Submitted/Approved: most recently completed first.
-        if (tab === "active") {
-          const ad = a.task.due_date ? new Date(a.task.due_date).getTime() : Infinity;
-          const bd = b.task.due_date ? new Date(b.task.due_date).getTime() : Infinity;
-          if (ad !== bd) return ad - bd;
-          const pri = { high: 0, normal: 1, low: 2 } as const;
-          return pri[a.task.priority] - pri[b.task.priority];
+        if (s === "assigned" || s === "in_progress") {
+          active.push(item);
+          continue;
         }
-        const at = a.assignment.completed_at
-          ? new Date(a.assignment.completed_at).getTime()
-          : 0;
-        const bt = b.assignment.completed_at
-          ? new Date(b.assignment.completed_at).getTime()
-          : 0;
+        if ((s === "submitted" || s === "approved") && item.assignment.completed_at) {
+          const completedAt = new Date(item.assignment.completed_at).getTime();
+          if (now - completedAt <= COMPLETED_VISIBLE_MS) recent.push(item);
+        }
+      }
+      active.sort((a, b) => {
+        const ad = a.task.due_date ? new Date(a.task.due_date).getTime() : Infinity;
+        const bd = b.task.due_date ? new Date(b.task.due_date).getTime() : Infinity;
+        if (ad !== bd) return ad - bd;
+        return priOrder[a.task.priority] - priOrder[b.task.priority];
+      });
+      recent.sort((a, b) => {
+        const at = a.assignment.completed_at ? new Date(a.assignment.completed_at).getTime() : 0;
+        const bt = b.assignment.completed_at ? new Date(b.assignment.completed_at).getTime() : 0;
         return bt - at;
       });
+      return { activeRows: active, completedRecently: recent, filteredFlat: [] as MyTaskItem[] };
+    }
+
+    // Other tabs: flat list, most recently completed first.
+    const list = items.filter((item) => {
+      const s = item.assignment.status;
+      if (tab === "submitted") return s === "submitted";
+      return s === "approved";
+    });
+    list.sort((a, b) => {
+      const at = a.assignment.completed_at ? new Date(a.assignment.completed_at).getTime() : 0;
+      const bt = b.assignment.completed_at ? new Date(b.assignment.completed_at).getTime() : 0;
+      return bt - at;
+    });
+    return {
+      activeRows: [] as MyTaskItem[],
+      completedRecently: [] as MyTaskItem[],
+      filteredFlat: list,
+    };
   }, [items, tab]);
+
+  const isCompletedExpanded =
+    completedExpanded ?? completedRecently.length <= COMPLETED_AUTO_COLLAPSE;
 
   function handleStatusChange(itemId: string, nextStatus: TaskStatus) {
     const target = items.find((i) => i.assignment.id === itemId);
@@ -208,17 +251,78 @@ export function TaskListClient({ initialItems }: TaskListClientProps) {
       </div>
 
       {/* Task list */}
-      {filtered.length === 0 ? (
+      {tab === "active" ? (
+        activeRows.length === 0 && completedRecently.length === 0 ? (
+          <div className="rounded-xl border border-dashed py-16 text-center text-sm text-muted-foreground">
+            All clear — nothing assigned right now.
+          </div>
+        ) : (
+          <div className="space-y-5">
+            {activeRows.length > 0 ? (
+              <ul className="space-y-2">
+                {activeRows.map((item) => (
+                  <TaskCard
+                    key={item.assignment.id}
+                    item={item}
+                    onStatusChange={handleStatusChange}
+                    onOpen={() => setOpenTaskId(item.task.id)}
+                  />
+                ))}
+              </ul>
+            ) : (
+              <div className="rounded-xl border border-dashed py-10 text-center text-sm text-muted-foreground">
+                Nothing left to do today. Look at this pile though ↓
+              </div>
+            )}
+
+            {completedRecently.length > 0 && (
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setCompletedExpanded(!isCompletedExpanded)}
+                  className="flex w-full items-center gap-2 border-t pt-3 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {isCompletedExpanded ? (
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  ) : (
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  )}
+                  <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                  <span>
+                    {completedRecently.length} completed in the last 24 hours
+                  </span>
+                  <span className="ml-auto text-[10px] text-muted-foreground/70">
+                    {isCompletedExpanded ? "Hide" : "Show"}
+                  </span>
+                </button>
+                <ul
+                  className={cn(
+                    "space-y-2 transition-all",
+                    !isCompletedExpanded && "hidden"
+                  )}
+                >
+                  {completedRecently.map((item) => (
+                    <TaskCard
+                      key={item.assignment.id}
+                      item={item}
+                      onStatusChange={handleStatusChange}
+                      onOpen={() => setOpenTaskId(item.task.id)}
+                    />
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )
+      ) : filteredFlat.length === 0 ? (
         <div className="rounded-xl border border-dashed py-16 text-center text-sm text-muted-foreground">
-          {tab === "active"
-            ? "All clear — nothing assigned right now."
-            : tab === "submitted"
+          {tab === "submitted"
             ? "Nothing waiting on review."
             : "No approved tasks yet."}
         </div>
       ) : (
         <ul className="space-y-2">
-          {filtered.map((item) => (
+          {filteredFlat.map((item) => (
             <TaskCard
               key={item.assignment.id}
               item={item}

@@ -16,6 +16,7 @@ import { MobileNav } from "./mobile-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ChangelogBell } from "@/components/changelog/changelog-bell";
 import { TasksBell } from "@/components/tasks/tasks-bell";
+import { CommandPaletteButton } from "@/components/command-palette/command-palette-button";
 
 interface HeaderProps {
   profile: Profile;
@@ -49,6 +50,7 @@ export function Header({
     <header className="flex h-14 items-center justify-between border-b px-4 md:justify-end gap-2">
       <MobileNav role={profile.role} openRequestCount={openRequestCount} newRequestCount={newRequestCount} practiceName={practiceName} />
       <div className="flex items-center gap-1">
+        <CommandPaletteButton />
         <ThemeToggle />
         <TasksBell initialActiveCount={activeTaskCount} />
         <ChangelogBell initialUnreadCount={unreadChangelogCount} />

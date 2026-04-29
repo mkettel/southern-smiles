@@ -8,6 +8,7 @@ import { getMyActiveTaskCount } from "@/actions/tasks";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { ChatWidget } from "@/components/messages/chat-widget";
+import { CommandPaletteProvider } from "@/components/command-palette/command-palette-provider";
 import { ThemeColorInjector } from "@/components/theme-color-injector";
 import { ToothMascot } from "@/components/tooth-mascot";
 import type { Profile } from "@/lib/types";
@@ -41,34 +42,36 @@ export default async function AppLayout({
   const logoUrl = settings.logo_url;
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <ThemeColorInjector primaryColor={settings.primary_color} />
-      <Sidebar
-        role={profile.role}
-        openRequestCount={openRequestCount}
-        newRequestCount={newRequestCount}
-        practiceName={practiceName}
-        logoUrl={logoUrl}
-        showNameWithLogo={settings.show_name_with_logo}
-      />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <Header
-          profile={profile}
+    <CommandPaletteProvider profile={profile}>
+      <div className="flex h-screen overflow-hidden">
+        <ThemeColorInjector primaryColor={settings.primary_color} />
+        <Sidebar
+          role={profile.role}
           openRequestCount={openRequestCount}
           newRequestCount={newRequestCount}
           practiceName={practiceName}
-          unreadChangelogCount={unreadChangelogCount}
-          activeTaskCount={activeTaskCount}
+          logoUrl={logoUrl}
+          showNameWithLogo={settings.show_name_with_logo}
         />
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <Header
+            profile={profile}
+            openRequestCount={openRequestCount}
+            newRequestCount={newRequestCount}
+            practiceName={practiceName}
+            unreadChangelogCount={unreadChangelogCount}
+            activeTaskCount={activeTaskCount}
+          />
+          <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+        </div>
+        <ChatWidget
+          profile={profile}
+          initialConversations={conversations}
+          practiceMembers={practiceMembers}
+          unreadMessageCount={unreadMessageCount}
+        />
+        <ToothMascot />
       </div>
-      <ChatWidget
-        profile={profile}
-        initialConversations={conversations}
-        practiceMembers={practiceMembers}
-        unreadMessageCount={unreadMessageCount}
-      />
-      <ToothMascot />
-    </div>
+    </CommandPaletteProvider>
   );
 }

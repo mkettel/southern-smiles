@@ -22,7 +22,8 @@ import { PostAssignmentManager } from "@/components/admin/post-assignment-manage
 import { AddPostWizard } from "@/components/admin/add-post-wizard";
 import { InviteEmployeeDialog } from "@/components/admin/invite-employee-dialog";
 import { ArchiveEmployeeButton } from "@/components/admin/archive-employee-button";
-import { Pencil, Plus, Mail } from "lucide-react";
+import { SetPasswordDialog } from "@/components/admin/set-password-dialog";
+import { Pencil, Plus, Mail, KeyRound } from "lucide-react";
 import type { Profile, Post, Division } from "@/lib/types";
 
 export default async function ManageEmployeesPage() {
@@ -170,6 +171,16 @@ export default async function ManageEmployeesPage() {
                           />
                           <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-0.5 rounded text-[10px] font-medium bg-foreground text-background whitespace-nowrap opacity-0 group-hover/edit:opacity-100 transition-opacity pointer-events-none z-10">
                             Edit employee
+                          </span>
+                        </span>
+                        <span className="relative group/pw">
+                          <SetPasswordDialog
+                            profileId={emp.id}
+                            fullName={emp.full_name}
+                            trigger={<KeyRound className="h-3 w-3" />}
+                          />
+                          <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-0.5 rounded text-[10px] font-medium bg-foreground text-background whitespace-nowrap opacity-0 group-hover/pw:opacity-100 transition-opacity pointer-events-none z-10">
+                            Set password
                           </span>
                         </span>
                         <ArchiveEmployeeButton

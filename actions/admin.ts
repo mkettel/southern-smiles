@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { divisionSchema, postSchema, statDefinitionSchema, departmentSchema, sectionSchema } from "@/lib/validators";
 import type { ConditionName } from "@/lib/conditions";
 
@@ -338,6 +339,49 @@ export async function updateProfile(
 
   revalidatePath("/admin/employees");
   revalidatePath("/dashboard");
+  return { success: true };
+}
+
+/**
+ * Admin-initiated password reset. Sets a new password directly for a user
+ * in the same practice, bypassing the current-password requirement. Used when
+ * an employee is locked out — the admin hands them this temporary password and
+ * they change it afterward from their profile page.
+ *
+ * Note: there is no way to read a user's existing password — it's stored only
+ * as a one-way hash. This replaces it with a new one.
+ */
+export async function setTemporaryPassword(
+  profileId: string,
+  newPassword: string
+) {
+  const { supabase, practiceId } = await requireAdmin();
+
+  const password = newPassword ?? "";
+  if (password.length < 8) {
+    return { error: "Password must be at least 8 characters" };
+  }
+  if (password.length > 72) {
+    return { error: "Password must be 72 characters or less" };
+  }
+
+  // Confirm the target user is in the admin's practice before touching auth.
+  const { data: target } = await supabase
+    .from("profiles")
+    .select("id, email, practice_id")
+    .eq("id", profileId)
+    .single();
+
+  if (!target || target.practice_id !== practiceId) {
+    return { error: "Employee not found" };
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.updateUserById(profileId, {
+    password,
+  });
+  if (error) return { error: error.message };
+
   return { success: true };
 }
 

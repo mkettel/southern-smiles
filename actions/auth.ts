@@ -143,6 +143,45 @@ export async function removeAvatar() {
   return { success: true };
 }
 
+export async function changePassword(input: {
+  current_password: string;
+  new_password: string;
+}) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user || !user.email) throw new Error("Unauthorized");
+
+  const newPassword = input.new_password ?? "";
+  if (newPassword.length < 8) {
+    return { error: "New password must be at least 8 characters" };
+  }
+  if (newPassword.length > 72) {
+    return { error: "New password must be 72 characters or less" };
+  }
+  if (input.current_password === newPassword) {
+    return { error: "New password must be different from the current one" };
+  }
+
+  // Verify the current password by re-authenticating. signInWithPassword
+  // refreshes the session cookie, so the user stays signed in either way.
+  const { error: verifyError } = await supabase.auth.signInWithPassword({
+    email: user.email,
+    password: input.current_password,
+  });
+  if (verifyError) {
+    return { error: "Current password is incorrect" };
+  }
+
+  const { error: updateError } = await supabase.auth.updateUser({
+    password: newPassword,
+  });
+  if (updateError) return { error: updateError.message };
+
+  return { success: true };
+}
+
 export async function updateMyProfile(input: {
   full_name?: string;
   username?: string | null;

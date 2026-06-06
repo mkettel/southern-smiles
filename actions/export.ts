@@ -13,9 +13,8 @@ import {
   type GoodDirection,
 } from "@/lib/conditions";
 import { getPracticeSettings } from "@/actions/settings";
-import { getOicEntries } from "@/actions/oic-log";
 import type { Profile, StatType } from "@/lib/types";
-import { format } from "date-fns";
+import { format, addDays } from "date-fns";
 
 // ============================================================
 // Export presets
@@ -150,8 +149,12 @@ export async function getStatsExport(
   // Pull one extra prior week so the first in-range week gets a real baseline
   // for its % change instead of showing "no prior data".
   const queryStart = getPreviousWeekStart(start);
+  // OIC entries are dated by effective_date, which can fall on any day of the
+  // week — extend the upper bound to the Sunday of the final week so an entry
+  // logged late in the last week still lands in range.
+  const oicEnd = format(addDays(new Date(end + "T00:00:00"), 6), "yyyy-MM-dd");
 
-  const [{ data: rawStats }, { data: entries }, settings, oicAll] =
+  const [{ data: rawStats }, { data: entries }, settings, { data: oicRows }] =
     await Promise.all([
       supabase
         .from("stats")
@@ -165,7 +168,14 @@ export async function getStatsExport(
         .lte("week_start", end)
         .order("week_start", { ascending: true }),
       getPracticeSettings(),
-      getOicEntries(),
+      // Query the OIC log directly, scoped to the range in the DB so nothing is
+      // dropped by a row cap on a wide all-time export.
+      supabase
+        .from("oic_log")
+        .select("effective_date, area, post_affected, entry_text, profile:profiles(full_name)")
+        .gte("effective_date", start)
+        .lte("effective_date", oicEnd)
+        .order("effective_date", { ascending: false }),
     ]);
 
   // Map post_id → assigned employee profiles (a stat can have several owners).
@@ -277,22 +287,16 @@ export async function getStatsExport(
     };
   });
 
-  // OIC entries whose effective_date falls inside the range.
-  const startDate = new Date(start + "T00:00:00");
-  const endDate = new Date(end + "T00:00:00");
-  endDate.setDate(endDate.getDate() + 6); // through the end of the final week
-  const oicEntries: ExportOicEntry[] = oicAll
-    .filter((entry) => {
-      const d = new Date(entry.effective_date + "T00:00:00");
-      return d >= startDate && d <= endDate;
-    })
-    .map((entry) => ({
-      effective_date: entry.effective_date,
-      area: entry.area,
-      post_affected: entry.post_affected,
-      entry_text: entry.entry_text,
-      author: entry.profile?.full_name ?? "Unknown",
-    }));
+  // OIC entries are already scoped to the range by the DB query above.
+  const oicEntries: ExportOicEntry[] = (oicRows ?? []).map((entry) => ({
+    effective_date: entry.effective_date,
+    area: entry.area,
+    post_affected: entry.post_affected,
+    entry_text: entry.entry_text,
+    author:
+      (entry.profile as unknown as Pick<Profile, "full_name">)?.full_name ??
+      "Unknown",
+  }));
 
   return {
     practiceName: settings.name,

@@ -99,6 +99,11 @@ export function toMarkdown(data: StatsExport): string {
   lines.push(
     "- **Total change** in each summary compares the first and last week of the range.",
   );
+  if (data.oicEntries.length > 0) {
+    lines.push(
+      "- The **Operational changes (OIC log)** section at the end lists dated actions the team took. Use those dates to explain *why* a stat moved in a given week, and call out likely cause-and-effect links.",
+    );
+  }
   lines.push("");
 
   // Cross-stat summary table

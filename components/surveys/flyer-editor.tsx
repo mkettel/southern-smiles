@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import {
   generateAiBackground,
 } from "@/actions/flyers";
 import type { FlyerConfig } from "@/lib/types";
-import { Download, Save, Sparkles, Upload, RefreshCw } from "lucide-react";
+import { Download, Save, Sparkles, Upload } from "lucide-react";
 
 export function FlyerEditor({
   campaignId,
@@ -24,26 +24,60 @@ export function FlyerEditor({
   aiEnabled: boolean;
 }) {
   const [config, setConfig] = useState<FlyerConfig>(initialConfig);
-  const [nonce, setNonce] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
   const [aiPrompt, setAiPrompt] = useState("");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState(true);
+
+  // Keep the latest config available to the debounced effect without making
+  // it a dependency (we drive the effect off the serialized key instead).
+  const configRef = useRef(config);
+  configRef.current = config;
+  const configKey = JSON.stringify(config);
 
   function set<K extends keyof FlyerConfig>(key: K, value: FlyerConfig[K]) {
     setConfig((c) => ({ ...c, [key]: value }));
   }
 
-  async function persist(next: FlyerConfig, msg = "Flyer saved") {
-    setBusy("save");
-    const res = await saveFlyerConfig(campaignId, next);
-    setBusy(null);
-    if (res.error) {
-      toast.error(typeof res.error === "string" ? res.error : "Could not save");
-      return false;
-    }
-    toast.success(msg);
-    setNonce((n) => n + 1); // refresh preview
-    return true;
-  }
+  // Live preview: debounce, then render the CURRENT (unsaved) config to a PDF
+  // blob and show it. No DB write happens here.
+  useEffect(() => {
+    let cancelled = false;
+    setPreviewing(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/flyer/${campaignId}?preview=1`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(configRef.current),
+        });
+        if (cancelled || !res.ok) return;
+        const blob = await res.blob();
+        if (cancelled) return;
+        const url = URL.createObjectURL(blob);
+        setPreviewUrl((old) => {
+          if (old) URL.revokeObjectURL(old);
+          return url;
+        });
+      } catch {
+        // ignore transient errors while typing
+      } finally {
+        if (!cancelled) setPreviewing(false);
+      }
+    }, 500);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [campaignId, configKey]);
+
+  // Revoke the last blob URL on unmount.
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleUpload(file: File) {
     setBusy("upload");
@@ -55,9 +89,9 @@ export function FlyerEditor({
       toast.error(typeof res.error === "string" ? res.error : "Upload failed");
       return;
     }
-    const next = { ...config, backgroundMode: "image" as const, backgroundUrl: res.url };
-    setConfig(next);
-    await persist(next, "Background uploaded");
+    // Set state only — the live preview updates; Save persists.
+    setConfig((c) => ({ ...c, backgroundMode: "image", backgroundUrl: res.url! }));
+    toast.success("Background added to preview — Save to keep it");
   }
 
   async function handleAi() {
@@ -72,9 +106,43 @@ export function FlyerEditor({
       toast.error(typeof res.error === "string" ? res.error : "Generation failed");
       return;
     }
-    const next = { ...config, backgroundMode: "image" as const, backgroundUrl: res.url };
-    setConfig(next);
-    await persist(next, "AI background generated");
+    setConfig((c) => ({ ...c, backgroundMode: "image", backgroundUrl: res.url! }));
+    toast.success("AI background added to preview — Save to keep it");
+  }
+
+  async function save() {
+    setBusy("save");
+    const res = await saveFlyerConfig(campaignId, config);
+    setBusy(null);
+    if (res.error) {
+      toast.error(typeof res.error === "string" ? res.error : "Could not save");
+      return;
+    }
+    toast.success("Flyer saved");
+  }
+
+  async function generate() {
+    setBusy("gen");
+    try {
+      const res = await fetch(`/api/flyer/${campaignId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(config),
+      });
+      if (!res.ok) {
+        toast.error("Could not generate flyers");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `flyers-${campaignId.slice(0, 8)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setBusy(null);
+    }
   }
 
   return (
@@ -157,7 +225,7 @@ export function FlyerEditor({
               {busy === "upload" ? "Uploading…" : "Upload"}
               <input
                 type="file"
-                accept="image/png,image/jpeg,image/webp"
+                accept="image/png,image/jpeg"
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
@@ -202,42 +270,40 @@ export function FlyerEditor({
         </div>
 
         <div className="flex items-center gap-2">
-          <Button onClick={() => persist(config)} disabled={busy !== null}>
+          <Button onClick={save} disabled={busy !== null}>
             <Save className="mr-1.5 h-4 w-4" />
             {busy === "save" ? "Saving…" : "Save"}
           </Button>
-          <a
-            href={`/api/flyer/${campaignId}`}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/80 transition-colors"
-          >
-            <Download className="h-4 w-4" />
-            Generate flyers (PDF)
-          </a>
+          <Button variant="outline" onClick={generate} disabled={busy !== null}>
+            <Download className="mr-1.5 h-4 w-4" />
+            {busy === "gen" ? "Generating…" : "Generate flyers (PDF)"}
+          </Button>
         </div>
       </div>
 
-      {/* Preview */}
+      {/* Live preview */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <Label>Preview (sample patient)</Label>
-          <button
-            type="button"
-            onClick={() => setNonce((n) => n + 1)}
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <RefreshCw className="h-3 w-3" />
-            Refresh
-          </button>
+          <Label>Live preview (sample patient)</Label>
+          {previewing && (
+            <span className="text-xs text-muted-foreground">Updating…</span>
+          )}
         </div>
-        <iframe
-          key={nonce}
-          src={`/api/flyer/${campaignId}?preview=1&t=${nonce}`}
-          className="h-[640px] w-full rounded-lg border bg-muted"
-          title="Flyer preview"
-        />
+        {previewUrl ? (
+          <iframe
+            src={previewUrl}
+            className="h-[640px] w-full rounded-lg border bg-muted"
+            title="Flyer preview"
+          />
+        ) : (
+          <div className="flex h-[640px] w-full items-center justify-center rounded-lg border bg-muted text-sm text-muted-foreground">
+            Rendering preview…
+          </div>
+        )}
         <p className="text-xs text-muted-foreground">
-          Save to update the preview. The real flyers use each patient&apos;s name
-          and unique QR code.
+          Updates as you edit — nothing is saved until you click{" "}
+          <span className="font-medium">Save</span>. Real flyers use each
+          patient&apos;s name and unique QR code.
         </p>
       </div>
     </div>

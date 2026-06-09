@@ -42,12 +42,31 @@ const styles = StyleSheet.create({
     height: "100%",
     objectFit: "cover",
   },
-  // Readable panel that floats above any background art.
+  // Readable panel that floats above the (solid-tint) background.
   panel: {
     margin: 40,
     padding: 28,
     borderRadius: 10,
     backgroundColor: "rgba(255,255,255,0.92)",
+    flexGrow: 1,
+  },
+  // Image mode: the uploaded/AI image as a visible hero band at the top.
+  heroImage: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: "100%",
+    height: 300,
+    objectFit: "cover",
+  },
+  // White content card that sits below the hero image (solid, fully readable).
+  contentCard: {
+    marginTop: 250,
+    marginHorizontal: 28,
+    marginBottom: 28,
+    padding: 26,
+    borderRadius: 12,
+    backgroundColor: "#ffffff",
     flexGrow: 1,
   },
   logo: { height: 38, marginBottom: 16, objectFit: "contain" },
@@ -127,71 +146,78 @@ function FlyerPage({
   // Split body into paragraphs.
   const paragraphs = (config.body ?? "").split(/\n{2,}/).filter(Boolean);
 
-  return (
-    <Page size="LETTER" style={styles.page}>
-      {showBg && <Image src={backgroundDataUrl!} style={styles.bgImage} />}
-      {!showBg && (
-        <View style={[styles.bgImage, { backgroundColor: `${accent}14` }]} />
+  const content = (
+    <>
+      {logoDataUrl ? (
+        <Image src={logoDataUrl} style={styles.logo} />
+      ) : (
+        <Text style={[styles.greeting, { color: accent }]}>{practiceName}</Text>
       )}
 
-      <View style={styles.panel}>
-        {logoDataUrl ? (
-          <Image src={logoDataUrl} style={styles.logo} />
-        ) : (
-          <Text style={[styles.greeting, { color: accent }]}>{practiceName}</Text>
-        )}
+      {config.heading ? (
+        <Text style={[styles.heading, { color: accent }]}>{config.heading}</Text>
+      ) : null}
 
-        {config.heading ? (
-          <Text style={[styles.heading, { color: accent }]}>{config.heading}</Text>
-        ) : null}
+      <Text style={styles.greeting}>Dear {data.firstName},</Text>
+      {paragraphs.map((p, i) => (
+        <Text key={i} style={styles.body}>
+          {p}
+        </Text>
+      ))}
 
-        <Text style={styles.greeting}>Dear {data.firstName},</Text>
-        {paragraphs.map((p, i) => (
-          <Text key={i} style={styles.body}>
-            {p}
-          </Text>
-        ))}
-
-        <View style={[styles.creditBox, { backgroundColor: accent }]}>
-          <Text style={styles.creditCaption}>Our thank-you to you</Text>
-          <Text style={styles.creditAmount}>
-            {creditLabel} appreciation credit
-          </Text>
-        </View>
-
-        {config.signature ? (
-          <View style={styles.signature}>
-            <MultiLine text={config.signature} style={styles.signature} />
-          </View>
-        ) : null}
-
-        <View style={styles.qrRow}>
-          <View style={[styles.qrCard, { borderColor: `${accent}55` }]}>
-            <Image src={data.qrDataUrl} style={styles.qrImage} />
-            <Text style={styles.qrCaption}>Scan with your camera</Text>
-          </View>
-          <View style={styles.qrSide}>
-            <Text style={[styles.qrTitle, { color: accent }]}>
-              Take the survey
-            </Text>
-            <Text style={styles.qrHint}>Scan the code, or visit:</Text>
-            <Text style={styles.qrUrl}>{data.surveyUrl}</Text>
-          </View>
-        </View>
-
-        {config.includeQuestions && questions.length > 0 ? (
-          <View>
-            <Text style={styles.questionsTitle}>We value your thoughts</Text>
-            {questions.map((q, i) => (
-              <Text key={i} style={styles.questionItem}>
-                {i + 1}. {q.label}
-              </Text>
-            ))}
-          </View>
-        ) : null}
-
-        <Text style={styles.footer}>{practiceName}</Text>
+      <View style={[styles.creditBox, { backgroundColor: accent }]}>
+        <Text style={styles.creditCaption}>Our thank-you to you</Text>
+        <Text style={styles.creditAmount}>{creditLabel} appreciation credit</Text>
       </View>
+
+      {config.signature ? (
+        <View style={styles.signature}>
+          <MultiLine text={config.signature} style={styles.signature} />
+        </View>
+      ) : null}
+
+      <View style={styles.qrRow}>
+        <View style={[styles.qrCard, { borderColor: `${accent}55` }]}>
+          <Image src={data.qrDataUrl} style={styles.qrImage} />
+          <Text style={styles.qrCaption}>Scan with your camera</Text>
+        </View>
+        <View style={styles.qrSide}>
+          <Text style={[styles.qrTitle, { color: accent }]}>Take the survey</Text>
+          <Text style={styles.qrHint}>Scan the code, or visit:</Text>
+          <Text style={styles.qrUrl}>{data.surveyUrl}</Text>
+        </View>
+      </View>
+
+      {config.includeQuestions && questions.length > 0 ? (
+        <View>
+          <Text style={styles.questionsTitle}>We value your thoughts</Text>
+          {questions.map((q, i) => (
+            <Text key={i} style={styles.questionItem}>
+              {i + 1}. {q.label}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+
+      <Text style={styles.footer}>{practiceName}</Text>
+    </>
+  );
+
+  // Image mode: image as a visible hero at the top, content on a white card
+  // below. Solid mode: accent-tint background with a translucent panel.
+  if (showBg) {
+    return (
+      <Page size="LETTER" style={styles.page}>
+        <Image src={backgroundDataUrl!} style={styles.heroImage} />
+        <View style={styles.contentCard}>{content}</View>
+      </Page>
+    );
+  }
+
+  return (
+    <Page size="LETTER" style={styles.page}>
+      <View style={[styles.bgImage, { backgroundColor: `${accent}14` }]} />
+      <View style={styles.panel}>{content}</View>
     </Page>
   );
 }

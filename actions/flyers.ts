@@ -51,8 +51,10 @@ export async function uploadFlyerBackground(formData: FormData) {
   if (file.size > 8 * 1024 * 1024) return { error: "Image must be under 8MB" };
 
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "png";
-  const allowed = ["png", "jpg", "jpeg", "webp"];
-  if (!allowed.includes(ext)) return { error: "Use PNG, JPG, or WebP" };
+  // PDF rendering (react-pdf) reliably supports PNG/JPEG only — WebP can
+  // silently fail to render, so we don't accept it for flyer backgrounds.
+  const allowed = ["png", "jpg", "jpeg"];
+  if (!allowed.includes(ext)) return { error: "Use a PNG or JPG image" };
 
   const filename = `${practiceId}/bg-${Date.now()}.${ext}`;
   const { error: uploadError } = await supabase.storage

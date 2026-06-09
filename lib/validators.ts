@@ -180,6 +180,11 @@ export const importPatientDataSchema = z.object({
   records: z.array(aggregatedPatientSchema).min(1).max(10000),
 });
 
+export const saveSheetSourceSchema = z.object({
+  url: z.string().min(1, "Paste a Google Sheets link").max(500),
+  sheetTitle: z.string().max(200).nullable().optional(),
+});
+
 export const patientFiltersSchema = z.object({
   search: z.string().max(100).optional(),
   minValueCents: z.number().int().min(0).optional(),

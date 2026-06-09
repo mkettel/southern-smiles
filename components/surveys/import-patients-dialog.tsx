@@ -55,7 +55,7 @@ export function ImportPatientsDialog() {
     const res = await importPatientData({ records: result.patients });
     setLoading(false);
 
-    if (res.error) {
+    if (!("inserted" in res)) {
       toast.error(typeof res.error === "string" ? res.error : "Import failed");
       return;
     }

@@ -173,7 +173,15 @@ function pickIndex(detected: DetectedColumn[], role: DetectedColumnRole, preferK
  * subtotal/Grand-Total rows are skipped.
  */
 export function aggregatePatients(text: string): AggregationResult {
-  const allRows = parseCsvRows(text);
+  return aggregateRows(parseCsvRows(text));
+}
+
+/**
+ * Aggregate an already-tokenized 2-D array of rows (e.g. straight from the
+ * Google Sheets API). Title rows, blank rows, and subtotal/Grand-Total rows
+ * are skipped. `aggregatePatients` is the CSV-text wrapper around this.
+ */
+export function aggregateRows(allRows: string[][]): AggregationResult {
   const headerIdx = findHeaderRow(allRows);
   if (headerIdx === -1) return { patients: [], detected: [], skipped: 0 };
 

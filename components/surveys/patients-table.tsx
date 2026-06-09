@@ -17,11 +17,10 @@ import { cn } from "@/lib/utils";
 import type { PatientListItem, SurveyCampaign } from "@/lib/types";
 import { Users } from "lucide-react";
 
-function monthsSince(dateIso: string | null): number | null {
+function monthsBetween(dateIso: string | null, refMs: number): number | null {
   if (!dateIso) return null;
   const then = new Date(dateIso + "T00:00:00").getTime();
-  const now = Date.now();
-  return (now - then) / (1000 * 60 * 60 * 24 * 30.44);
+  return (refMs - then) / (1000 * 60 * 60 * 24 * 30.44);
 }
 
 function fmtMoney(cents: number): string {
@@ -34,10 +33,18 @@ const NEW_MONTHS = 6;
 export function PatientsTable({
   patients,
   campaigns,
+  asOf,
 }: {
   patients: PatientListItem[];
   campaigns: SurveyCampaign[];
+  /** Date the data reflects (latest visit). Recency is measured against this,
+   *  not today, so a stale export doesn't make everyone look lapsed. */
+  asOf?: string;
 }) {
+  // Reference point for recency: the data's as-of date, falling back to today.
+  // `now` is captured once (lazy init) to keep render pure.
+  const [now] = useState(() => Date.now());
+  const refMs = asOf ? new Date(asOf + "T00:00:00").getTime() : now;
   const [search, setSearch] = useState("");
   const [minDollars, setMinDollars] = useState("");
   const [lapsedOnly, setLapsedOnly] = useState(false);
@@ -63,12 +70,12 @@ export function PatientsTable({
       if (minCents && p.total_collected_cents < minCents) return false;
       if (repeatOnly && p.visit_count <= 1) return false;
       if (lapsedOnly) {
-        const m = monthsSince(p.last_seen);
+        const m = monthsBetween(p.last_seen, refMs);
         if (m === null || m < LAPSED_MONTHS) return false;
       }
       return true;
     });
-  }, [patients, search, minDollars, repeatOnly, lapsedOnly]);
+  }, [patients, search, minDollars, repeatOnly, lapsedOnly, refMs]);
 
   const allFilteredSelected =
     filtered.length > 0 && filtered.every((p) => selected.has(p.id));
@@ -95,12 +102,12 @@ export function PatientsTable({
     const out: { label: string; className: string }[] = [];
     if (p.total_collected_cents >= topValueThreshold && p.total_collected_cents > 0)
       out.push({ label: "💰 Top value", className: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400" });
-    const lm = monthsSince(p.last_seen);
+    const lm = monthsBetween(p.last_seen, refMs);
     if (lm !== null && lm >= LAPSED_MONTHS)
       out.push({ label: "⏰ Lapsed", className: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400" });
     if (p.visit_count > 1)
       out.push({ label: "🔁 Repeat", className: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400" });
-    const fm = monthsSince(p.first_seen);
+    const fm = monthsBetween(p.first_seen, refMs);
     if (fm !== null && fm <= NEW_MONTHS)
       out.push({ label: "🌱 New", className: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400" });
     return out;
@@ -143,6 +150,12 @@ export function PatientsTable({
         </Button>
 
         <div className="ml-auto flex items-center gap-2">
+          {asOf && (
+            <span className="text-xs text-muted-foreground">
+              recency as of{" "}
+              {new Date(asOf + "T00:00:00").toLocaleDateString()}
+            </span>
+          )}
           <span className="text-sm text-muted-foreground">
             {selected.size} selected · {filtered.length} shown
           </span>

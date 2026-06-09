@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { calculateCondition } from "@/lib/conditions";
 import { getCurrentWeekStart } from "@/lib/constants";
 import { generateSurveyCode } from "@/lib/survey/code";
+import { upsertAggregatedPatients } from "@/lib/survey/upsert-patients";
 import {
   surveyCampaignSchema,
   patientImportRowSchema,
@@ -151,96 +152,28 @@ export async function importPatientData(input: { records: AggregatedPatient[] })
 
   const parsed = importPatientDataSchema.safeParse(input);
   if (!parsed.success) return { error: "Invalid import data" };
-  const { records } = parsed.data;
 
-  // Existing patients in this practice for identity matching + coalescing.
-  type ExistingPatient = {
-    id: string;
-    name_key: string | null;
-    external_ref: string | null;
-    email: string | null;
-    phone: string | null;
-    attributes: Record<string, unknown> | null;
-  };
-  const { data: existing } = await supabase
-    .from("patients")
-    .select("id, name_key, external_ref, email, phone, attributes")
-    .eq("practice_id", practiceId);
+  // Normalize Zod's optional/undefined fields to the strict AggregatedPatient shape.
+  const records: AggregatedPatient[] = parsed.data.records.map((r) => ({
+    full_name: r.full_name,
+    first_name: r.first_name ?? null,
+    name_key: r.name_key,
+    email: r.email ?? null,
+    phone: r.phone ?? null,
+    external_ref: r.external_ref ?? null,
+    total_collected_cents: r.total_collected_cents,
+    visit_count: r.visit_count,
+    first_seen: r.first_seen ?? null,
+    last_seen: r.last_seen ?? null,
+    attributes: r.attributes ?? {},
+  }));
 
-  const byRef = new Map<string, ExistingPatient>();
-  const byKey = new Map<string, ExistingPatient>();
-  for (const e of (existing ?? []) as ExistingPatient[]) {
-    if (e.external_ref) byRef.set(e.external_ref, e);
-    if (e.name_key) byKey.set(e.name_key, e);
-  }
-
-  const inserts: Record<string, unknown>[] = [];
-  const updates: Record<string, unknown>[] = [];
-
-  for (const r of records) {
-    const match =
-      (r.external_ref && byRef.get(r.external_ref)) ||
-      byKey.get(r.name_key) ||
-      null;
-
-    const metrics = {
-      full_name: r.full_name,
-      first_name: r.first_name ?? null,
-      name_key: r.name_key,
-      external_ref: r.external_ref ?? match?.external_ref ?? null,
-      total_collected_cents: r.total_collected_cents,
-      visit_count: r.visit_count,
-      first_seen: r.first_seen ?? null,
-      last_seen: r.last_seen ?? null,
-    };
-
-    if (match) {
-      updates.push({
-        id: match.id,
-        practice_id: practiceId,
-        ...metrics,
-        // Coalesce contacts: keep existing if the import lacks them.
-        email: r.email ?? match.email ?? null,
-        phone: r.phone ?? match.phone ?? null,
-        attributes: { ...(match.attributes ?? {}), ...r.attributes },
-        updated_at: new Date().toISOString(),
-      });
-    } else {
-      inserts.push({
-        practice_id: practiceId,
-        ...metrics,
-        email: r.email ?? null,
-        phone: r.phone ?? null,
-        attributes: r.attributes ?? {},
-      });
-    }
-  }
-
-  const CHUNK = 500;
-  let inserted = 0;
-  for (let i = 0; i < inserts.length; i += CHUNK) {
-    const slice = inserts.slice(i, i + CHUNK);
-    const { error, count } = await supabase
-      .from("patients")
-      .insert(slice, { count: "exact" });
-    if (error) return { error: error.message };
-    inserted += count ?? slice.length;
-  }
-
-  let updated = 0;
-  for (let i = 0; i < updates.length; i += CHUNK) {
-    const slice = updates.slice(i, i + CHUNK);
-    // onConflict 'id' → updates the matched rows by primary key.
-    const { error } = await supabase
-      .from("patients")
-      .upsert(slice, { onConflict: "id" });
-    if (error) return { error: error.message };
-    updated += slice.length;
-  }
+  const result = await upsertAggregatedPatients(supabase, practiceId, records);
+  if ("error" in result) return { error: result.error };
 
   revalidatePath("/admin/surveys");
   revalidatePath("/admin/surveys/patients");
-  return { success: true, inserted, updated, skipped: 0 };
+  return { success: true, ...result, skipped: 0 };
 }
 
 /**

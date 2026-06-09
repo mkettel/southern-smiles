@@ -416,6 +416,27 @@ export interface PatientListItem extends Patient {
   enrolledCampaignIds: string[];
 }
 
+export interface PatientSheetSource {
+  id: string;
+  practice_id: string;
+  spreadsheet_id: string;
+  spreadsheet_url: string | null;
+  sheet_title: string | null;
+  last_synced_at: string | null;
+  last_row_count: number | null;
+  last_status: string | null;
+  last_error: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SheetSyncResult {
+  inserted: number;
+  updated: number;
+  rowCount: number;
+}
+
 export interface SurveyCampaign {
   id: string;
   practice_id: string;

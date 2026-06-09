@@ -25,6 +25,7 @@ import {
   Bell,
   CheckSquare,
   Download,
+  Mailbox,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -56,6 +57,7 @@ const adminOnlyLinks: NavLink[] = [
   { href: "/admin/tasks", label: "Command Center", icon: CheckSquare },
   { href: "/admin/organization", label: "Organization", icon: Building2 },
   { href: "/admin/stats", label: "Manage Stats", icon: BarChart3 },
+  { href: "/admin/surveys", label: "Patient Surveys", icon: Mailbox },
   { href: "/admin/export", label: "Export & Analyze", icon: Download },
   { href: "/admin/employees", label: "Manage Team", icon: Settings },
   { href: "/admin/updates", label: "Updates", icon: Bell },

@@ -325,6 +325,176 @@ export interface MyStatForEntry {
   existingEntry: StatEntry | null;
 }
 
+// ============================================================
+// Patient surveys & referral insights
+// ============================================================
+
+export type SurveyQuestionType =
+  | "rating"
+  | "single_choice"
+  | "multi_choice"
+  | "text"
+  | "referral_source";
+
+export interface SurveyQuestion {
+  id: string;
+  type: SurveyQuestionType;
+  label: string;
+  options?: string[];
+  required?: boolean;
+}
+
+export type CampaignStatus = "draft" | "active" | "closed";
+export type CreditStatus = "none" | "promised" | "redeemed" | "expired";
+
+export interface Patient {
+  id: string;
+  practice_id: string;
+  full_name: string;
+  first_name: string | null;
+  phone: string | null;
+  email: string | null;
+  external_ref: string | null;
+  // Metrics (migration 033) — derived from imported revenue/visit data
+  total_collected_cents: number;
+  visit_count: number;
+  first_seen: string | null;
+  last_seen: string | null;
+  name_key: string | null;
+  attributes: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A patient aggregated from raw CSV rows, ready to upsert. */
+export interface AggregatedPatient {
+  full_name: string;
+  first_name: string | null;
+  name_key: string;
+  email: string | null;
+  phone: string | null;
+  external_ref: string | null;
+  total_collected_cents: number;
+  visit_count: number;
+  first_seen: string | null;
+  last_seen: string | null;
+  attributes: Record<string, unknown>;
+}
+
+export type DetectedColumnRole =
+  | "name"
+  | "currency"
+  | "date"
+  | "email"
+  | "phone"
+  | "external_ref"
+  | "other";
+
+export interface DetectedColumn {
+  header: string;
+  role: DetectedColumnRole;
+}
+
+export interface AggregationResult {
+  patients: AggregatedPatient[];
+  detected: DetectedColumn[];
+  skipped: number;
+}
+
+export interface PatientFilters {
+  search?: string;
+  minValueCents?: number;
+  lapsedMonths?: number;
+  newWithinMonths?: number;
+  repeatOnly?: boolean;
+}
+
+export type PatientSegment = "top_value" | "lapsed" | "repeat" | "new";
+
+/** A patient row plus which campaigns they're already enrolled in. */
+export interface PatientListItem extends Patient {
+  enrolledCampaignIds: string[];
+}
+
+export interface SurveyCampaign {
+  id: string;
+  practice_id: string;
+  title: string;
+  questions: SurveyQuestion[];
+  credit_amount_cents: number;
+  credit_expires_days: number | null;
+  status: CampaignStatus;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SurveyRecipient {
+  id: string;
+  practice_id: string;
+  campaign_id: string;
+  patient_id: string;
+  code: string;
+  sent_at: string | null;
+  responded_at: string | null;
+  credit_status: CreditStatus;
+  credit_amount_cents: number | null;
+  credit_expires_at: string | null;
+  credit_redeemed_at: string | null;
+  credit_redeemed_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  patient?: Patient;
+  campaign?: SurveyCampaign;
+}
+
+export interface SurveyResponse {
+  id: string;
+  practice_id: string;
+  campaign_id: string;
+  recipient_id: string;
+  patient_id: string;
+  answers: Record<string, unknown>;
+  referral_source: string | null;
+  submitted_at: string;
+  // Joined
+  patient?: Patient;
+}
+
+// View models for the admin insights dashboard
+export interface CampaignStats {
+  campaign: SurveyCampaign;
+  recipientCount: number;
+  sentCount: number;
+  responseCount: number;
+  responseRate: number; // responses ÷ sent (0 when none sent)
+  creditPromisedCents: number;
+  creditRedeemedCents: number;
+  creditOutstandingCents: number;
+}
+
+export interface ReferralAggregationItem {
+  source: string;
+  count: number;
+}
+
+export interface PullQuote {
+  patientName: string;
+  questionLabel: string;
+  text: string;
+  submittedAt: string;
+}
+
+/** Narrow, safe shape returned to the anonymous public survey page. */
+export interface PublicSurveyView {
+  status: "ok" | "not_found" | "closed" | "already_responded";
+  patientFirstName?: string;
+  campaignTitle?: string;
+  questions?: SurveyQuestion[];
+  creditAmountCents?: number;
+}
+
 export interface OtherStatForEntry {
   stat: Stat;
   post: Post;

@@ -125,3 +125,65 @@ export const taskSchema = z.object({
 export const taskCommentSchema = z.object({
   message: z.string().min(1, "Message cannot be empty").max(4000),
 });
+
+// ============================================================
+// Patient surveys & referral insights
+// ============================================================
+
+export const surveyQuestionSchema = z.object({
+  id: z.string().min(1).max(64),
+  type: z.enum(["rating", "single_choice", "multi_choice", "text", "referral_source"]),
+  label: z.string().min(1, "Question label is required").max(300),
+  options: z.array(z.string().min(1).max(200)).max(30).optional(),
+  required: z.boolean().optional(),
+});
+
+export const surveyCampaignSchema = z.object({
+  title: z.string().min(1, "Title is required").max(200),
+  questions: z.array(surveyQuestionSchema).min(1, "Add at least one question").max(30),
+  credit_amount_cents: z.number().int().min(0).max(1_000_000).default(5000),
+  credit_expires_days: z.number().int().min(1).max(3650).nullable().optional(),
+});
+
+export const patientImportRowSchema = z.object({
+  full_name: z.string().min(1, "Name is required").max(200),
+  first_name: z.string().max(100).nullable().optional(),
+  phone: z.string().max(40).nullable().optional(),
+  email: z.string().max(200).nullable().optional(),
+  external_ref: z.string().max(100).nullable().optional(),
+});
+
+export const surveySubmissionSchema = z.object({
+  code: z.string().min(4).max(40),
+  answers: z.record(z.string().max(64), z.unknown()),
+});
+
+export const redeemCreditSchema = z.object({
+  recipient_id: uuidLike,
+});
+
+export const aggregatedPatientSchema = z.object({
+  full_name: z.string().min(1).max(200),
+  first_name: z.string().max(100).nullable().optional(),
+  name_key: z.string().min(1).max(220),
+  email: z.string().max(200).nullable().optional(),
+  phone: z.string().max(40).nullable().optional(),
+  external_ref: z.string().max(100).nullable().optional(),
+  total_collected_cents: z.number().int().min(0).max(1_000_000_000),
+  visit_count: z.number().int().min(0).max(100_000),
+  first_seen: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  last_seen: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  attributes: z.record(z.string().max(64), z.unknown()).default({}),
+});
+
+export const importPatientDataSchema = z.object({
+  records: z.array(aggregatedPatientSchema).min(1).max(10000),
+});
+
+export const patientFiltersSchema = z.object({
+  search: z.string().max(100).optional(),
+  minValueCents: z.number().int().min(0).optional(),
+  lapsedMonths: z.number().int().min(0).max(120).optional(),
+  newWithinMonths: z.number().int().min(0).max(120).optional(),
+  repeatOnly: z.boolean().optional(),
+});

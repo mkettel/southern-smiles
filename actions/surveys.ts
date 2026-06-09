@@ -390,6 +390,52 @@ export async function generateRecipients(
 }
 
 /**
+ * Unenroll patients from a campaign by deleting their recipient rows. Only
+ * removes recipients that haven't been sent or responded — sent letters and
+ * collected responses (with their $50 credits) are preserved.
+ */
+export async function unenrollAll(campaignId: string) {
+  const { supabase } = await requireAdmin();
+  const { error, count } = await supabase
+    .from("survey_recipients")
+    .delete({ count: "exact" })
+    .eq("campaign_id", campaignId)
+    .is("sent_at", null)
+    .is("responded_at", null);
+  if (error) return { error: error.message };
+  if (!count) {
+    return { error: "Nothing to unenroll — sent/responded enrollments are kept." };
+  }
+
+  revalidatePath(`/admin/surveys/${campaignId}`);
+  revalidatePath("/admin/surveys/patients");
+  return { success: true, removed: count };
+}
+
+/**
+ * Unenroll a specific subset of patients from a campaign. Only removes
+ * recipients that haven't been sent or responded.
+ */
+export async function unenrollPatients(campaignId: string, patientIds: string[]) {
+  const { supabase } = await requireAdmin();
+  if (!patientIds || patientIds.length === 0) {
+    return { error: "No patients selected" };
+  }
+  const { error, count } = await supabase
+    .from("survey_recipients")
+    .delete({ count: "exact" })
+    .eq("campaign_id", campaignId)
+    .in("patient_id", patientIds)
+    .is("sent_at", null)
+    .is("responded_at", null);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/admin/surveys/${campaignId}`);
+  revalidatePath("/admin/surveys/patients");
+  return { success: true, removed: count ?? 0 };
+}
+
+/**
  * "Send" a batch: stamp sent_at on un-sent recipients, promise the $50 credit,
  * and increment the Personalized Outflow (PO) stat for the current week.
  */

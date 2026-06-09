@@ -11,9 +11,17 @@ import {
   getSheetTabs,
   saveSheetSource,
   syncSheetNow,
+  disconnectSheetSource,
 } from "@/actions/patient-sources";
 import type { PatientSheetSource } from "@/lib/types";
-import { Sheet, RefreshCw, CheckCircle2, AlertCircle, Link2 } from "lucide-react";
+import {
+  Sheet,
+  RefreshCw,
+  CheckCircle2,
+  AlertCircle,
+  Link2,
+  Unlink,
+} from "lucide-react";
 
 export function SheetConnection({
   source,
@@ -69,6 +77,24 @@ export function SheetConnection({
     }
     toast.success("Sheet connected");
     setEditing(false);
+    router.refresh();
+  }
+
+  async function unlink() {
+    if (
+      !window.confirm(
+        "Unlink this Google Sheet? Your already-synced patient data is kept — you just won't be able to sync from this sheet until you reconnect."
+      )
+    )
+      return;
+    setBusy("unlink");
+    const res = await disconnectSheetSource();
+    setBusy(null);
+    if (res.error) {
+      toast.error(typeof res.error === "string" ? res.error : "Could not unlink");
+      return;
+    }
+    toast.success("Google Sheet unlinked");
     router.refresh();
   }
 
@@ -136,6 +162,15 @@ export function SheetConnection({
             )}
             <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
               Change
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={unlink}
+              disabled={busy !== null}
+            >
+              <Unlink className="mr-1.5 h-4 w-4" />
+              {busy === "unlink" ? "Unlinking…" : "Unlink"}
             </Button>
             <Button size="sm" onClick={sync} disabled={busy !== null}>
               <RefreshCw

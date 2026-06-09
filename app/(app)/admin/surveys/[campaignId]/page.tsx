@@ -8,6 +8,7 @@ import {
   getReferralAggregation,
   getResponseFeed,
   getPullQuotes,
+  getPatientsFiltered,
 } from "@/actions/surveys";
 import {
   Card,
@@ -17,6 +18,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CampaignActions } from "@/components/surveys/campaign-actions";
+import { EnrollmentManager } from "@/components/surveys/enrollment-manager";
 import { RecipientsTable } from "@/components/surveys/recipients-table";
 import { ReferralChart } from "@/components/surveys/referral-chart";
 import { FlyerEditor } from "@/components/surveys/flyer-editor";
@@ -42,15 +44,26 @@ export default async function CampaignDetailPage({
   const campaign = await getCampaign(campaignId);
   if (!campaign) notFound();
 
-  const [stats, recipients, referrals, feed, quotes] = await Promise.all([
-    getCampaignStats(campaignId),
-    getCampaignRecipients(campaignId),
-    getReferralAggregation(campaignId),
-    getResponseFeed(campaignId),
-    getPullQuotes(campaignId),
-  ]);
+  const [stats, recipients, referrals, feed, quotes, allPatients] =
+    await Promise.all([
+      getCampaignStats(campaignId),
+      getCampaignRecipients(campaignId),
+      getReferralAggregation(campaignId),
+      getResponseFeed(campaignId),
+      getPullQuotes(campaignId),
+      getPatientsFiltered({}),
+    ]);
 
   const unsentCount = recipients.filter((r) => !r.sent_at).length;
+  const enrolledPatientIds = recipients.map((r) => r.patient_id);
+  const sentPatientIds = recipients
+    .filter((r) => r.sent_at)
+    .map((r) => r.patient_id);
+  const patientsAsOf =
+    allPatients.reduce<string | null>(
+      (max, p) => (p.last_seen && (!max || p.last_seen > max) ? p.last_seen : max),
+      null
+    ) ?? undefined;
 
   const flyerConfig: FlyerConfig = {
     ...DEFAULT_FLYER_CONFIG,
@@ -89,12 +102,21 @@ export default async function CampaignDetailPage({
         </div>
       </div>
 
-      <CampaignActions
-        campaignId={campaignId}
-        status={campaign.status}
-        recipientCount={stats?.recipientCount ?? 0}
-        unsentCount={unsentCount}
-      />
+      <div className="flex flex-wrap items-center gap-2">
+        <EnrollmentManager
+          campaignId={campaignId}
+          patients={allPatients}
+          enrolledPatientIds={enrolledPatientIds}
+          sentPatientIds={sentPatientIds}
+          asOf={patientsAsOf}
+        />
+        <CampaignActions
+          campaignId={campaignId}
+          status={campaign.status}
+          recipientCount={stats?.recipientCount ?? 0}
+          unsentCount={unsentCount}
+        />
+      </div>
 
       {/* KPI row */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">

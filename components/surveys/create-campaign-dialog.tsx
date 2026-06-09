@@ -123,6 +123,9 @@ export function CreateCampaignDialog() {
     }
     toast.success("Campaign created");
     setOpen(false);
+    // Refresh so the new campaign appears in the list immediately (clears the
+    // client router cache), then open it to configure.
+    router.refresh();
     if (result.id) router.push(`/admin/surveys/${result.id}`);
   }
 

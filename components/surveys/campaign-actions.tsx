@@ -4,13 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  generateRecipients,
-  sendBatch,
-  setCampaignStatus,
-} from "@/actions/surveys";
+import { sendBatch, setCampaignStatus } from "@/actions/surveys";
 import type { CampaignStatus } from "@/lib/types";
-import { Users, Send, Lock } from "lucide-react";
+import { Send, Lock } from "lucide-react";
 
 export function CampaignActions({
   campaignId,
@@ -40,21 +36,6 @@ export function CampaignActions({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button
-        variant="outline"
-        disabled={busy !== null}
-        onClick={() =>
-          run(
-            "gen",
-            () => generateRecipients(campaignId),
-            (r) => `Generated ${r.created} code${r.created === 1 ? "" : "s"}`
-          )
-        }
-      >
-        <Users className="mr-1.5 h-4 w-4" />
-        {busy === "gen" ? "Generating…" : "Enroll all patients"}
-      </Button>
-
       <Button
         disabled={busy !== null || unsentCount === 0}
         onClick={() =>

@@ -100,6 +100,19 @@ export async function saveSheetSource(input: {
   return { success: true };
 }
 
+/** Unlink the connected Google Sheet. Patient data already synced is kept. */
+export async function disconnectSheetSource() {
+  const { supabase, practiceId } = await requireAdmin();
+  const { error } = await supabase
+    .from("patient_sheet_sources")
+    .delete()
+    .eq("practice_id", practiceId);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/surveys/patients");
+  return { success: true };
+}
+
 export async function syncSheetNow() {
   const { supabase, practiceId } = await requireAdmin();
 

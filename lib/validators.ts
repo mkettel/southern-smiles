@@ -185,6 +185,24 @@ export const saveSheetSourceSchema = z.object({
   sheetTitle: z.string().max(200).nullable().optional(),
 });
 
+export const flyerConfigSchema = z.object({
+  heading: z.string().max(120).default(""),
+  body: z.string().max(1500).default(""),
+  signature: z.string().max(200).default(""),
+  accentColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/, "Use a hex color like #0f766e")
+    .default("#0f766e"),
+  backgroundMode: z.enum(["solid", "image"]).default("solid"),
+  backgroundUrl: z.string().url().nullable().optional(),
+  includeQuestions: z.boolean().default(false),
+});
+
+export const generateAiBackgroundSchema = z.object({
+  campaign_id: uuidLike,
+  prompt: z.string().min(3, "Describe the look you want").max(500),
+});
+
 export const patientFiltersSchema = z.object({
   search: z.string().max(100).optional(),
   minValueCents: z.number().int().min(0).optional(),

@@ -437,6 +437,28 @@ export interface SheetSyncResult {
   rowCount: number;
 }
 
+export type FlyerBackgroundMode = "solid" | "image";
+
+export interface FlyerConfig {
+  heading: string;
+  body: string;
+  signature: string;
+  accentColor: string;
+  backgroundMode: FlyerBackgroundMode;
+  backgroundUrl: string | null;
+  includeQuestions: boolean;
+}
+
+export const DEFAULT_FLYER_CONFIG: FlyerConfig = {
+  heading: "A Personal Note",
+  body: "Our practice exists because of patients like you. We'd love your quick feedback — it only takes a few minutes, and as a thank-you we've included an appreciation credit toward any future treatment.",
+  signature: "With gratitude,\nDr. Shakally",
+  accentColor: "#0f766e",
+  backgroundMode: "solid",
+  backgroundUrl: null,
+  includeQuestions: false,
+};
+
 export interface SurveyCampaign {
   id: string;
   practice_id: string;

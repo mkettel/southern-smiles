@@ -19,7 +19,9 @@ import { Badge } from "@/components/ui/badge";
 import { CampaignActions } from "@/components/surveys/campaign-actions";
 import { RecipientsTable } from "@/components/surveys/recipients-table";
 import { ReferralChart } from "@/components/surveys/referral-chart";
-import type { Profile } from "@/lib/types";
+import { FlyerEditor } from "@/components/surveys/flyer-editor";
+import { isImageGenConfigured } from "@/lib/ai/image";
+import { DEFAULT_FLYER_CONFIG, type FlyerConfig, type Profile } from "@/lib/types";
 import { ArrowLeft, Quote } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -49,6 +51,13 @@ export default async function CampaignDetailPage({
   ]);
 
   const unsentCount = recipients.filter((r) => !r.sent_at).length;
+
+  const flyerConfig: FlyerConfig = {
+    ...DEFAULT_FLYER_CONFIG,
+    ...(((campaign as unknown as { flyer_config?: Partial<FlyerConfig> })
+      .flyer_config) ?? {}),
+  };
+  const aiEnabled = isImageGenConfigured();
 
   const kpis = [
     { label: "Enrolled", value: stats?.recipientCount ?? 0 },
@@ -137,6 +146,20 @@ export default async function CampaignDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      {/* Flyer designer */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Flyer</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <FlyerEditor
+            campaignId={campaignId}
+            initialConfig={flyerConfig}
+            aiEnabled={aiEnabled}
+          />
+        </CardContent>
+      </Card>
 
       {/* Recipients + credit ledger */}
       <Card>

@@ -20,6 +20,12 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { FlyerPageView } from "@/components/flyer/flyer-page-view";
 import { FlyerInspector } from "@/components/surveys/flyer-inspector";
 import { FlyerSimpleForm } from "@/components/surveys/flyer-simple-form";
@@ -100,6 +106,71 @@ function isTyping(target: EventTarget | null): boolean {
   );
 }
 
+/** Toolbar button with a hover tooltip (and optional keyboard shortcut). */
+function TbButton({
+  tip,
+  shortcut,
+  children,
+  ...props
+}: { tip: string; shortcut?: string } & React.ComponentProps<typeof Button>) {
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<Button size="sm" {...props} />}>
+        {children}
+      </TooltipTrigger>
+      <TooltipContent>
+        {tip}
+        {shortcut && (
+          <kbd className="rounded bg-background/20 px-1 font-sans text-[10px]">
+            {shortcut}
+          </kbd>
+        )}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+const DESIGN_MESSAGES = [
+  "Reading your brief…",
+  "Choosing a palette…",
+  "Writing your note…",
+  "Laying out the page…",
+  "Generating artwork…",
+  "Final touches…",
+];
+
+const IMAGE_MESSAGES = [
+  "Sketching ideas…",
+  "Mixing colors…",
+  "Painting details…",
+  "Almost there…",
+];
+
+/** Full-page overlay while AI works (whole-flyer design or background art). */
+function AiWorkingOverlay({
+  messages = DESIGN_MESSAGES,
+  hint = "Designing your flyer — about 30 seconds",
+}: {
+  messages?: string[];
+  hint?: string;
+}) {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setI((x) => x + 1), 4000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-background/70 backdrop-blur-sm">
+      <span className="relative flex h-12 w-12 items-center justify-center">
+        <span className="absolute inset-0 animate-spin rounded-full border-[3px] border-teal-500/60 border-t-transparent" />
+        <Sparkles className="h-5 w-5 animate-pulse text-teal-600" />
+      </span>
+      <p className="text-sm font-medium">{messages[i % messages.length]}</p>
+      <p className="text-xs text-muted-foreground">{hint}</p>
+    </div>
+  );
+}
+
 export function FlyerDesigner({
   campaignId,
   initialDocument,
@@ -139,6 +210,17 @@ export function FlyerDesigner({
     initialDocument.savedAt ?? null
   );
   const savedKeyRef = useRef(docKey(initialDocument));
+  // Targets ("background" or block ids) with AI image generation in flight,
+  // so the canvas shows a loading state in place.
+  const [generating, setGenerating] = useState<Set<string>>(new Set());
+  const onImageBusy = useCallback((target: string, g: boolean) => {
+    setGenerating((prev) => {
+      const next = new Set(prev);
+      if (g) next.add(target);
+      else next.delete(target);
+      return next;
+    });
+  }, []);
   // Format times only after mount — the server may be in a different
   // timezone, which would cause a hydration mismatch.
   const [mounted, setMounted] = useState(false);
@@ -645,6 +727,30 @@ export function FlyerDesigner({
         <div style={{ width: "100%", height: "100%", pointerEvents: "none" }}>
           {content}
         </div>
+        {generating.has(block.id) && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "rgba(255,255,255,0.7)",
+              borderRadius: 4 / scale,
+            }}
+          >
+            <span
+              className="animate-spin"
+              style={{
+                width: 26 / scale,
+                height: 26 / scale,
+                border: `${3 / scale}px solid rgba(20,184,166,0.6)`,
+                borderTopColor: "transparent",
+                borderRadius: "50%",
+              }}
+            />
+          </div>
+        )}
         {isSelected &&
           HANDLES.map((h) => {
             const pos: React.CSSProperties = {};
@@ -681,6 +787,7 @@ export function FlyerDesigner({
   const pagePx = { w: PAGE_W * PX_PER_PT, h: PAGE_H * PX_PER_PT };
 
   return (
+    <TooltipProvider>
     <div className="space-y-3">
       {/* Google fonts for the editor canvas (print loads its own copy). */}
       <link
@@ -722,45 +829,44 @@ export function FlyerDesigner({
       {/* Canvas toolbar */}
       {mode === "canvas" && (
       <div className="flex flex-wrap items-center gap-1.5">
-        <Button variant="outline" size="sm" onClick={addText}>
+        <TbButton tip="Add a text box" variant="outline" onClick={addText}>
           <Type className="mr-1 h-4 w-4" /> Text
-        </Button>
-        <Button variant="outline" size="sm" onClick={addImage}>
+        </TbButton>
+        <TbButton tip="Add an image — upload or AI" variant="outline" onClick={addImage}>
           <ImageIcon className="mr-1 h-4 w-4" /> Image
-        </Button>
-        <Button variant="outline" size="sm" onClick={addShape}>
+        </TbButton>
+        <TbButton tip="Add a decorative shape" variant="outline" onClick={addShape}>
           <Shapes className="mr-1 h-4 w-4" /> Shape
-        </Button>
+        </TbButton>
         <div className="mx-1 h-5 w-px bg-border" />
-        <Button variant="ghost" size="sm" onClick={undo} disabled={!canUndo} title="Undo (⌘Z)">
+        <TbButton tip="Undo" shortcut="⌘Z" variant="ghost" onClick={undo} disabled={!canUndo}>
           <Undo2 className="h-4 w-4" />
-        </Button>
-        <Button variant="ghost" size="sm" onClick={redo} disabled={!canRedo} title="Redo (⇧⌘Z)">
+        </TbButton>
+        <TbButton tip="Redo" shortcut="⇧⌘Z" variant="ghost" onClick={redo} disabled={!canRedo}>
           <Redo2 className="h-4 w-4" />
-        </Button>
-        <Button
+        </TbButton>
+        <TbButton
+          tip={showSafe ? "Hide printer safe area" : "Show printer safe area"}
           variant={showSafe ? "secondary" : "ghost"}
-          size="sm"
           onClick={() => setShowSafe((s) => !s)}
-          title="Toggle printer safe-zone guide"
         >
           <Frame className="h-4 w-4" />
-        </Button>
+        </TbButton>
         {selected && (
           <>
             <div className="mx-1 h-5 w-px bg-border" />
-            <Button variant="ghost" size="sm" onClick={duplicateSelected} title="Duplicate (⌘D)" disabled={selected.type === "qr"}>
+            <TbButton tip="Duplicate" shortcut="⌘D" variant="ghost" onClick={duplicateSelected} disabled={selected.type === "qr"}>
               <Copy className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => reorderSelected(1)} title="Bring to front">
+            </TbButton>
+            <TbButton tip="Bring to front" variant="ghost" onClick={() => reorderSelected(1)}>
               <BringToFront className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => reorderSelected(-1)} title="Send to back">
+            </TbButton>
+            <TbButton tip="Send to back" variant="ghost" onClick={() => reorderSelected(-1)}>
               <SendToBack className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={deleteSelected} title="Delete" disabled={selected.type === "qr"}>
+            </TbButton>
+            <TbButton tip="Delete" shortcut="⌫" variant="ghost" onClick={deleteSelected} disabled={selected.type === "qr"}>
               <Trash2 className="h-4 w-4" />
-            </Button>
+            </TbButton>
           </>
         )}
       </div>
@@ -816,9 +922,20 @@ export function FlyerDesigner({
             doc={doc}
             commit={commit}
             aiEnabled={aiEnabled}
+            onImageBusy={onImageBusy}
           />
           <div className="min-w-0">
-            <ScaledFlyerPreview doc={doc} data={sampleData} />
+            <ScaledFlyerPreview
+              doc={doc}
+              data={sampleData}
+              working={
+                busy === "ai"
+                  ? "design"
+                  : generating.has("background")
+                    ? "background"
+                    : null
+              }
+            />
             <p className="mt-2 text-center text-xs text-muted-foreground">
               Live preview with sample data — real flyers use each
               patient&apos;s name and unique QR code.
@@ -896,6 +1013,13 @@ export function FlyerDesigner({
                 )}
               </div>
             </div>
+            {generating.has("background") && (
+              <div className="absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full border bg-background/90 px-3 py-1.5 text-xs font-medium shadow-sm backdrop-blur-sm">
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-teal-500/60 border-t-transparent" />
+                Generating background…
+              </div>
+            )}
+            {busy === "ai" && <AiWorkingOverlay />}
           </div>
           <p className="mt-2 text-center text-xs text-muted-foreground">
             Previewing with sample data — real flyers use each patient&apos;s name
@@ -913,6 +1037,7 @@ export function FlyerDesigner({
           patchBackground={(bg, key) =>
             commit((d) => ({ ...d, page: { ...d.page, background: bg } }), key)
           }
+          onImageBusy={onImageBusy}
         />
       </div>
       )}
@@ -954,6 +1079,7 @@ export function FlyerDesigner({
         />
       )}
     </div>
+    </TooltipProvider>
   );
 }
 
@@ -961,9 +1087,11 @@ export function FlyerDesigner({
 function ScaledFlyerPreview({
   doc,
   data,
+  working = null,
 }: {
   doc: FlyerDocument;
   data: FlyerRenderData;
+  working?: "design" | "background" | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.5);
@@ -982,7 +1110,7 @@ function ScaledFlyerPreview({
   return (
     <div ref={ref} className="min-w-0">
       <div
-        className="mx-auto overflow-hidden rounded-md border shadow-sm"
+        className="relative mx-auto overflow-hidden rounded-md border shadow-sm"
         style={{
           width: PAGE_W * PX_PER_PT * scale,
           height: PAGE_H * PX_PER_PT * scale,
@@ -998,6 +1126,13 @@ function ScaledFlyerPreview({
         >
           <FlyerPageView doc={doc} data={data} />
         </div>
+        {working === "design" && <AiWorkingOverlay />}
+        {working === "background" && (
+          <AiWorkingOverlay
+            messages={IMAGE_MESSAGES}
+            hint="Generating your background image"
+          />
+        )}
       </div>
     </div>
   );

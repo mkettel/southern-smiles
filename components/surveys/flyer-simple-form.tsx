@@ -92,11 +92,13 @@ export function FlyerSimpleForm({
   doc,
   commit,
   aiEnabled,
+  onImageBusy,
 }: {
   campaignId: string;
   doc: FlyerDocument;
   commit: Commit;
   aiEnabled: boolean;
+  onImageBusy?: (target: string, generating: boolean) => void;
 }) {
   const heading = findRoleBlock(doc, "heading");
   const body = findRoleBlock(doc, "body");
@@ -207,6 +209,7 @@ export function FlyerSimpleForm({
           patchBackground={(bg: FlyerBackground, key: string | null) =>
             commit((d) => ({ ...d, page: { ...d.page, background: bg } }), key)
           }
+          onImageBusy={onImageBusy}
         />
       </div>
 

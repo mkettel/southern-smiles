@@ -3,7 +3,7 @@
 // Property panel for the flyer designer. Shows page-background controls when
 // nothing is selected, otherwise the selected block's controls.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -138,18 +138,52 @@ function effectiveDpi(naturalWidth: number, wPt: number): number {
   return Math.round(naturalWidth / (wPt / 72));
 }
 
+/** Animated placeholder shown while AI paints an image. */
+export function ImageGenLoading({ compact = false }: { compact?: boolean }) {
+  const messages = [
+    "Sketching ideas…",
+    "Mixing colors…",
+    "Painting details…",
+    "Almost there…",
+  ];
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setI((x) => x + 1), 2600);
+    return () => clearInterval(t);
+  }, []);
+
+  return (
+    <div
+      className={`relative w-full overflow-hidden rounded-md border ${compact ? "h-16" : "h-24"}`}
+    >
+      <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-teal-100 via-rose-100 to-amber-100 dark:from-teal-900/40 dark:via-rose-900/30 dark:to-amber-900/30" />
+      <div className="relative flex h-full flex-col items-center justify-center gap-1">
+        <span className="relative flex h-6 w-6 items-center justify-center">
+          <span className="absolute inset-0 animate-spin rounded-full border-2 border-teal-500/60 border-t-transparent" />
+          <Sparkles className="h-3 w-3 animate-pulse text-teal-600" />
+        </span>
+        <span className="text-[11px] font-medium text-muted-foreground">
+          {messages[i % messages.length]}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function ImageSourceControls({
   campaignId,
   aiEnabled,
   aspect,
   kind,
   onImage,
+  onBusyChange,
 }: {
   campaignId: string;
   aiEnabled: boolean;
   aspect: "portrait" | "landscape" | "square";
   kind: "background" | "illustration";
   onImage: (r: { url: string; naturalWidth?: number; naturalHeight?: number }) => void;
+  onBusyChange?: (generating: boolean) => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
@@ -171,22 +205,27 @@ function ImageSourceControls({
       return;
     }
     setBusy("ai");
-    const res = await generateAiImage({
-      campaign_id: campaignId,
-      prompt,
-      kind,
-      aspect,
-    });
-    setBusy(null);
-    if (res.error || !res.url) {
-      toast.error(typeof res.error === "string" ? res.error : "Generation failed");
-      return;
+    onBusyChange?.(true);
+    try {
+      const res = await generateAiImage({
+        campaign_id: campaignId,
+        prompt,
+        kind,
+        aspect,
+      });
+      if (res.error || !res.url) {
+        toast.error(typeof res.error === "string" ? res.error : "Generation failed");
+        return;
+      }
+      onImage({
+        url: res.url,
+        naturalWidth: res.width ?? undefined,
+        naturalHeight: res.height ?? undefined,
+      });
+    } finally {
+      setBusy(null);
+      onBusyChange?.(false);
     }
-    onImage({
-      url: res.url,
-      naturalWidth: res.width ?? undefined,
-      naturalHeight: res.height ?? undefined,
-    });
   }
 
   return (
@@ -213,17 +252,21 @@ function ImageSourceControls({
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="e.g. watercolor tooth with flowers"
           />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="w-full"
-            onClick={handleAi}
-            disabled={busy !== null}
-          >
-            <Sparkles className="mr-1 h-3.5 w-3.5" />
-            {busy === "ai" ? "Generating…" : "Generate with AI"}
-          </Button>
+          {busy === "ai" ? (
+            <ImageGenLoading />
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={handleAi}
+              disabled={busy !== null}
+            >
+              <Sparkles className="mr-1 h-3.5 w-3.5" />
+              Generate with AI
+            </Button>
+          )}
         </div>
       )}
     </div>
@@ -237,6 +280,7 @@ export function FlyerInspector({
   aiEnabled,
   patchBlock,
   patchBackground,
+  onImageBusy,
 }: {
   campaignId: string;
   doc: FlyerDocument;
@@ -244,6 +288,9 @@ export function FlyerInspector({
   aiEnabled: boolean;
   patchBlock: PatchBlock;
   patchBackground: (bg: FlyerBackground, snapshotKey: string | null) => void;
+  /** Reports which target ("background" or a block id) is generating art,
+   *  so the canvas can show a loading overlay in place. */
+  onImageBusy?: (target: string, generating: boolean) => void;
 }) {
   return (
     <div className="h-fit space-y-3 rounded-lg border p-3">
@@ -253,6 +300,7 @@ export function FlyerInspector({
           block={selected}
           aiEnabled={aiEnabled}
           patchBlock={patchBlock}
+          onImageBusy={onImageBusy}
         />
       ) : (
         <>
@@ -261,6 +309,7 @@ export function FlyerInspector({
             background={doc.page.background}
             aiEnabled={aiEnabled}
             patchBackground={patchBackground}
+            onImageBusy={onImageBusy}
           />
           <p className="border-t pt-2 text-[11px] leading-snug text-muted-foreground">
             Select a block on the canvas to edit it. Drag to move, use the
@@ -281,11 +330,13 @@ export function BackgroundPanel({
   background,
   aiEnabled,
   patchBackground,
+  onImageBusy,
 }: {
   campaignId: string;
   background: FlyerBackground;
   aiEnabled: boolean;
   patchBackground: (bg: FlyerBackground, snapshotKey: string | null) => void;
+  onImageBusy?: (target: string, generating: boolean) => void;
 }) {
   const key = "bg";
   return (
@@ -369,6 +420,7 @@ export function BackgroundPanel({
             aspect="portrait"
             kind="background"
             onImage={(r) => patchBackground({ ...background, url: r.url }, key)}
+            onBusyChange={(g) => onImageBusy?.("background", g)}
           />
           <Row label="Wash color">
             <ColorInput
@@ -409,11 +461,13 @@ function BlockPanel({
   block,
   aiEnabled,
   patchBlock,
+  onImageBusy,
 }: {
   campaignId: string;
   block: FlyerBlock;
   aiEnabled: boolean;
   patchBlock: PatchBlock;
+  onImageBusy?: (target: string, generating: boolean) => void;
 }) {
   const key = `insp-${block.id}`;
   const set = (patch: Partial<FlyerBlock>) => patchBlock(block.id, patch, key);
@@ -554,6 +608,7 @@ function BlockPanel({
                 naturalHeight: r.naturalHeight,
               })
             }
+            onBusyChange={(g) => onImageBusy?.(block.id, g)}
           />
           {dpi !== null && dpi < 150 && (
             <p className="rounded bg-amber-50 px-2 py-1 text-[11px] leading-snug text-amber-700">

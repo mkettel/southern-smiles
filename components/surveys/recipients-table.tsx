@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { toCsv } from "@/lib/survey/csv";
 import { markCreditRedeemed } from "@/actions/surveys";
 import type { SurveyRecipient, CreditStatus } from "@/lib/types";
-import { Download, Printer, Check } from "lucide-react";
+import { Download, Printer, Check, FileText } from "lucide-react";
 
 const CREDIT_BADGE: Record<CreditStatus, { label: string; className: string }> = {
   none: { label: "Not sent", className: "bg-muted text-muted-foreground" },
@@ -134,16 +134,26 @@ export function RecipientsTable({
                       <Badge className={badge.className}>{badge.label}</Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      {r.credit_status === "promised" && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={redeeming === r.id}
-                          onClick={() => redeem(r.id)}
+                      <div className="flex items-center justify-end gap-2">
+                        <a
+                          href={`/api/flyer/${campaignId}?recipientId=${r.id}`}
+                          className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium hover:bg-muted transition-colors"
+                          title={`Download ${r.patient?.full_name ?? "this patient"}'s flyer`}
                         >
-                          {redeeming === r.id ? "…" : "Mark redeemed"}
-                        </Button>
-                      )}
+                          <FileText className="h-3.5 w-3.5" />
+                          Flyer
+                        </a>
+                        {r.credit_status === "promised" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={redeeming === r.id}
+                            onClick={() => redeem(r.id)}
+                          >
+                            {redeeming === r.id ? "…" : "Mark redeemed"}
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 );

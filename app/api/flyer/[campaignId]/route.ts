@@ -33,7 +33,8 @@ async function renderFlyerPdf(
   campaignId: string,
   config: FlyerConfig,
   origin: string,
-  preview: boolean
+  preview: boolean,
+  recipientId?: string | null
 ): Promise<Buffer | null> {
   const { data: campaign } = await supabase
     .from("survey_campaigns")
@@ -47,7 +48,13 @@ async function renderFlyerPdf(
     getPracticeSettings(),
   ]);
 
-  const source = preview ? recipients.slice(0, 1) : recipients;
+  let source = recipients;
+  if (recipientId) {
+    source = recipients.filter((r) => r.id === recipientId);
+    if (source.length === 0) return null; // unknown recipient
+  } else if (preview) {
+    source = recipients.slice(0, 1);
+  }
   let pages: FlyerPageData[];
   if (source.length === 0) {
     const url = `${origin}/survey/SAMPLE`;
@@ -135,6 +142,7 @@ export async function GET(
   const { campaignId } = await params;
   const { searchParams } = new URL(request.url);
   const preview = searchParams.get("preview") === "1";
+  const recipientId = searchParams.get("recipientId");
   const origin = new URL(request.url).origin;
 
   const { data: campaign } = await supabase
@@ -148,7 +156,14 @@ export async function GET(
     ...DEFAULT_FLYER_CONFIG,
     ...((campaign.flyer_config as Partial<FlyerConfig>) ?? {}),
   };
-  const buffer = await renderFlyerPdf(supabase, campaignId, config, origin, preview);
+  const buffer = await renderFlyerPdf(
+    supabase,
+    campaignId,
+    config,
+    origin,
+    preview,
+    recipientId
+  );
   if (!buffer) return new Response("Campaign not found", { status: 404 });
   return pdfResponse(buffer, campaignId, preview);
 }
@@ -182,7 +197,7 @@ export async function POST(
     ...parsed.data,
     backgroundUrl: parsed.data.backgroundUrl ?? null,
   };
-  const buffer = await renderFlyerPdf(supabase, campaignId, config, origin, preview);
+  const buffer = await renderFlyerPdf(supabase, campaignId, config, origin, preview, null);
   if (!buffer) return new Response("Campaign not found", { status: 404 });
   return pdfResponse(buffer, campaignId, preview);
 }

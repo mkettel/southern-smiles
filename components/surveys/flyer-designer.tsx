@@ -15,6 +15,7 @@ import {
   useState,
 } from "react";
 import QRCode from "qrcode";
+import { format, isToday } from "date-fns";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -78,6 +79,17 @@ interface DragState {
   moved: boolean;
 }
 
+/** Serialized form used to detect unsaved changes (savedAt itself excluded). */
+function docKey(doc: FlyerDocument): string {
+  return JSON.stringify({ ...doc, savedAt: undefined });
+}
+
+function formatSavedAt(iso: string): string | null {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return isToday(d) ? format(d, "h:mm a") : format(d, "MMM d 'at' h:mm a");
+}
+
 function isTyping(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLElement &&
@@ -123,6 +135,14 @@ export function FlyerDesigner({
   const [aiBrief, setAiBrief] = useState("");
   const [aiTone, setAiTone] = useState<"warm" | "playful" | "professional">("warm");
   const [sampleQr, setSampleQr] = useState(BLANK_QR);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(
+    initialDocument.savedAt ?? null
+  );
+  const savedKeyRef = useRef(docKey(initialDocument));
+  // Format times only after mount — the server may be in a different
+  // timezone, which would cause a hydration mismatch.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   // ---- history (refs + version bump so drag frames stay cheap) ----
   const historyRef = useRef<FlyerDocument[]>([]);
@@ -532,6 +552,8 @@ export function FlyerDesigner({
       toast.error(typeof res.error === "string" ? res.error : "Could not save");
       return;
     }
+    savedKeyRef.current = docKey(docRef.current);
+    setLastSavedAt(res.savedAt ?? new Date().toISOString());
     toast.success("Flyer saved");
   }
 
@@ -909,6 +931,18 @@ export function FlyerDesigner({
           <Download className="mr-1.5 h-4 w-4" />
           {busy === "gen" ? "Generating…" : "Generate flyers (PDF)"}
         </Button>
+        {mounted && (
+          <span className="text-xs text-muted-foreground">
+            {lastSavedAt && formatSavedAt(lastSavedAt)
+              ? `Last saved ${formatSavedAt(lastSavedAt)}`
+              : "Not saved yet"}
+            {docKey(doc) !== savedKeyRef.current && (
+              <span className="ml-1.5 font-medium text-amber-600">
+                · unsaved changes
+              </span>
+            )}
+          </span>
+        )}
       </div>
 
       {/* Exact print output (headless Chrome render of the current design) */}

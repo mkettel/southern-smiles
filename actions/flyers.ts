@@ -46,14 +46,15 @@ export async function saveFlyerDocument(campaignId: string, doc: FlyerDocument) 
   if (!parsed.success) return { error: "Invalid flyer document" };
 
   const safe = ensureDocumentSafety(parsed.data as FlyerDocument);
+  safe.savedAt = new Date().toISOString();
   const { error } = await supabase
     .from("survey_campaigns")
-    .update({ flyer_config: safe, updated_at: new Date().toISOString() })
+    .update({ flyer_config: safe, updated_at: safe.savedAt })
     .eq("id", campaignId);
   if (error) return { error: error.message };
 
   revalidatePath(`/admin/surveys/${campaignId}`);
-  return { success: true };
+  return { success: true, savedAt: safe.savedAt };
 }
 
 /** Upload a flyer image (background or block); returns its public URL. */

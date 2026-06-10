@@ -232,6 +232,8 @@ export interface FlyerDocument {
   version: 2;
   page: { background: FlyerBackground };
   blocks: FlyerBlock[];
+  /** ISO timestamp stamped server-side on each save. */
+  savedAt?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -596,7 +598,7 @@ export function ensureDocumentSafety(doc: FlyerDocument): FlyerDocument {
     blocks = blocks.filter((b) => b.type !== "qr" || b.id === keep);
   }
 
-  return { version: 2, page: doc.page, blocks };
+  return { ...doc, version: 2, blocks };
 }
 
 function clamp(n: number, lo: number, hi: number): number {

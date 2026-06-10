@@ -295,6 +295,7 @@ export const flyerDocumentSchema = z.object({
   version: z.literal(2),
   page: z.object({ background: flyerBackgroundSchema }),
   blocks: z.array(flyerBlockSchema).min(1).max(40),
+  savedAt: z.string().max(40).optional(),
 });
 
 export const generateAiFlyerSchema = z.object({

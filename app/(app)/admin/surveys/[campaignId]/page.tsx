@@ -22,10 +22,11 @@ import { EnrollmentManager } from "@/components/surveys/enrollment-manager";
 import { AddTestRecipientDialog } from "@/components/surveys/add-test-recipient-dialog";
 import { RecipientsTable } from "@/components/surveys/recipients-table";
 import { ReferralChart } from "@/components/surveys/referral-chart";
+import { ResponseFeed } from "@/components/surveys/response-feed";
 import { FlyerEditor } from "@/components/surveys/flyer-editor";
 import { isImageGenConfigured } from "@/lib/ai/image";
 import { DEFAULT_FLYER_CONFIG, type FlyerConfig, type Profile } from "@/lib/types";
-import { ArrowLeft, Quote } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -157,10 +158,12 @@ export default async function CampaignDetailPage({
               quotes.slice(0, 8).map((q, i) => (
                 <blockquote
                   key={i}
-                  className="rounded-lg border-l-2 border-primary/40 bg-muted/40 py-2 pl-3 pr-2 text-sm"
+                  className="border-l-2 border-primary/40 pl-3 text-sm"
                 >
-                  <Quote className="mb-1 h-3.5 w-3.5 text-muted-foreground" />
-                  <p className="italic">“{q.text}”</p>
+                  <p className="text-[11px] font-medium text-muted-foreground">
+                    {q.questionLabel}
+                  </p>
+                  <p className="mt-0.5 italic">“{q.text}”</p>
                   <footer className="mt-1 text-xs text-muted-foreground">
                     — {q.patientName}
                   </footer>
@@ -195,32 +198,13 @@ export default async function CampaignDetailPage({
         </CardContent>
       </Card>
 
-      {/* Response feed */}
+      {/* Response feed — click a response to see the full Q&A */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Recent responses</CardTitle>
+          <CardTitle className="text-base">Responses</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
-          {feed.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              No responses yet.
-            </p>
-          ) : (
-            feed.map((r) => (
-              <div
-                key={r.id}
-                className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm"
-              >
-                <span className="font-medium">
-                  {r.patient?.full_name ?? "A patient"}
-                </span>
-                <span className="text-muted-foreground">
-                  {r.referral_source ? `via ${r.referral_source} · ` : ""}
-                  {new Date(r.submitted_at).toLocaleDateString()}
-                </span>
-              </div>
-            ))
-          )}
+        <CardContent>
+          <ResponseFeed responses={feed} questions={campaign.questions} />
         </CardContent>
       </Card>
     </div>

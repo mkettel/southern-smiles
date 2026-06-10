@@ -149,26 +149,28 @@ export default async function CampaignDetailPage({
           <CardHeader>
             <CardTitle className="text-base">In patients’ words</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent>
             {quotes.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
                 No written responses yet.
               </p>
             ) : (
-              quotes.slice(0, 8).map((q, i) => (
-                <blockquote
-                  key={i}
-                  className="border-l-2 border-primary/40 pl-3 text-sm"
-                >
-                  <p className="text-[11px] font-medium text-muted-foreground">
-                    {q.questionLabel}
-                  </p>
-                  <p className="mt-0.5 italic">“{q.text}”</p>
-                  <footer className="mt-1 text-xs text-muted-foreground">
-                    — {q.patientName}
-                  </footer>
-                </blockquote>
-              ))
+              <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
+                {quotes.map((q, i) => (
+                  <blockquote
+                    key={i}
+                    className="border-l-2 border-primary/40 pl-3 text-sm"
+                  >
+                    <p className="text-[11px] font-medium text-muted-foreground">
+                      {q.questionLabel}
+                    </p>
+                    <p className="mt-0.5 italic">“{q.text}”</p>
+                    <footer className="mt-1 text-xs text-muted-foreground">
+                      — {q.patientName}
+                    </footer>
+                  </blockquote>
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>

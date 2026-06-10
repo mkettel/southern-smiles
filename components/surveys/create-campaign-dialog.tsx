@@ -19,32 +19,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createCampaign } from "@/actions/surveys";
-import type { SurveyQuestion, SurveyQuestionType } from "@/lib/types";
-import { Plus, Trash2 } from "lucide-react";
-
-interface DraftQuestion extends SurveyQuestion {
-  optionsText?: string;
-}
-
-const TYPE_LABELS: Record<SurveyQuestionType, string> = {
-  referral_source: "How did you hear about us (choices)",
-  single_choice: "Single choice",
-  multi_choice: "Multiple choice",
-  rating: "Rating (1–5)",
-  text: "Free text",
-};
-
-const NEEDS_OPTIONS: SurveyQuestionType[] = [
-  "single_choice",
-  "multi_choice",
-  "referral_source",
-];
-
-let idCounter = 0;
-function newId() {
-  idCounter += 1;
-  return `q${idCounter}_${Date.now().toString(36)}`;
-}
+import {
+  QuestionBuilder,
+  emptyQuestion,
+  questionsFromDraft,
+  type DraftQuestion,
+} from "@/components/surveys/question-builder";
+import { Plus } from "lucide-react";
 
 export function CreateCampaignDialog() {
   const router = useRouter();
@@ -53,55 +34,19 @@ export function CreateCampaignDialog() {
   const [title, setTitle] = useState("");
   const [creditDollars, setCreditDollars] = useState("50");
   const [expiresDays, setExpiresDays] = useState("180");
-  const [questions, setQuestions] = useState<DraftQuestion[]>([
-    { id: newId(), type: "text", label: "", required: false },
-  ]);
-
-  function addQuestion() {
-    setQuestions((q) => [
-      ...q,
-      { id: newId(), type: "text", label: "", required: false },
-    ]);
-  }
-
-  function updateQuestion(id: string, patch: Partial<DraftQuestion>) {
-    setQuestions((qs) => qs.map((q) => (q.id === id ? { ...q, ...patch } : q)));
-  }
-
-  function removeQuestion(id: string) {
-    setQuestions((qs) => qs.filter((q) => q.id !== id));
-  }
+  const [questions, setQuestions] = useState<DraftQuestion[]>([emptyQuestion()]);
 
   async function handleSubmit() {
     if (!title.trim()) {
       toast.error("Give the campaign a title");
       return;
     }
-    const cleaned: SurveyQuestion[] = [];
-    for (const q of questions) {
-      if (!q.label.trim()) {
-        toast.error("Every question needs a label");
-        return;
-      }
-      const base: SurveyQuestion = {
-        id: q.id,
-        type: q.type,
-        label: q.label.trim(),
-        required: q.required,
-      };
-      if (NEEDS_OPTIONS.includes(q.type)) {
-        const options = (q.optionsText ?? "")
-          .split("\n")
-          .map((o) => o.trim())
-          .filter(Boolean);
-        if (options.length < 2) {
-          toast.error(`"${q.label}" needs at least 2 options (one per line)`);
-          return;
-        }
-        base.options = options;
-      }
-      cleaned.push(base);
+    const built = questionsFromDraft(questions);
+    if ("error" in built) {
+      toast.error(built.error);
+      return;
     }
+    const cleaned = built.questions;
 
     const creditCents = Math.round((parseFloat(creditDollars) || 0) * 100);
     const expires = parseInt(expiresDays, 10);
@@ -184,88 +129,7 @@ export function CreateCampaignDialog() {
               </div>
             </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label>Questions</Label>
-                <button
-                  type="button"
-                  onClick={addQuestion}
-                  className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Add question
-                </button>
-              </div>
-
-              {questions.map((q, i) => (
-                <div key={q.id} className="space-y-2 rounded-lg border p-3">
-                  <div className="flex items-start gap-2">
-                    <span className="mt-2 text-sm text-muted-foreground">
-                      {i + 1}.
-                    </span>
-                    <div className="flex-1 space-y-2">
-                      <Input
-                        value={q.label}
-                        onChange={(e) =>
-                          updateQuestion(q.id, { label: e.target.value })
-                        }
-                        placeholder="Question text"
-                      />
-                      <div className="flex flex-wrap items-center gap-3">
-                        <select
-                          value={q.type}
-                          onChange={(e) =>
-                            updateQuestion(q.id, {
-                              type: e.target.value as SurveyQuestionType,
-                            })
-                          }
-                          className="rounded-md border bg-background px-2 py-1.5 text-sm"
-                        >
-                          {(
-                            Object.keys(TYPE_LABELS) as SurveyQuestionType[]
-                          ).map((t) => (
-                            <option key={t} value={t}>
-                              {TYPE_LABELS[t]}
-                            </option>
-                          ))}
-                        </select>
-                        <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                          <input
-                            type="checkbox"
-                            checked={q.required ?? false}
-                            onChange={(e) =>
-                              updateQuestion(q.id, { required: e.target.checked })
-                            }
-                          />
-                          Required
-                        </label>
-                        {questions.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeQuestion(q.id)}
-                            className="ml-auto text-muted-foreground hover:text-destructive"
-                            aria-label="Remove question"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
-                      {NEEDS_OPTIONS.includes(q.type) && (
-                        <textarea
-                          value={q.optionsText ?? ""}
-                          onChange={(e) =>
-                            updateQuestion(q.id, { optionsText: e.target.value })
-                          }
-                          rows={4}
-                          placeholder={"One option per line\nReferred by friend\nOnline reviews\nLocation"}
-                          className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
-                        />
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <QuestionBuilder questions={questions} onChange={setQuestions} />
           </div>
 
           <DialogFooter>

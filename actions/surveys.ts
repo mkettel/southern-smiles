@@ -12,6 +12,7 @@ import {
   redeemCreditSchema,
   importPatientDataSchema,
   patientFiltersSchema,
+  campaignQuestionsSchema,
 } from "@/lib/validators";
 import type {
   AggregatedPatient,
@@ -285,6 +286,25 @@ export async function createCampaign(input: {
 
   revalidatePath("/admin/surveys");
   return { success: true, id: data.id as string };
+}
+
+export async function updateCampaignQuestions(
+  campaignId: string,
+  questions: SurveyQuestion[]
+) {
+  const { supabase } = await requireAdmin();
+  const parsed = campaignQuestionsSchema.safeParse(questions);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid questions" };
+  }
+  const { error } = await supabase
+    .from("survey_campaigns")
+    .update({ questions: parsed.data, updated_at: new Date().toISOString() })
+    .eq("id", campaignId);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/admin/surveys/${campaignId}`);
+  return { success: true };
 }
 
 export async function setCampaignStatus(

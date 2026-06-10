@@ -23,8 +23,15 @@ import { AddTestRecipientDialog } from "@/components/surveys/add-test-recipient-
 import { RecipientsTable } from "@/components/surveys/recipients-table";
 import { ReferralChart } from "@/components/surveys/referral-chart";
 import { ResponseFeed } from "@/components/surveys/response-feed";
-import { FlyerEditor } from "@/components/surveys/flyer-editor";
+import { FlyerDesigner } from "@/components/surveys/flyer-designer";
+import { getPracticeSettings } from "@/actions/settings";
 import { isImageGenConfigured } from "@/lib/ai/image";
+import {
+  ensureDocumentSafety,
+  legacyToDocument,
+  type FlyerDocument,
+} from "@/lib/flyer/types";
+import { flyerConfigSchema, flyerDocumentSchema } from "@/lib/validators";
 import { DEFAULT_FLYER_CONFIG, type FlyerConfig, type Profile } from "@/lib/types";
 import { ArrowLeft } from "lucide-react";
 
@@ -46,7 +53,7 @@ export default async function CampaignDetailPage({
   const campaign = await getCampaign(campaignId);
   if (!campaign) notFound();
 
-  const [stats, recipients, referrals, feed, quotes, allPatients] =
+  const [stats, recipients, referrals, feed, quotes, allPatients, settings] =
     await Promise.all([
       getCampaignStats(campaignId),
       getCampaignRecipients(campaignId),
@@ -54,6 +61,7 @@ export default async function CampaignDetailPage({
       getResponseFeed(campaignId),
       getPullQuotes(campaignId),
       getPatientsFiltered({}),
+      getPracticeSettings(),
     ]);
 
   const unsentCount = recipients.filter((r) => !r.sent_at).length;
@@ -67,11 +75,28 @@ export default async function CampaignDetailPage({
       null
     ) ?? undefined;
 
-  const flyerConfig: FlyerConfig = {
-    ...DEFAULT_FLYER_CONFIG,
-    ...(((campaign as unknown as { flyer_config?: Partial<FlyerConfig> })
-      .flyer_config) ?? {}),
-  };
+  // Flyer config: v2 block documents load directly; older fixed-template
+  // configs are converted to an equivalent block layout on the fly.
+  const rawFlyerConfig = (campaign as unknown as { flyer_config?: unknown })
+    .flyer_config;
+  const v2 = flyerDocumentSchema.safeParse(rawFlyerConfig);
+  let flyerDocument: FlyerDocument;
+  if (v2.success) {
+    flyerDocument = ensureDocumentSafety(v2.data as FlyerDocument);
+  } else {
+    const legacy: FlyerConfig = {
+      ...DEFAULT_FLYER_CONFIG,
+      ...(flyerConfigSchema.safeParse(rawFlyerConfig ?? {}).data ?? {}),
+    } as FlyerConfig;
+    const logoUrl =
+      settings.logo_url && !settings.logo_url.toLowerCase().endsWith(".svg")
+        ? settings.logo_url
+        : null;
+    flyerDocument = ensureDocumentSafety(
+      legacyToDocument(legacy, { logoUrl, questions: campaign.questions })
+    );
+  }
+  const creditLabel = `$${Math.round((campaign.credit_amount_cents ?? 0) / 100)}`;
   const aiEnabled = isImageGenConfigured();
 
   const kpis = [
@@ -147,7 +172,9 @@ export default async function CampaignDetailPage({
         {/* Pull quotes */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">In patients’ words</CardTitle>
+            <CardTitle className="text-base">
+              In patients’ words{quotes.length ? ` (${quotes.length})` : ""}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {quotes.length === 0 ? (
@@ -182,9 +209,11 @@ export default async function CampaignDetailPage({
           <CardTitle className="text-base">Flyer</CardTitle>
         </CardHeader>
         <CardContent>
-          <FlyerEditor
+          <FlyerDesigner
             campaignId={campaignId}
-            initialConfig={flyerConfig}
+            initialDocument={flyerDocument}
+            practiceName={settings.name}
+            creditLabel={creditLabel}
             aiEnabled={aiEnabled}
           />
         </CardContent>
@@ -206,7 +235,11 @@ export default async function CampaignDetailPage({
           <CardTitle className="text-base">Responses</CardTitle>
         </CardHeader>
         <CardContent>
-          <ResponseFeed responses={feed} questions={campaign.questions} />
+          <ResponseFeed
+            responses={feed}
+            questions={campaign.questions}
+            campaignId={campaignId}
+          />
         </CardContent>
       </Card>
     </div>

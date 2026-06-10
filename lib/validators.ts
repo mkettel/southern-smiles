@@ -198,9 +198,116 @@ export const flyerConfigSchema = z.object({
   includeQuestions: z.boolean().default(false),
 });
 
-export const generateAiBackgroundSchema = z.object({
+export const campaignQuestionsSchema = z
+  .array(surveyQuestionSchema)
+  .min(1, "Add at least one question")
+  .max(30);
+
+// ============================================================
+// Flyer document (v2 block model — see lib/flyer/types.ts)
+// ============================================================
+
+const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, "Use a hex color like #0f766e");
+const hexOrTransparent = z.union([hexColor, z.literal("transparent")]);
+const flyerFontKey = z.enum(["inter", "poppins", "nunito", "playfair", "lora", "caveat"]);
+
+const flyerBlockBase = {
+  id: z.string().min(1).max(40),
+  x: z.number().finite(),
+  y: z.number().finite(),
+  w: z.number().finite().min(1),
+  h: z.number().finite().min(1),
+  rotation: z.number().finite().min(-360).max(360).default(0),
+  z: z.number().finite().min(0).max(500).default(1),
+};
+
+export const flyerBlockSchema = z.discriminatedUnion("type", [
+  z.object({
+    ...flyerBlockBase,
+    type: z.literal("text"),
+    text: z.string().max(3000),
+    role: z.enum(["heading", "body", "signature"]).optional(),
+    font: flyerFontKey.default("inter"),
+    fontSize: z.number().min(6).max(120),
+    bold: z.boolean().default(false),
+    color: hexColor,
+    align: z.enum(["left", "center", "right"]).default("left"),
+    lineHeight: z.number().min(0.8).max(3).default(1.4),
+    backgroundColor: hexOrTransparent.default("transparent"),
+    padding: z.number().min(0).max(72).default(0),
+    borderRadius: z.number().min(0).max(200).default(0),
+  }),
+  z.object({
+    ...flyerBlockBase,
+    type: z.literal("image"),
+    url: z.string().url().nullable(),
+    aiPrompt: z.string().max(500).optional(),
+    fit: z.enum(["cover", "contain"]).default("cover"),
+    borderRadius: z.number().min(0).max(400).default(0),
+    opacity: z.number().min(0.05).max(1).default(1),
+    naturalWidth: z.number().int().positive().optional(),
+    naturalHeight: z.number().int().positive().optional(),
+  }),
+  z.object({
+    ...flyerBlockBase,
+    type: z.literal("shape"),
+    shape: z.enum(["rect", "circle", "blob1", "blob2", "wave", "tooth", "sparkle", "heart"]),
+    color: hexColor,
+    opacity: z.number().min(0.05).max(1).default(1),
+    borderRadius: z.number().min(0).max(400).default(0),
+  }),
+  z.object({
+    ...flyerBlockBase,
+    type: z.literal("qr"),
+    frameColor: hexColor,
+    caption: z.string().max(80).default(""),
+  }),
+  z.object({
+    ...flyerBlockBase,
+    type: z.literal("credit"),
+    caption: z.string().max(120),
+    label: z.string().max(120),
+    backgroundColor: hexColor,
+    textColor: hexColor,
+    borderRadius: z.number().min(0).max(200).default(8),
+    font: flyerFontKey.default("inter"),
+  }),
+]);
+
+export const flyerBackgroundSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("solid"), color: hexColor }),
+  z.object({
+    type: z.literal("gradient"),
+    from: hexColor,
+    to: hexColor,
+    angle: z.number().min(0).max(360).default(160),
+  }),
+  z.object({
+    type: z.literal("image"),
+    url: z.string().url().nullable(),
+    aiPrompt: z.string().max(500).optional(),
+    overlayColor: hexColor.default("#ffffff"),
+    overlayOpacity: z.number().min(0).max(0.95).default(0),
+  }),
+]);
+
+export const flyerDocumentSchema = z.object({
+  version: z.literal(2),
+  page: z.object({ background: flyerBackgroundSchema }),
+  blocks: z.array(flyerBlockSchema).min(1).max(40),
+});
+
+export const generateAiFlyerSchema = z.object({
+  campaign_id: uuidLike,
+  brief: z.string().min(3, "Describe the flyer you want").max(1000),
+  tone: z.enum(["warm", "playful", "professional"]).default("warm"),
+});
+
+export const generateAiImageSchema = z.object({
   campaign_id: uuidLike,
   prompt: z.string().min(3, "Describe the look you want").max(500),
+  kind: z.enum(["background", "illustration"]).default("illustration"),
+  aspect: z.enum(["portrait", "landscape", "square"]).default("square"),
 });
 
 export const patientFiltersSchema = z.object({

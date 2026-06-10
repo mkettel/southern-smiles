@@ -6,6 +6,8 @@ const supabaseHostname = supabaseUrl
   : undefined;
 
 const nextConfig: NextConfig = {
+  // Headless-Chrome PDF rendering (flyers) — keep these out of the bundle.
+  serverExternalPackages: ["puppeteer-core", "@sparticuz/chromium"],
   experimental: {
     serverActions: {
       // Headroom over the 25 MB video cap enforced in uploadChangelogMedia

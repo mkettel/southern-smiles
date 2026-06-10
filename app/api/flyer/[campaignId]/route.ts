@@ -1,17 +1,30 @@
-import { renderToBuffer } from "@react-pdf/renderer";
-import React from "react";
+// Flyer PDF generation. Renders the block document (lib/flyer/types.ts) to
+// real HTML/CSS and prints it with headless Chrome — the same component the
+// editor canvas uses, so the PDF matches the on-screen design exactly.
+
 import QRCode from "qrcode";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { getCampaignRecipients } from "@/actions/surveys";
 import { getPracticeSettings } from "@/actions/settings";
-import { toDataUrl } from "@/lib/images";
-import { flyerConfigSchema } from "@/lib/validators";
+import { flyerConfigSchema, flyerDocumentSchema } from "@/lib/validators";
+import { buildFlyerHtml } from "@/lib/flyer/render-html";
+import { htmlToPdf } from "@/lib/flyer/pdf";
 import {
-  FlyerDocument,
-  type FlyerPageData,
-} from "@/components/pdf/flyer-document";
-import { DEFAULT_FLYER_CONFIG, type FlyerConfig, type SurveyQuestion } from "@/lib/types";
+  ensureDocumentSafety,
+  isFlyerDocument,
+  legacyToDocument,
+  type FlyerDocument,
+  type FlyerRenderData,
+} from "@/lib/flyer/types";
+import {
+  DEFAULT_FLYER_CONFIG,
+  type FlyerConfig,
+  type SurveyQuestion,
+} from "@/lib/types";
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 async function requireAdmin(supabase: SupabaseClient): Promise<Response | null> {
   const {
@@ -28,97 +41,96 @@ async function requireAdmin(supabase: SupabaseClient): Promise<Response | null> 
   return null;
 }
 
-async function renderFlyerPdf(
+interface CampaignRow {
+  title: string;
+  questions: SurveyQuestion[];
+  credit_amount_cents: number | null;
+  flyer_config: unknown;
+}
+
+async function loadCampaign(
   supabase: SupabaseClient,
-  campaignId: string,
-  config: FlyerConfig,
-  origin: string,
-  preview: boolean,
-  recipientId?: string | null
-): Promise<Buffer | null> {
-  const { data: campaign } = await supabase
+  campaignId: string
+): Promise<CampaignRow | null> {
+  const { data } = await supabase
     .from("survey_campaigns")
-    .select("title, questions, credit_amount_cents")
+    .select("title, questions, credit_amount_cents, flyer_config")
     .eq("id", campaignId)
     .single();
-  if (!campaign) return null;
+  return (data as CampaignRow | null) ?? null;
+}
 
-  const [recipients, settings] = await Promise.all([
-    getCampaignRecipients(campaignId),
-    getPracticeSettings(),
-  ]);
+/** Saved flyer_config → v2 document (converting legacy configs on the fly). */
+function toDocument(
+  raw: unknown,
+  campaign: CampaignRow,
+  logoUrl: string | null
+): FlyerDocument {
+  const v2 = flyerDocumentSchema.safeParse(raw);
+  if (v2.success) return ensureDocumentSafety(v2.data as FlyerDocument);
+
+  const legacy: FlyerConfig = {
+    ...DEFAULT_FLYER_CONFIG,
+    ...(flyerConfigSchema.safeParse(raw ?? {}).data ?? {}),
+  } as FlyerConfig;
+  return ensureDocumentSafety(
+    legacyToDocument(legacy, { logoUrl, questions: campaign.questions ?? [] })
+  );
+}
+
+async function buildRenderData(
+  campaign: CampaignRow,
+  campaignId: string,
+  origin: string,
+  practiceName: string,
+  preview: boolean,
+  recipientId: string | null
+): Promise<FlyerRenderData[] | null> {
+  const creditLabel = `$${Math.round((campaign.credit_amount_cents ?? 0) / 100)}`;
+  const recipients = await getCampaignRecipients(campaignId);
 
   let source = recipients;
   if (recipientId) {
     source = recipients.filter((r) => r.id === recipientId);
-    if (source.length === 0) return null; // unknown recipient
+    if (source.length === 0) return null;
   } else if (preview) {
     source = recipients.slice(0, 1);
   }
-  let pages: FlyerPageData[];
+
+  const makeQr = (url: string) =>
+    QRCode.toDataURL(url, { margin: 1, width: 600, errorCorrectionLevel: "M" });
+
   if (source.length === 0) {
     const url = `${origin}/survey/SAMPLE`;
-    pages = [
+    return [
       {
         firstName: "Jane",
         fullName: "Jane Sample",
-        qrDataUrl: await QRCode.toDataURL(url, {
-          margin: 1,
-          width: 600,
-          errorCorrectionLevel: "M",
-        }),
+        practiceName,
+        creditLabel,
         surveyUrl: url.replace(/^https?:\/\//, ""),
+        qrDataUrl: await makeQr(url),
       },
     ];
-  } else {
-    pages = await Promise.all(
-      source.map(async (r) => {
-        const url = `${origin}/survey/${r.code}`;
-        const first =
-          r.patient?.first_name?.trim() ||
-          r.patient?.full_name?.trim().split(/\s+/)[0] ||
-          "there";
-        return {
-          firstName: first,
-          fullName: r.patient?.full_name ?? "",
-          qrDataUrl: await QRCode.toDataURL(url, {
-            margin: 1,
-            width: 600,
-            errorCorrectionLevel: "M",
-          }),
-          surveyUrl: url.replace(/^https?:\/\//, ""),
-        };
-      })
-    );
   }
 
-  const logoUrl =
-    settings.logo_url && !settings.logo_url.toLowerCase().endsWith(".svg")
-      ? settings.logo_url
-      : null;
-  const [logoDataUrl, backgroundDataUrl] = await Promise.all([
-    toDataUrl(logoUrl),
-    config.backgroundMode === "image"
-      ? toDataUrl(config.backgroundUrl)
-      : Promise.resolve(null),
-  ]);
-
-  const creditLabel = `$${Math.round((campaign.credit_amount_cents ?? 0) / 100)}`;
-  const questions = config.includeQuestions
-    ? ((campaign.questions as SurveyQuestion[]) ?? []).map((q) => ({ label: q.label }))
-    : [];
-
-  const element = React.createElement(FlyerDocument, {
-    practiceName: settings.name,
-    logoDataUrl,
-    backgroundDataUrl,
-    config,
-    creditLabel,
-    questions,
-    pages,
-  });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return renderToBuffer(element as any);
+  return Promise.all(
+    source.map(async (r) => {
+      const url = `${origin}/survey/${r.code}`;
+      const first =
+        r.patient?.first_name?.trim() ||
+        r.patient?.full_name?.trim().split(/\s+/)[0] ||
+        "there";
+      return {
+        firstName: first,
+        fullName: r.patient?.full_name ?? "",
+        practiceName,
+        creditLabel,
+        surveyUrl: url.replace(/^https?:\/\//, ""),
+        qrDataUrl: await makeQr(url),
+      };
+    })
+  );
 }
 
 function pdfResponse(buffer: Buffer, campaignId: string, preview: boolean) {
@@ -130,58 +142,63 @@ function pdfResponse(buffer: Buffer, campaignId: string, preview: boolean) {
   });
 }
 
+async function render(
+  request: Request,
+  campaignId: string,
+  documentOverride: FlyerDocument | null
+): Promise<Response> {
+  const supabase = await createClient();
+  const denied = await requireAdmin(supabase);
+  if (denied) return denied;
+
+  const { searchParams, origin } = new URL(request.url);
+  const preview = searchParams.get("preview") === "1";
+  const recipientId = searchParams.get("recipientId");
+
+  const campaign = await loadCampaign(supabase, campaignId);
+  if (!campaign) return new Response("Campaign not found", { status: 404 });
+
+  const settings = await getPracticeSettings();
+  const logoUrl =
+    settings.logo_url && !settings.logo_url.toLowerCase().endsWith(".svg")
+      ? settings.logo_url
+      : null;
+
+  const doc = documentOverride
+    ? ensureDocumentSafety(documentOverride)
+    : toDocument(campaign.flyer_config, campaign, logoUrl);
+
+  const data = await buildRenderData(
+    campaign,
+    campaignId,
+    origin,
+    settings.name,
+    preview,
+    recipientId
+  );
+  if (!data) return new Response("Recipient not found", { status: 404 });
+
+  const html = await buildFlyerHtml(doc, data);
+  const pdf = await htmlToPdf(html);
+  return pdfResponse(pdf, campaignId, preview);
+}
+
 /** GET → render from the SAVED config in the DB (used for direct links). */
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ campaignId: string }> }
 ) {
-  const supabase = await createClient();
-  const denied = await requireAdmin(supabase);
-  if (denied) return denied;
-
   const { campaignId } = await params;
-  const { searchParams } = new URL(request.url);
-  const preview = searchParams.get("preview") === "1";
-  const recipientId = searchParams.get("recipientId");
-  const origin = new URL(request.url).origin;
-
-  const { data: campaign } = await supabase
-    .from("survey_campaigns")
-    .select("flyer_config")
-    .eq("id", campaignId)
-    .single();
-  if (!campaign) return new Response("Campaign not found", { status: 404 });
-
-  const config: FlyerConfig = {
-    ...DEFAULT_FLYER_CONFIG,
-    ...((campaign.flyer_config as Partial<FlyerConfig>) ?? {}),
-  };
-  const buffer = await renderFlyerPdf(
-    supabase,
-    campaignId,
-    config,
-    origin,
-    preview,
-    recipientId
-  );
-  if (!buffer) return new Response("Campaign not found", { status: 404 });
-  return pdfResponse(buffer, campaignId, preview);
+  return render(request, campaignId, null);
 }
 
-/** POST → render from the config in the request body (live, unsaved preview
- *  and "generate" — so the PDF reflects the current editor state). */
+/** POST → render from the document in the request body (live, unsaved
+ *  preview and "generate" — the PDF reflects the current editor state). */
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ campaignId: string }> }
 ) {
-  const supabase = await createClient();
-  const denied = await requireAdmin(supabase);
-  if (denied) return denied;
-
   const { campaignId } = await params;
-  const { searchParams } = new URL(request.url);
-  const preview = searchParams.get("preview") === "1";
-  const origin = new URL(request.url).origin;
 
   let body: unknown;
   try {
@@ -189,15 +206,23 @@ export async function POST(
   } catch {
     return new Response("Invalid body", { status: 400 });
   }
-  const parsed = flyerConfigSchema.safeParse(body);
-  if (!parsed.success) return new Response("Invalid config", { status: 400 });
 
-  const config: FlyerConfig = {
-    ...DEFAULT_FLYER_CONFIG,
-    ...parsed.data,
-    backgroundUrl: parsed.data.backgroundUrl ?? null,
-  };
-  const buffer = await renderFlyerPdf(supabase, campaignId, config, origin, preview, null);
-  if (!buffer) return new Response("Campaign not found", { status: 404 });
-  return pdfResponse(buffer, campaignId, preview);
+  let doc: FlyerDocument;
+  if (isFlyerDocument(body)) {
+    const parsed = flyerDocumentSchema.safeParse(body);
+    if (!parsed.success) return new Response("Invalid document", { status: 400 });
+    doc = parsed.data as FlyerDocument;
+  } else {
+    // Legacy editor payload — convert on the fly.
+    const parsed = flyerConfigSchema.safeParse(body);
+    if (!parsed.success) return new Response("Invalid config", { status: 400 });
+    const legacy = {
+      ...DEFAULT_FLYER_CONFIG,
+      ...parsed.data,
+      backgroundUrl: parsed.data.backgroundUrl ?? null,
+    } as FlyerConfig;
+    doc = legacyToDocument(legacy);
+  }
+
+  return render(request, campaignId, doc);
 }

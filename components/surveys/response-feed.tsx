@@ -10,6 +10,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { EditQuestionsDialog } from "@/components/surveys/edit-questions-dialog";
 import type { SurveyResponse, SurveyQuestion } from "@/lib/types";
 import { ChevronRight } from "lucide-react";
 
@@ -23,27 +24,36 @@ function formatAnswer(v: unknown): string {
 export function ResponseFeed({
   responses,
   questions,
+  campaignId,
 }: {
   responses: SurveyResponse[];
   questions: SurveyQuestion[];
+  campaignId: string;
 }) {
   const [active, setActive] = useState<SurveyResponse | null>(null);
 
   return (
     <div className="space-y-3">
       {/* Questions reference — always visible, so you can see what was asked */}
-      {questions.length > 0 && (
-        <div className="rounded-lg border bg-muted/30 p-3">
-          <p className="mb-1 text-xs font-medium text-muted-foreground">
+      <div className="rounded-lg border bg-muted/30 p-3">
+        <div className="mb-1 flex items-center justify-between">
+          <p className="text-xs font-medium text-muted-foreground">
             Survey questions
           </p>
+          <EditQuestionsDialog campaignId={campaignId} questions={questions} />
+        </div>
+        {questions.length > 0 ? (
           <ol className="list-decimal space-y-0.5 pl-4 text-sm">
             {questions.map((q) => (
               <li key={q.id}>{q.label}</li>
             ))}
           </ol>
-        </div>
-      )}
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No questions yet — click Edit to add some.
+          </p>
+        )}
+      </div>
 
       {/* Responses */}
       {responses.length === 0 ? (

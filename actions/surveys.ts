@@ -413,6 +413,56 @@ export async function unenrollAll(campaignId: string) {
 }
 
 /**
+ * Add a one-off custom person to a campaign for testing (not from the CSV /
+ * patient import). Creates a patient with a null name_key so it stays separate
+ * from import dedupe, enrolls them with a real survey code, and returns the
+ * survey link so you can run the flow end-to-end.
+ */
+export async function addManualRecipient(
+  campaignId: string,
+  input: { fullName: string; email?: string | null }
+) {
+  const { supabase, practiceId } = await requireAdmin();
+  const fullName = (input.fullName ?? "").trim();
+  if (!fullName) return { error: "Enter a name" };
+
+  const { data: patient, error: pErr } = await supabase
+    .from("patients")
+    .insert({
+      practice_id: practiceId,
+      full_name: fullName,
+      first_name: fullName.split(/\s+/)[0],
+      email: input.email?.trim() || null,
+      attributes: { source: "manual" },
+    })
+    .select("id")
+    .single();
+  if (pErr || !patient) return { error: pErr?.message ?? "Could not add person" };
+
+  let code = "";
+  let inserted = false;
+  for (let i = 0; i < 5; i++) {
+    code = generateSurveyCode();
+    const { error } = await supabase.from("survey_recipients").insert({
+      practice_id: practiceId,
+      campaign_id: campaignId,
+      patient_id: patient.id,
+      code,
+    });
+    if (!error) {
+      inserted = true;
+      break;
+    }
+    if (error.code === "23505") continue; // code collision — regenerate
+    return { error: error.message };
+  }
+  if (!inserted) return { error: "Could not generate a unique code" };
+
+  revalidatePath(`/admin/surveys/${campaignId}`);
+  return { success: true, code, surveyPath: `/survey/${code}` };
+}
+
+/**
  * Unenroll a specific subset of patients from a campaign. Only removes
  * recipients that haven't been sent or responded.
  */

@@ -19,6 +19,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { CampaignActions } from "@/components/surveys/campaign-actions";
 import { EnrollmentManager } from "@/components/surveys/enrollment-manager";
+import { AddTestRecipientDialog } from "@/components/surveys/add-test-recipient-dialog";
 import { RecipientsTable } from "@/components/surveys/recipients-table";
 import { ReferralChart } from "@/components/surveys/referral-chart";
 import { FlyerEditor } from "@/components/surveys/flyer-editor";
@@ -110,6 +111,7 @@ export default async function CampaignDetailPage({
           sentPatientIds={sentPatientIds}
           asOf={patientsAsOf}
         />
+        <AddTestRecipientDialog campaignId={campaignId} />
         <CampaignActions
           campaignId={campaignId}
           status={campaign.status}

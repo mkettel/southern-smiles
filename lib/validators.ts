@@ -300,7 +300,7 @@ export const flyerDocumentSchema = z.object({
 
 export const generateAiFlyerSchema = z.object({
   campaign_id: uuidLike,
-  brief: z.string().min(3, "Describe the flyer you want").max(1000),
+  brief: z.string().min(3, "Describe the flyer you want").max(5000),
   tone: z.enum(["warm", "playful", "professional"]).default("warm"),
 });
 

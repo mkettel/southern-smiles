@@ -881,10 +881,16 @@ export function FlyerDesigner({
               <Textarea
                 id="ai-brief"
                 rows={2}
+                maxLength={5000}
                 value={aiBrief}
                 onChange={(e) => setAiBrief(e.target.value)}
                 placeholder="e.g. A cheerful spring check-up reminder for patients we haven't seen in a year — mention the $50 credit"
               />
+              {aiBrief.length > 4500 && (
+                <p className="text-right text-xs text-muted-foreground">
+                  {aiBrief.length.toLocaleString()} / 5,000
+                </p>
+              )}
               <div className="flex items-center gap-2">
                 <select
                   className="h-8 rounded-md border bg-background px-2 text-sm"

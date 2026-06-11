@@ -125,7 +125,7 @@ export function EnrollmentManager({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-transparent bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/80 transition-colors"
+        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-transparent bg-primary px-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/80 transition-colors"
       >
         <Users className="h-4 w-4" />
         Manage enrollment

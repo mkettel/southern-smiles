@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CampaignActions } from "@/components/surveys/campaign-actions";
+import { CampaignTitle } from "@/components/surveys/campaign-title";
 import { EnrollmentManager } from "@/components/surveys/enrollment-manager";
 import { AddTestRecipientDialog } from "@/components/surveys/add-test-recipient-dialog";
 import { RecipientsTable } from "@/components/surveys/recipients-table";
@@ -124,12 +125,18 @@ export default async function CampaignDetailPage({
           All campaigns
         </Link>
         <div className="mt-2 flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-bold">{campaign.title}</h1>
+          <CampaignTitle campaignId={campaignId} title={campaign.title} />
           <Badge className="capitalize">{campaign.status}</Badge>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <CampaignActions
+        campaignId={campaignId}
+        campaignTitle={campaign.title}
+        status={campaign.status}
+        recipientCount={stats?.recipientCount ?? 0}
+        unsentCount={unsentCount}
+      >
         <EnrollmentManager
           campaignId={campaignId}
           patients={allPatients}
@@ -138,13 +145,7 @@ export default async function CampaignDetailPage({
           asOf={patientsAsOf}
         />
         <AddTestRecipientDialog campaignId={campaignId} />
-        <CampaignActions
-          campaignId={campaignId}
-          status={campaign.status}
-          recipientCount={stats?.recipientCount ?? 0}
-          unsentCount={unsentCount}
-        />
-      </div>
+      </CampaignActions>
 
       {/* KPI row */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">

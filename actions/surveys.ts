@@ -323,6 +323,37 @@ export async function setCampaignStatus(
   return { success: true };
 }
 
+export async function renameCampaign(id: string, title: string) {
+  const { supabase } = await requireAdmin();
+  const trimmed = title.trim();
+  if (!trimmed) return { error: "Title can't be empty" };
+  if (trimmed.length > 200) return { error: "Title must be under 200 characters" };
+
+  const { error } = await supabase
+    .from("survey_campaigns")
+    .update({ title: trimmed, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/surveys");
+  revalidatePath(`/admin/surveys/${id}`);
+  return { success: true, title: trimmed };
+}
+
+/** Permanently delete a campaign. Recipients, responses, and any promised
+ *  (unredeemed) credits cascade away with it — there is no undo. */
+export async function deleteCampaign(id: string) {
+  const { supabase } = await requireAdmin();
+  const { error } = await supabase
+    .from("survey_campaigns")
+    .delete()
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/surveys");
+  return { success: true };
+}
+
 // ============================================================
 // Recipients (unique codes) + batch send
 // ============================================================

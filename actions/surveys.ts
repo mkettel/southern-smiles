@@ -235,6 +235,28 @@ export async function getPatientsFiltered(
   }));
 }
 
+/** Permanently remove patients from the practice's list. Any campaign
+ *  enrollments, survey responses, and promised credits they have cascade
+ *  away with them — there is no undo. */
+export async function deletePatients(patientIds: string[]) {
+  const { supabase } = await requireAdmin();
+  const ids = [...new Set(patientIds)].filter(
+    (id) => typeof id === "string" && id.length > 0
+  );
+  if (ids.length === 0) return { error: "No patients selected" };
+  if (ids.length > 2000) return { error: "Too many patients at once" };
+
+  const { error, count } = await supabase
+    .from("patients")
+    .delete({ count: "exact" })
+    .in("id", ids);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/surveys/patients");
+  revalidatePath("/admin/surveys");
+  return { success: true, removed: count ?? ids.length };
+}
+
 // ============================================================
 // Campaigns
 // ============================================================

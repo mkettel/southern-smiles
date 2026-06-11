@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   Table,
   TableBody,
@@ -12,10 +14,22 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogPortal,
+  DialogOverlay,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
 import { EnrollDialog } from "@/components/surveys/enroll-dialog";
+import { deletePatients } from "@/actions/surveys";
 import { cn } from "@/lib/utils";
 import type { PatientListItem, SurveyCampaign } from "@/lib/types";
-import { Users } from "lucide-react";
+import { Trash2, Users } from "lucide-react";
 
 function monthsBetween(dateIso: string | null, refMs: number): number | null {
   if (!dateIso) return null;
@@ -51,6 +65,9 @@ export function PatientsTable({
   const [repeatOnly, setRepeatOnly] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [enrollOpen, setEnrollOpen] = useState(false);
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const router = useRouter();
 
   // Top-value threshold = 80th percentile of collections (for the 💰 badge).
   const topValueThreshold = useMemo(() => {
@@ -96,6 +113,30 @@ export function PatientsTable({
       else filtered.forEach((p) => next.add(p.id));
       return next;
     });
+  }
+
+  const enrolledSelectedCount = useMemo(
+    () =>
+      patients.filter(
+        (p) => selected.has(p.id) && p.enrolledCampaignIds.length > 0
+      ).length,
+    [patients, selected]
+  );
+
+  async function handleRemove() {
+    setRemoving(true);
+    const res = await deletePatients([...selected]);
+    setRemoving(false);
+    if (res.error) {
+      toast.error(typeof res.error === "string" ? res.error : "Could not remove");
+      return;
+    }
+    toast.success(
+      `Removed ${res.removed} patient${res.removed === 1 ? "" : "s"}`
+    );
+    setSelected(new Set());
+    setRemoveOpen(false);
+    router.refresh();
   }
 
   function segments(p: PatientListItem) {
@@ -165,6 +206,15 @@ export function PatientsTable({
           >
             <Users className="mr-1.5 h-4 w-4" />
             Enroll selected
+          </Button>
+          <Button
+            variant="outline"
+            disabled={selected.size === 0}
+            className="text-muted-foreground hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => setRemoveOpen(true)}
+          >
+            <Trash2 className="mr-1.5 h-4 w-4" />
+            Remove
           </Button>
         </div>
       </div>
@@ -259,6 +309,48 @@ export function PatientsTable({
         campaigns={campaigns}
         selectedIds={[...selected]}
       />
+
+      <Dialog open={removeOpen} onOpenChange={setRemoveOpen}>
+        <DialogPortal>
+          <DialogOverlay />
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                Remove {selected.size} patient{selected.size === 1 ? "" : "s"}?
+              </DialogTitle>
+              <DialogDescription>
+                This permanently removes them from your patient list
+                {enrolledSelectedCount > 0 && (
+                  <>
+                    {" "}
+                    — including{" "}
+                    <span className="font-medium text-foreground">
+                      {enrolledSelectedCount} enrolled in campaigns
+                    </span>
+                    , whose survey codes, responses, and promised credits will
+                    be deleted too
+                  </>
+                )}
+                . Re-importing your CSV will bring them back as new entries.
+                There is no undo.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <DialogClose className="inline-flex items-center rounded-lg border bg-background px-3 py-1.5 text-sm font-medium hover:bg-muted">
+                Cancel
+              </DialogClose>
+              <Button
+                variant="destructive"
+                disabled={removing}
+                onClick={handleRemove}
+              >
+                <Trash2 className="mr-1.5 h-4 w-4" />
+                {removing ? "Removing…" : "Remove patients"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </DialogPortal>
+      </Dialog>
     </div>
   );
 }

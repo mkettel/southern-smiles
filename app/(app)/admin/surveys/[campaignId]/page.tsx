@@ -10,12 +10,7 @@ import {
   getPullQuotes,
   getPatientsFiltered,
 } from "@/actions/surveys";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CampaignActions } from "@/components/surveys/campaign-actions";
 import { CampaignTitle } from "@/components/surveys/campaign-title";
@@ -33,7 +28,11 @@ import {
   type FlyerDocument,
 } from "@/lib/flyer/types";
 import { flyerConfigSchema, flyerDocumentSchema } from "@/lib/validators";
-import { DEFAULT_FLYER_CONFIG, type FlyerConfig, type Profile } from "@/lib/types";
+import {
+  DEFAULT_FLYER_CONFIG,
+  type FlyerConfig,
+  type Profile,
+} from "@/lib/types";
 import { ArrowLeft } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -72,8 +71,9 @@ export default async function CampaignDetailPage({
     .map((r) => r.patient_id);
   const patientsAsOf =
     allPatients.reduce<string | null>(
-      (max, p) => (p.last_seen && (!max || p.last_seen > max) ? p.last_seen : max),
-      null
+      (max, p) =>
+        p.last_seen && (!max || p.last_seen > max) ? p.last_seen : max,
+      null,
     ) ?? undefined;
 
   // Flyer config: v2 block documents load directly; older fixed-template
@@ -94,7 +94,7 @@ export default async function CampaignDetailPage({
         ? settings.logo_url
         : null;
     flyerDocument = ensureDocumentSafety(
-      legacyToDocument(legacy, { logoUrl, questions: campaign.questions })
+      legacyToDocument(legacy, { logoUrl, questions: campaign.questions }),
     );
   }
   const creditLabel = `$${Math.round((campaign.credit_amount_cents ?? 0) / 100)}`;
@@ -154,7 +154,7 @@ export default async function CampaignDetailPage({
       </CampaignActions>
 
       {/* KPI row */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {kpis.map((k) => (
           <Card key={k.label}>
             <CardContent className="py-4">
@@ -169,7 +169,9 @@ export default async function CampaignDetailPage({
         {/* Referral sources */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Where patients come from</CardTitle>
+            <CardTitle className="text-base">
+              Where patients come from
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <ReferralChart data={referrals} />

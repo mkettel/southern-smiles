@@ -60,6 +60,9 @@ import {
 
 const PX_PER_PT = 96 / 72;
 const SNAP_PT = 4;
+/** Vertical space reserved for the app header + designer toolbar when
+ *  fitting the canvas to the viewport. */
+const CANVAS_CHROME_PX = 170;
 const BLANK_QR =
   "data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==";
 
@@ -277,17 +280,34 @@ export function FlyerDesigner({
   }, []);
 
   // ---- canvas scale ----
+  // Fit the WHOLE page on screen: constrain by column width AND viewport
+  // height (minus header/toolbar chrome), so editing never requires
+  // scrolling to see the bottom of the flyer.
   const outerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (mode !== "canvas") return; // canvas not mounted in simple mode
     const el = outerRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => {
+    const compute = () => {
       const w = el.clientWidth;
-      if (w > 0) setScale(Math.min(1.2, w / (PAGE_W * PX_PER_PT)));
-    });
+      if (w <= 0) return;
+      const availH = window.innerHeight - CANVAS_CHROME_PX;
+      setScale(
+        Math.min(
+          1.2,
+          w / (PAGE_W * PX_PER_PT),
+          Math.max(0.3, availH / (PAGE_H * PX_PER_PT))
+        )
+      );
+    };
+    const ro = new ResizeObserver(compute);
     ro.observe(el);
-    return () => ro.disconnect();
+    window.addEventListener("resize", compute);
+    compute();
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", compute);
+    };
   }, [mode]);
 
   // ---- sample QR for the canvas preview ----
@@ -1108,12 +1128,26 @@ function ScaledFlyerPreview({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => {
+    const compute = () => {
       const w = el.clientWidth;
-      if (w > 0) setScale(Math.min(1, w / (PAGE_W * PX_PER_PT)));
-    });
+      if (w <= 0) return;
+      const availH = window.innerHeight - CANVAS_CHROME_PX;
+      setScale(
+        Math.min(
+          1,
+          w / (PAGE_W * PX_PER_PT),
+          Math.max(0.3, availH / (PAGE_H * PX_PER_PT))
+        )
+      );
+    };
+    const ro = new ResizeObserver(compute);
     ro.observe(el);
-    return () => ro.disconnect();
+    window.addEventListener("resize", compute);
+    compute();
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", compute);
+    };
   }, []);
 
   return (

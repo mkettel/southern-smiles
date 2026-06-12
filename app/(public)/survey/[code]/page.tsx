@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { getPublicSurveyView } from "@/lib/survey/public";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SurveyForm } from "./survey-form";
@@ -5,13 +6,20 @@ import { CheckCircle2, Clock, Search } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
+// Link scanners, email-security previewers, and crawlers hit the URL without
+// a human ever looking — don't count those as "opens".
+const BOT_UA =
+  /bot|crawl|spider|slurp|preview|scan|monitor|fetch|facebookexternalhit|whatsapp|telegram|slack|discord|headless|lighthouse|curl|wget|python-requests|axios|node-fetch|google-?(safe|read)|outlook|bingpreview|skypeuripreview/i;
+
 export default async function SurveyPage({
   params,
 }: {
   params: Promise<{ code: string }>;
 }) {
   const { code } = await params;
-  const view = await getPublicSurveyView(code);
+  const ua = (await headers()).get("user-agent") ?? "";
+  const isBot = ua === "" || BOT_UA.test(ua);
+  const view = await getPublicSurveyView(code, { recordView: !isBot });
 
   if (view.status === "ok") {
     return (

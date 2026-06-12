@@ -743,7 +743,7 @@ export async function getCampaignStats(
 
   const { data: recipients } = await supabase
     .from("survey_recipients")
-    .select("sent_at, credit_status, credit_amount_cents")
+    .select("sent_at, first_viewed_at, credit_status, credit_amount_cents")
     .eq("campaign_id", campaignId);
 
   const { count: responseCount } = await supabase
@@ -753,6 +753,7 @@ export async function getCampaignStats(
 
   const recs = recipients ?? [];
   const sentCount = recs.filter((r) => r.sent_at).length;
+  const openedCount = recs.filter((r) => r.first_viewed_at).length;
   const responses = responseCount ?? 0;
 
   let creditPromisedCents = 0;
@@ -767,7 +768,9 @@ export async function getCampaignStats(
     campaign: campaign as SurveyCampaign,
     recipientCount: recs.length,
     sentCount,
+    openedCount,
     responseCount: responses,
+    openRate: sentCount > 0 ? openedCount / sentCount : 0,
     responseRate: sentCount > 0 ? responses / sentCount : 0,
     creditPromisedCents,
     creditRedeemedCents,

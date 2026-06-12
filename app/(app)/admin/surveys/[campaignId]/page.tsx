@@ -103,6 +103,12 @@ export default async function CampaignDetailPage({
   const kpis = [
     { label: "Enrolled", value: stats?.recipientCount ?? 0 },
     { label: "Letters sent", value: stats?.sentCount ?? 0 },
+    {
+      label: "Opened",
+      value: stats
+        ? `${stats.openedCount}${stats.sentCount > 0 ? ` · ${Math.round(stats.openRate * 100)}%` : ""}`
+        : 0,
+    },
     { label: "Responses", value: stats?.responseCount ?? 0 },
     {
       label: "Response rate",

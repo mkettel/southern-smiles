@@ -480,6 +480,9 @@ export interface SurveyRecipient {
   code: string;
   sent_at: string | null;
   responded_at: string | null;
+  first_viewed_at: string | null;
+  last_viewed_at: string | null;
+  view_count: number;
   credit_status: CreditStatus;
   credit_amount_cents: number | null;
   credit_expires_at: string | null;
@@ -510,7 +513,9 @@ export interface CampaignStats {
   campaign: SurveyCampaign;
   recipientCount: number;
   sentCount: number;
+  openedCount: number; // recipients who opened the link at least once
   responseCount: number;
+  openRate: number; // opened ÷ sent (0 when none sent)
   responseRate: number; // responses ÷ sent (0 when none sent)
   creditPromisedCents: number;
   creditRedeemedCents: number;

@@ -104,6 +104,7 @@ export function RecipientsTable({
                 <TableHead>Patient</TableHead>
                 <TableHead>Code</TableHead>
                 <TableHead>Sent</TableHead>
+                <TableHead>Opened</TableHead>
                 <TableHead>Responded</TableHead>
                 <TableHead>Credit</TableHead>
                 <TableHead className="text-right">Action</TableHead>
@@ -122,6 +123,16 @@ export function RecipientsTable({
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {r.sent_at ? new Date(r.sent_at).toLocaleDateString() : "—"}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {r.first_viewed_at ? (
+                        <span title={new Date(r.last_viewed_at ?? r.first_viewed_at).toLocaleString()}>
+                          {new Date(r.first_viewed_at).toLocaleDateString()}
+                          {r.view_count > 1 ? ` ·${r.view_count}×` : ""}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
                     </TableCell>
                     <TableCell>
                       {r.responded_at ? (

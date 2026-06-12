@@ -51,11 +51,14 @@ import {
   Redo2,
   Save,
   SendToBack,
+  Maximize,
   Shapes,
   Sparkles,
   Trash2,
   Type,
   Undo2,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 
 const PX_PER_PT = 96 / 72;
@@ -85,6 +88,8 @@ interface DragState {
   blockId: string;
   startPx: { x: number; y: number };
   orig: { x: number; y: number; w: number; h: number };
+  /** Original positions of every block moving with this drag (group move). */
+  origPositions: Map<string, { x: number; y: number }>;
   moved: boolean;
 }
 
@@ -194,8 +199,23 @@ export function FlyerDesigner({
   // "simple" = the original form fields; "canvas" = full block editing.
   // Both edit the same document, so switching tabs never loses work.
   const [mode, setMode] = useState<"simple" | "canvas">("simple");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [scale, setScale] = useState(0.6);
+  // Multi-select: click selects one, shift-click toggles, dragging on empty
+  // canvas draws a marquee. Dragging any selected block moves the group.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const selectedIdsRef = useRef(selectedIds);
+  selectedIdsRef.current = selectedIds;
+  const [marquee, setMarquee] = useState<{
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+  } | null>(null);
+  // "fit" auto-scales the whole page into view; a number is an absolute zoom
+  // level (1 = actual print size).
+  const [fitScale, setFitScale] = useState(0.6);
+  const [zoom, setZoom] = useState<"fit" | number>("fit");
+  const [availH, setAvailH] = useState(640);
+  const scale = zoom === "fit" ? fitScale : zoom;
   const scaleRef = useRef(scale);
   scaleRef.current = scale;
   const [guides, setGuides] = useState<{ x: number | null; y: number | null }>({
@@ -291,12 +311,13 @@ export function FlyerDesigner({
     const compute = () => {
       const w = el.clientWidth;
       if (w <= 0) return;
-      const availH = window.innerHeight - CANVAS_CHROME_PX;
-      setScale(
+      const h = window.innerHeight - CANVAS_CHROME_PX;
+      setAvailH(h);
+      setFitScale(
         Math.min(
           1.2,
           w / (PAGE_W * PX_PER_PT),
-          Math.max(0.3, availH / (PAGE_H * PX_PER_PT))
+          Math.max(0.3, h / (PAGE_H * PX_PER_PT))
         )
       );
     };
@@ -309,6 +330,29 @@ export function FlyerDesigner({
       window.removeEventListener("resize", compute);
     };
   }, [mode]);
+
+  const zoomBy = useCallback((factor: number) => {
+    setZoom((prev) => {
+      const current = prev === "fit" ? scaleRef.current : prev;
+      return Math.min(2, Math.max(0.25, current * factor));
+    });
+  }, []);
+
+  // Trackpad pinch / ctrl+wheel zoom on the canvas. Attached manually because
+  // React's root wheel listener is passive (preventDefault wouldn't work).
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (mode !== "canvas") return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      zoomBy(e.deltaY < 0 ? 1.08 : 1 / 1.08);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [mode, zoomBy]);
 
   // ---- sample QR for the canvas preview ----
   useEffect(() => {
@@ -333,7 +377,14 @@ export function FlyerDesigner({
     [practiceName, creditLabel, sampleQr]
   );
 
-  const selected = doc.blocks.find((b) => b.id === selectedId) ?? null;
+  const selectionCount = selectedIds.size;
+  const selected =
+    selectionCount === 1
+      ? (doc.blocks.find((b) => selectedIds.has(b.id)) ?? null)
+      : null;
+  const onlyQrSelected =
+    selectionCount > 0 &&
+    doc.blocks.filter((b) => selectedIds.has(b.id)).every((b) => b.type === "qr");
 
   // ---- block ops ----
   const patchBlock = useCallback(
@@ -354,7 +405,7 @@ export function FlyerDesigner({
   const addBlock = useCallback(
     (block: FlyerBlock) => {
       commit((d) => ({ ...d, blocks: [...d.blocks, block] }), `add-${block.id}`);
-      setSelectedId(block.id);
+      setSelectedIds(new Set([block.id]));
     },
     [commit]
   );
@@ -416,45 +467,72 @@ export function FlyerDesigner({
     });
 
   const duplicateSelected = useCallback(() => {
-    const b = docRef.current.blocks.find((x) => x.id === selectedId);
-    if (!b || b.type === "qr") return;
-    const copy = { ...b, id: flyerId(), x: b.x + 14, y: b.y + 14, z: maxZ() + 1 };
-    commit((d) => ({ ...d, blocks: [...d.blocks, copy] }), `dup-${copy.id}`);
-    setSelectedId(copy.id);
-  }, [commit, selectedId]);
+    const ids = selectedIdsRef.current;
+    const sources = docRef.current.blocks.filter(
+      (b) => ids.has(b.id) && b.type !== "qr"
+    );
+    if (sources.length === 0) return;
+    let z = maxZ();
+    const copies = sources.map((b) => ({
+      ...b,
+      id: flyerId(),
+      x: b.x + 14,
+      y: b.y + 14,
+      z: ++z,
+    }));
+    commit(
+      (d) => ({ ...d, blocks: [...d.blocks, ...copies] }),
+      `dup-${copies[0].id}`
+    );
+    setSelectedIds(new Set(copies.map((c) => c.id)));
+  }, [commit]);
 
   const deleteSelected = useCallback(() => {
-    const b = docRef.current.blocks.find((x) => x.id === selectedId);
-    if (!b) return;
-    if (b.type === "qr") {
+    const ids = selectedIdsRef.current;
+    if (ids.size === 0) return;
+    const deletable = docRef.current.blocks.filter(
+      (b) => ids.has(b.id) && b.type !== "qr"
+    );
+    if (deletable.length === 0) {
       toast.error("The QR code is required — every flyer needs its survey link");
       return;
     }
+    if (deletable.length < ids.size) {
+      toast.info("Kept the QR code — it's required on every flyer");
+    }
+    const drop = new Set(deletable.map((b) => b.id));
     commit(
-      (d) => ({ ...d, blocks: d.blocks.filter((x) => x.id !== b.id) }),
-      `del-${b.id}`
+      (d) => ({ ...d, blocks: d.blocks.filter((x) => !drop.has(x.id)) }),
+      `del-${deletable[0].id}`
     );
-    setSelectedId(null);
-  }, [commit, selectedId]);
+    setSelectedIds(new Set());
+  }, [commit]);
 
   const reorderSelected = useCallback(
     (dir: 1 | -1) => {
-      if (!selectedId) return;
+      const ids = selectedIdsRef.current;
+      if (ids.size === 0) return;
       commit((d) => {
         const zs = d.blocks.map((b) => b.z);
         const top = Math.max(...zs);
         const bottom = Math.min(...zs);
+        // Preserve the group's internal stacking order while moving it.
+        const ordered = d.blocks
+          .filter((b) => ids.has(b.id))
+          .sort((a, b) => a.z - b.z);
+        const newZ = new Map<string, number>();
+        ordered.forEach((b, i) => {
+          newZ.set(b.id, dir === 1 ? top + 1 + i : Math.max(0, bottom - ordered.length + i));
+        });
         return {
           ...d,
           blocks: d.blocks.map((b) =>
-            b.id === selectedId
-              ? { ...b, z: dir === 1 ? top + 1 : Math.max(0, bottom - 1) }
-              : b
+            newZ.has(b.id) ? { ...b, z: newZ.get(b.id)! } : b
           ),
         };
-      }, `z-${selectedId}`);
+      }, `z-${[...ids][0]}`);
     },
-    [commit, selectedId]
+    [commit]
   );
 
   // ---- drag / resize ----
@@ -507,8 +585,10 @@ export function FlyerDesigner({
       }
 
       if (drag.mode === "move") {
+        // Snap by the grabbed block; the rest of the group follows its delta.
+        const moving = drag.origPositions;
         const others = docRef.current.blocks
-          .filter((b) => b.id !== drag.blockId)
+          .filter((b) => !moving.has(b.id))
           .map((b) => ({ x: b.x, y: b.y, w: b.w, h: b.h }));
         const sx = snapAxis(
           drag.orig.x + dx,
@@ -523,12 +603,15 @@ export function FlyerDesigner({
           others.map((o) => ({ start: o.y, len: o.h }))
         );
         setGuides({ x: sx.guide, y: sy.guide });
+        const ddx = sx.pos - drag.orig.x;
+        const ddy = sy.pos - drag.orig.y;
         commit(
           (d) => ({
             ...d,
-            blocks: d.blocks.map((b) =>
-              b.id === drag.blockId ? { ...b, x: sx.pos, y: sy.pos } : b
-            ),
+            blocks: d.blocks.map((b) => {
+              const o = moving.get(b.id);
+              return o ? { ...b, x: o.x + ddx, y: o.y + ddy } : b;
+            }),
           }),
           null
         );
@@ -576,19 +659,105 @@ export function FlyerDesigner({
       e.stopPropagation();
       const b = docRef.current.blocks.find((x) => x.id === blockId);
       if (!b) return;
-      setSelectedId(blockId);
+
+      // Shift-click toggles membership without starting a drag.
+      if (e.shiftKey && mode === "move") {
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          if (next.has(blockId)) next.delete(blockId);
+          else next.add(blockId);
+          return next;
+        });
+        return;
+      }
+
+      // Dragging a block that's already in the selection moves the group;
+      // dragging an unselected block selects just it.
+      const current = selectedIdsRef.current;
+      const ids =
+        mode === "move" && current.has(blockId) ? current : new Set([blockId]);
+      setSelectedIds(ids);
+      const origPositions = new Map(
+        docRef.current.blocks
+          .filter((x) => ids.has(x.id))
+          .map((x) => [x.id, { x: x.x, y: x.y }] as const)
+      );
       dragRef.current = {
         mode,
         handle,
         blockId,
         startPx: { x: e.clientX, y: e.clientY },
         orig: { x: b.x, y: b.y, w: b.w, h: b.h },
+        origPositions,
         moved: false,
       };
       window.addEventListener("pointermove", onDragMove);
       window.addEventListener("pointerup", endDrag);
     },
     [endDrag, onDragMove]
+  );
+
+  // ---- marquee (drag-to-select on empty canvas) ----
+  const cardRef = useRef<HTMLDivElement>(null);
+  const marqueeRef = useRef<{ startX: number; startY: number; moved: boolean } | null>(
+    null
+  );
+
+  const ptFromEvent = useCallback((e: { clientX: number; clientY: number }) => {
+    const rect = cardRef.current!.getBoundingClientRect();
+    const k = 1 / (PX_PER_PT * scaleRef.current);
+    return { x: (e.clientX - rect.left) * k, y: (e.clientY - rect.top) * k };
+  }, []);
+
+  const onMarqueeMove = useCallback(
+    (e: PointerEvent) => {
+      const m = marqueeRef.current;
+      if (!m || !cardRef.current) return;
+      const p = ptFromEvent(e);
+      const rect = {
+        x1: Math.min(m.startX, p.x),
+        y1: Math.min(m.startY, p.y),
+        x2: Math.max(m.startX, p.x),
+        y2: Math.max(m.startY, p.y),
+      };
+      if (!m.moved && rect.x2 - rect.x1 + (rect.y2 - rect.y1) < 3) return;
+      m.moved = true;
+      setMarquee(rect);
+      setSelectedIds(
+        new Set(
+          docRef.current.blocks
+            .filter(
+              (b) =>
+                b.x < rect.x2 &&
+                b.x + b.w > rect.x1 &&
+                b.y < rect.y2 &&
+                b.y + b.h > rect.y1
+            )
+            .map((b) => b.id)
+        )
+      );
+    },
+    [ptFromEvent]
+  );
+
+  const endMarquee = useCallback(() => {
+    const m = marqueeRef.current;
+    marqueeRef.current = null;
+    setMarquee(null);
+    if (m && !m.moved) setSelectedIds(new Set()); // plain click on empty canvas
+    window.removeEventListener("pointermove", onMarqueeMove);
+    window.removeEventListener("pointerup", endMarquee);
+  }, [onMarqueeMove]);
+
+  const beginMarquee = useCallback(
+    (e: React.PointerEvent) => {
+      if (e.button !== 0 || !cardRef.current) return;
+      const p = ptFromEvent(e);
+      marqueeRef.current = { startX: p.x, startY: p.y, moved: false };
+      window.addEventListener("pointermove", onMarqueeMove);
+      window.addEventListener("pointerup", endMarquee);
+    },
+    [endMarquee, onMarqueeMove, ptFromEvent]
   );
 
   useEffect(() => endDrag, [endDrag]); // clean up listeners on unmount
@@ -609,9 +778,10 @@ export function FlyerDesigner({
         duplicateSelected();
         return;
       }
-      if (!selectedId) return;
+      const ids = selectedIdsRef.current;
+      if (ids.size === 0) return;
       if (e.key === "Escape") {
-        setSelectedId(null);
+        setSelectedIds(new Set());
         return;
       }
       if (e.key === "Backspace" || e.key === "Delete") {
@@ -629,21 +799,20 @@ export function FlyerDesigner({
       if (nudge[e.key]) {
         e.preventDefault();
         const [dx, dy] = nudge[e.key];
-        const id = selectedId;
         commit(
           (d) => ({
             ...d,
             blocks: d.blocks.map((b) =>
-              b.id === id ? { ...b, x: b.x + dx, y: b.y + dy } : b
+              ids.has(b.id) ? { ...b, x: b.x + dx, y: b.y + dy } : b
             ),
           }),
-          `nudge-${id}`
+          `nudge-${[...ids][0]}`
         );
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [commit, deleteSelected, duplicateSelected, redo, selectedId, undo]);
+  }, [commit, deleteSelected, duplicateSelected, redo, undo]);
 
   // ---- save / preview / generate ----
   async function save() {
@@ -725,13 +894,14 @@ export function FlyerDesigner({
       return;
     }
     commit(() => res.document as FlyerDocument, `ai-${Date.now()}`);
-    setSelectedId(null);
+    setSelectedIds(new Set());
     toast.success("AI design ready — tweak anything, then Save");
   }
 
   // ---- editor chrome around each block ----
   const renderEditorBlock = (block: FlyerBlock, content: React.ReactNode) => {
-    const isSelected = block.id === selectedId;
+    const isSelected = selectedIds.has(block.id);
+    const showHandles = isSelected && selectionCount === 1;
     const hs = 10 / scale; // handle size, screen-constant
     return (
       <div
@@ -774,7 +944,7 @@ export function FlyerDesigner({
             />
           </div>
         )}
-        {isSelected &&
+        {showHandles &&
           HANDLES.map((h) => {
             const pos: React.CSSProperties = {};
             if (h.key.includes("w")) pos.left = -hs / 2;
@@ -831,7 +1001,7 @@ export function FlyerDesigner({
               className="capitalize"
               onClick={() => {
                 setMode(m);
-                if (m === "simple") setSelectedId(null);
+                if (m === "simple") setSelectedIds(new Set());
               }}
             >
               {m}
@@ -875,10 +1045,37 @@ export function FlyerDesigner({
         >
           <Frame className="h-4 w-4" />
         </TbButton>
-        {selected && (
+        <div className="mx-1 h-5 w-px bg-border" />
+        <TbButton tip="Zoom out" variant="ghost" onClick={() => zoomBy(1 / 1.25)}>
+          <ZoomOut className="h-4 w-4" />
+        </TbButton>
+        <button
+          type="button"
+          className="w-11 text-center text-xs tabular-nums text-muted-foreground hover:text-foreground"
+          onClick={() => setZoom("fit")}
+          title="Reset zoom to fit"
+        >
+          {Math.round(scale * 100)}%
+        </button>
+        <TbButton tip="Zoom in" variant="ghost" onClick={() => zoomBy(1.25)}>
+          <ZoomIn className="h-4 w-4" />
+        </TbButton>
+        <TbButton
+          tip="Fit whole page on screen"
+          variant={zoom === "fit" ? "secondary" : "ghost"}
+          onClick={() => setZoom("fit")}
+        >
+          <Maximize className="h-4 w-4" />
+        </TbButton>
+        {selectionCount > 0 && (
           <>
             <div className="mx-1 h-5 w-px bg-border" />
-            <TbButton tip="Duplicate" shortcut="⌘D" variant="ghost" onClick={duplicateSelected} disabled={selected.type === "qr"}>
+            {selectionCount > 1 && (
+              <span className="text-xs text-muted-foreground">
+                {selectionCount} selected
+              </span>
+            )}
+            <TbButton tip="Duplicate" shortcut="⌘D" variant="ghost" onClick={duplicateSelected} disabled={onlyQrSelected}>
               <Copy className="h-4 w-4" />
             </TbButton>
             <TbButton tip="Bring to front" variant="ghost" onClick={() => reorderSelected(1)}>
@@ -887,7 +1084,7 @@ export function FlyerDesigner({
             <TbButton tip="Send to back" variant="ghost" onClick={() => reorderSelected(-1)}>
               <SendToBack className="h-4 w-4" />
             </TbButton>
-            <TbButton tip="Delete" shortcut="⌫" variant="ghost" onClick={deleteSelected} disabled={selected.type === "qr"}>
+            <TbButton tip="Delete" shortcut="⌫" variant="ghost" onClick={deleteSelected} disabled={onlyQrSelected}>
               <Trash2 className="h-4 w-4" />
             </TbButton>
           </>
@@ -978,9 +1175,15 @@ export function FlyerDesigner({
         {/* Canvas */}
         <div ref={outerRef} className="min-w-0">
           <div
+            ref={scrollRef}
+            className="overflow-auto overscroll-contain"
+            style={{ maxHeight: availH }}
+          >
+          <div
+            ref={cardRef}
             className="relative mx-auto overflow-hidden rounded-md border shadow-sm"
             style={{ width: pagePx.w * scale, height: pagePx.h * scale }}
-            onPointerDown={() => setSelectedId(null)}
+            onPointerDown={beginMarquee}
           >
             <div
               style={{
@@ -1040,6 +1243,19 @@ export function FlyerDesigner({
                     }}
                   />
                 )}
+                {marquee && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: `${marquee.x1}pt`,
+                      top: `${marquee.y1}pt`,
+                      width: `${marquee.x2 - marquee.x1}pt`,
+                      height: `${marquee.y2 - marquee.y1}pt`,
+                      border: `${1 / scale}px solid #3b82f6`,
+                      background: "rgba(59,130,246,0.08)",
+                    }}
+                  />
+                )}
               </div>
             </div>
             {generating.has("background") && (
@@ -1050,24 +1266,37 @@ export function FlyerDesigner({
             )}
             {busy === "ai" && <AiWorkingOverlay />}
           </div>
+          </div>
           <p className="mt-2 text-center text-xs text-muted-foreground">
             Previewing with sample data — real flyers use each patient&apos;s name
-            and unique QR code. Drag to move · handles to resize · arrows to nudge.
+            and unique QR code. Drag to move · drag empty space to multi-select ·
+            shift-click to add · ⌘-scroll to zoom.
           </p>
         </div>
 
         {/* Inspector */}
-        <FlyerInspector
-          campaignId={campaignId}
-          doc={doc}
-          selected={selected}
-          aiEnabled={aiEnabled}
-          patchBlock={patchBlock}
-          patchBackground={(bg, key) =>
-            commit((d) => ({ ...d, page: { ...d.page, background: bg } }), key)
-          }
-          onImageBusy={onImageBusy}
-        />
+        {selectionCount > 1 ? (
+          <div className="h-fit space-y-2 rounded-lg border p-3">
+            <p className="text-sm font-medium">{selectionCount} blocks selected</p>
+            <p className="text-[11px] leading-snug text-muted-foreground">
+              Drag any selected block to move them together. Arrow keys nudge
+              the group, ⌘D duplicates it, Delete removes it (the QR code
+              always stays). Shift-click adds or removes a block.
+            </p>
+          </div>
+        ) : (
+          <FlyerInspector
+            campaignId={campaignId}
+            doc={doc}
+            selected={selected}
+            aiEnabled={aiEnabled}
+            patchBlock={patchBlock}
+            patchBackground={(bg, key) =>
+              commit((d) => ({ ...d, page: { ...d.page, background: bg } }), key)
+            }
+            onImageBusy={onImageBusy}
+          />
+        )}
       </div>
       )}
 

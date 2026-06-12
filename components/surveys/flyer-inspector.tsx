@@ -644,7 +644,18 @@ function BlockPanel({
       );
     }
 
-    case "shape":
+    case "shape": {
+      // Switching to a line pre-flattens it into a thin bar with rounded ends;
+      // switching back to a 2D shape from a thin line restores a square.
+      const pickShape = (kind: typeof block.shape) => {
+        if (kind === "line" && block.shape !== "line") {
+          set({ shape: kind, h: 4, borderRadius: 2 });
+        } else if (kind !== "line" && block.shape === "line") {
+          set({ shape: kind, h: block.w });
+        } else {
+          set({ shape: kind });
+        }
+      };
       return (
         <div className="space-y-2.5">
           <p className="text-sm font-medium">Shape</p>
@@ -656,7 +667,7 @@ function BlockPanel({
                 size="sm"
                 variant={block.shape === s.kind ? "secondary" : "outline"}
                 className="h-7 px-0 text-[10px]"
-                onClick={() => set({ shape: s.kind })}
+                onClick={() => pickShape(s.kind)}
                 title={s.label}
               >
                 {s.label.slice(0, 5)}
@@ -676,14 +687,20 @@ function BlockPanel({
               onChange={(e) => set({ opacity: Number(e.target.value) })}
             />
           </Row>
-          {block.shape === "rect" && (
-            <Row label="Corner radius">
+          {(block.shape === "rect" || block.shape === "line") && (
+            <Row label={block.shape === "line" ? "End rounding" : "Corner radius"}>
               <NumInput value={block.borderRadius} min={0} max={400} onChange={(v) => set({ borderRadius: v })} />
+            </Row>
+          )}
+          {block.shape === "line" && (
+            <Row label="Thickness">
+              <NumInput value={Math.round(block.h)} min={1} max={60} onChange={(v) => set({ h: v })} />
             </Row>
           )}
           {geometry}
         </div>
       );
+    }
 
     case "qr":
       return (

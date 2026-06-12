@@ -251,7 +251,7 @@ export const flyerBlockSchema = z.discriminatedUnion("type", [
   z.object({
     ...flyerBlockBase,
     type: z.literal("shape"),
-    shape: z.enum(["rect", "circle", "blob1", "blob2", "wave", "tooth", "sparkle", "heart"]),
+    shape: z.enum(["rect", "line", "circle", "blob1", "blob2", "wave", "tooth", "sparkle", "heart"]),
     color: hexColor,
     opacity: z.number().min(0.05).max(1).default(1),
     borderRadius: z.number().min(0).max(400).default(0),

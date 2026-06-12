@@ -20,7 +20,7 @@ import {
 // Shapes (inline SVG, stretched to the block box)
 // ---------------------------------------------------------------------------
 
-const SHAPE_PATHS: Record<Exclude<FlyerShapeKind, "rect" | "circle">, string> = {
+const SHAPE_PATHS: Record<Exclude<FlyerShapeKind, "rect" | "line" | "circle">, string> = {
   blob1:
     "M54.7,9.7 C68.6,13.5 80.9,22.4 87.5,34.8 C94.1,47.2 95,63.1 88.1,74.6 C81.2,86.1 66.5,93.2 51.6,94.5 C36.7,95.8 21.6,91.3 12.4,80.9 C3.2,70.5 -0.1,54.2 4.4,40.7 C8.9,27.2 21.2,16.5 34.4,11.5 C40.9,9 47.8,7.8 54.7,9.7 Z",
   blob2:
@@ -40,7 +40,7 @@ function ShapeSvg({
   kind: FlyerShapeKind;
   color: string;
 }) {
-  if (kind === "rect") return null; // plain div handles it (with borderRadius)
+  if (kind === "rect" || kind === "line") return null; // plain div handles these
   if (kind === "circle") {
     return (
       <svg
@@ -156,7 +156,9 @@ export function BlockView({
     }
 
     case "shape":
-      if (block.shape === "rect") {
+      // A line is just a thin bar — same rendering as a rectangle, but it's
+      // added pre-flattened with rounded ends (see the designer's shape picker).
+      if (block.shape === "rect" || block.shape === "line") {
         return (
           <div
             style={{

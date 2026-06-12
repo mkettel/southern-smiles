@@ -46,7 +46,7 @@ EVERY block has: "id" (short unique string), "x","y","w","h" (points), "rotation
 BLOCK TYPES:
 - text: { "type":"text", "text":"...", "font":"inter|poppins|nunito|playfair|lora|caveat", "fontSize":6-72, "bold":true|false, "color":"#rrggbb", "align":"left|center|right", "lineHeight":1.0-2.0, "backgroundColor":"transparent"|"#rrggbb", "padding":0-30, "borderRadius":0-30, "role":"heading|body|signature" (optional) } — tag the main headline "heading", the letter body "body", and the sign-off "signature".
 - image: { "type":"image", "url":null, "aiPrompt":"<art description>", "fit":"cover", "borderRadius":0-40, "opacity":1 }
-- shape: { "type":"shape", "shape":"rect|circle|blob1|blob2|wave|tooth|sparkle|heart", "color":"#rrggbb", "opacity":0.05-1, "borderRadius":0-40 }
+- shape: { "type":"shape", "shape":"rect|line|circle|blob1|blob2|wave|tooth|sparkle|heart", "color":"#rrggbb", "opacity":0.05-1, "borderRadius":0-40 } — "line" is a thin divider (give it a small h like 3-4).
 - qr: { "type":"qr", "frameColor":"#rrggbb", "caption":"Scan with your camera" } — REQUIRED, exactly one, at least 110w x 130h.
 - credit: { "type":"credit", "caption":"<short caption>", "label":"{{credit}} appreciation credit", "backgroundColor":"#rrggbb", "textColor":"#ffffff", "borderRadius":8, "font":"<font>" } — include unless the brief says otherwise.
 

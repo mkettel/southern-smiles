@@ -160,6 +160,7 @@ export interface FlyerImageBlock extends FlyerBlockBase {
 
 export type FlyerShapeKind =
   | "rect"
+  | "line"
   | "circle"
   | "blob1"
   | "blob2"
@@ -170,6 +171,7 @@ export type FlyerShapeKind =
 
 export const FLYER_SHAPES: { kind: FlyerShapeKind; label: string }[] = [
   { kind: "rect", label: "Rectangle" },
+  { kind: "line", label: "Line" },
   { kind: "circle", label: "Circle" },
   { kind: "blob1", label: "Blob" },
   { kind: "blob2", label: "Blob 2" },

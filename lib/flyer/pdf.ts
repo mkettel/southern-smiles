@@ -65,6 +65,9 @@ export async function htmlToPdf(html: string): Promise<Buffer> {
       format: "letter",
       printBackground: true,
       preferCSSPageSize: true,
+      // Large batches (one page per recipient, often with full-bleed
+      // background art) can take well over puppeteer's 30s default.
+      timeout: 300_000,
     });
     return Buffer.from(pdf);
   } finally {

@@ -24,7 +24,8 @@ import {
 } from "@/lib/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// One page per recipient — large batches with full-bleed art can take minutes.
+export const maxDuration = 300;
 
 async function requireAdmin(supabase: SupabaseClient): Promise<Response | null> {
   const {
@@ -178,9 +179,15 @@ async function render(
   );
   if (!data) return new Response("Recipient not found", { status: 404 });
 
-  const html = await buildFlyerHtml(doc, data);
-  const pdf = await htmlToPdf(html);
-  return pdfResponse(pdf, campaignId, preview);
+  try {
+    const html = await buildFlyerHtml(doc, data);
+    const pdf = await htmlToPdf(html);
+    return pdfResponse(pdf, campaignId, preview);
+  } catch (e) {
+    console.error(`[flyer] render failed for campaign ${campaignId} (${data.length} pages):`, e);
+    const msg = e instanceof Error ? e.message : "Unknown render error";
+    return new Response(`Flyer render failed: ${msg}`, { status: 500 });
+  }
 }
 
 /** GET → render from the SAVED config in the DB (used for direct links). */

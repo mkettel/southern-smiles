@@ -27,13 +27,11 @@ function formatCredit(cents: number): string {
 export function SurveyForm({
   code,
   patientFirstName,
-  campaignTitle,
   questions,
   creditAmountCents,
 }: {
   code: string;
   patientFirstName: string;
-  campaignTitle: string;
   questions: SurveyQuestion[];
   creditAmountCents: number;
 }) {
@@ -105,7 +103,10 @@ export function SurveyForm({
     <Card>
       <CardHeader>
         <CardTitle className="text-2xl">Hi {patientFirstName} 👋</CardTitle>
-        <CardDescription>{campaignTitle}</CardDescription>
+        <CardDescription>
+          We&apos;d love to hear about your experience — it only takes a couple
+          of minutes.
+        </CardDescription>
         {creditAmountCents > 0 && (
           <div className="mt-2 flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-2 text-sm text-primary">
             <Gift className="h-4 w-4 shrink-0" />

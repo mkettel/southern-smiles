@@ -648,7 +648,8 @@ export function FlyerDesigner({
         body: JSON.stringify(docRef.current),
       });
       if (!res.ok) {
-        toast.error("Could not render the preview");
+        const detail = await res.text().catch(() => "");
+        toast.error(detail.slice(0, 200) || "Could not render the preview");
         return;
       }
       const blob = await res.blob();
@@ -663,6 +664,7 @@ export function FlyerDesigner({
 
   async function generatePdf() {
     setBusy("gen");
+    toast.info("Rendering your flyers — large batches can take a minute or two…");
     try {
       const res = await fetch(`/api/flyer/${campaignId}`, {
         method: "POST",
@@ -670,7 +672,8 @@ export function FlyerDesigner({
         body: JSON.stringify(docRef.current),
       });
       if (!res.ok) {
-        toast.error("Could not generate flyers");
+        const detail = await res.text().catch(() => "");
+        toast.error(detail.slice(0, 200) || "Could not generate flyers");
         return;
       }
       const blob = await res.blob();

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { calculateCondition } from "@/lib/conditions";
 import { getCurrentWeekStart } from "@/lib/constants";
-import { generateSurveyCode } from "@/lib/survey/code";
+import { generateSurveyCode, normalizeSurveyCode } from "@/lib/survey/code";
 import { upsertDeidentifiedPatients } from "@/lib/survey/upsert-patients";
 import { patientLabel } from "@/lib/survey/label";
 import {
@@ -472,6 +472,121 @@ export async function addManualRecipient(campaignId: string) {
 
   revalidatePath(`/admin/surveys/${campaignId}`);
   return { success: true, code, surveyPath: `/survey/${code}` };
+}
+
+/**
+ * Recover already-mailed flyers whose recipient rows were purged (e.g. by the
+ * de-identification cutover). Takes the survey CODES off the printed flyers
+ * (extracted client-side from the practice's merge file — names never sent)
+ * and recreates the recipient rows on the still-existing campaign so the
+ * physical QR codes resolve again. Each code gets a de-identified placeholder
+ * patient (bridge_key `recovered:<code>`, no PHI). Idempotent: codes that
+ * already have a recipient are skipped, so it's safe to re-run.
+ */
+export async function recoverSentRecipients(
+  campaignId: string,
+  rawCodes: string[]
+) {
+  const { supabase, practiceId } = await requireAdmin();
+
+  // Normalize + validate to the survey-code shape, then dedupe.
+  const codes = Array.from(
+    new Set(
+      (rawCodes ?? [])
+        .map(normalizeSurveyCode)
+        .filter((c) => /^[0-9a-z]{8,14}$/.test(c))
+    )
+  );
+  if (codes.length === 0) return { error: "No valid survey codes found in that file." };
+
+  const { data: campaign } = await supabase
+    .from("survey_campaigns")
+    .select("credit_amount_cents, credit_expires_days")
+    .eq("id", campaignId)
+    .single();
+  if (!campaign) return { error: "Campaign not found" };
+
+  // Skip codes that still have a recipient (never deleted, or already recovered).
+  const { data: existing } = await supabase
+    .from("survey_recipients")
+    .select("code")
+    .eq("campaign_id", campaignId)
+    .in("code", codes);
+  const existingCodes = new Set((existing ?? []).map((r) => r.code));
+  const toAdd = codes.filter((c) => !existingCodes.has(c));
+  if (toAdd.length === 0) {
+    return { success: true, recovered: 0, skipped: codes.length };
+  }
+
+  // Reuse placeholder patients from a prior run; insert only the missing ones.
+  const bridgeKeys = toAdd.map((c) => `recovered:${c}`);
+  const { data: existingPatients } = await supabase
+    .from("patients")
+    .select("id, bridge_key")
+    .eq("practice_id", practiceId)
+    .in("bridge_key", bridgeKeys);
+  const patientByBridge = new Map(
+    (existingPatients ?? []).map((p) => [p.bridge_key as string, p.id as string])
+  );
+
+  const missing = toAdd
+    .filter((c) => !patientByBridge.has(`recovered:${c}`))
+    .map((c) => ({
+      practice_id: practiceId,
+      bridge_key: `recovered:${c}`,
+      attributes: { source: "recovered" },
+    }));
+  if (missing.length > 0) {
+    const { data: insertedP, error: pErr } = await supabase
+      .from("patients")
+      .insert(missing)
+      .select("id, bridge_key");
+    if (pErr) return { error: pErr.message };
+    for (const p of insertedP ?? []) {
+      patientByBridge.set(p.bridge_key as string, p.id as string);
+    }
+  }
+
+  const nowIso = new Date().toISOString();
+  let creditExpiresAt: string | null = null;
+  if (campaign.credit_expires_days) {
+    const d = new Date();
+    d.setDate(d.getDate() + campaign.credit_expires_days);
+    creditExpiresAt = d.toISOString().slice(0, 10);
+  }
+
+  const rows = toAdd
+    .map((c) => ({
+      practice_id: practiceId,
+      campaign_id: campaignId,
+      patient_id: patientByBridge.get(`recovered:${c}`),
+      code: c,
+      sent_at: nowIso,
+      credit_status: "promised",
+      credit_amount_cents: campaign.credit_amount_cents,
+      credit_expires_at: creditExpiresAt,
+    }))
+    .filter((r) => r.patient_id);
+
+  const { error: rErr, count } = await supabase
+    .from("survey_recipients")
+    .insert(rows, { count: "exact" });
+  if (rErr) return { error: rErr.message };
+
+  // The public form only resolves codes for an ACTIVE campaign.
+  await supabase
+    .from("survey_campaigns")
+    .update({ status: "active", updated_at: nowIso })
+    .eq("id", campaignId)
+    .neq("status", "active");
+
+  revalidatePath(`/admin/surveys/${campaignId}`);
+  revalidatePath("/admin/surveys");
+  return {
+    success: true,
+    recovered: count ?? rows.length,
+    skipped: codes.length - toAdd.length,
+  };
 }
 
 /**

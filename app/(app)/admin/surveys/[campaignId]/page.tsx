@@ -16,6 +16,7 @@ import { CampaignActions } from "@/components/surveys/campaign-actions";
 import { CampaignTitle } from "@/components/surveys/campaign-title";
 import { EnrollmentManager } from "@/components/surveys/enrollment-manager";
 import { AddTestRecipientDialog } from "@/components/surveys/add-test-recipient-dialog";
+import { RecoverFlyersDialog } from "@/components/surveys/recover-flyers-dialog";
 import { RecipientsTable } from "@/components/surveys/recipients-table";
 import { ReferralChart } from "@/components/surveys/referral-chart";
 import { ResponseFeed } from "@/components/surveys/response-feed";
@@ -152,6 +153,7 @@ export default async function CampaignDetailPage({
           asOf={patientsAsOf}
         />
         <AddTestRecipientDialog campaignId={campaignId} />
+        <RecoverFlyersDialog campaignId={campaignId} />
       </CampaignActions>
 
       {/* KPI row */}

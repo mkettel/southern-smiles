@@ -26,12 +26,10 @@ function formatCredit(cents: number): string {
 
 export function SurveyForm({
   code,
-  patientFirstName,
   questions,
   creditAmountCents,
 }: {
   code: string;
-  patientFirstName: string;
   questions: SurveyQuestion[];
   creditAmountCents: number;
 }) {
@@ -88,7 +86,7 @@ export function SurveyForm({
       <Card>
         <CardHeader className="items-center text-center">
           <CheckCircle2 className="mb-2 h-12 w-12 text-green-600 dark:text-green-500" />
-          <CardTitle>Thank you, {patientFirstName}!</CardTitle>
+          <CardTitle>Thank you!</CardTitle>
           <CardDescription>
             Your feedback means the world to us. Your{" "}
             {formatCredit(creditAmountCents)} appreciation credit will be applied
@@ -102,7 +100,7 @@ export function SurveyForm({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-2xl">Hi {patientFirstName} 👋</CardTitle>
+        <CardTitle className="text-2xl">Hi there 👋</CardTitle>
         <CardDescription>
           We&apos;d love to hear about your experience — it only takes a couple
           of minutes.

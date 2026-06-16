@@ -12,7 +12,6 @@ export interface ResolvedRecipient {
   practiceId: string;
   campaignId: string;
   patientId: string;
-  patientFirstName: string;
   campaignTitle: string;
   campaignStatus: "draft" | "active" | "closed";
   questions: SurveyQuestion[];
@@ -37,7 +36,6 @@ export async function resolveRecipientByCode(
     .from("survey_recipients")
     .select(
       `id, practice_id, campaign_id, patient_id, responded_at,
-       patient:patients(first_name, full_name),
        campaign:survey_campaigns(title, status, questions, credit_amount_cents, credit_expires_days)`
     )
     .eq("code", code)
@@ -45,10 +43,6 @@ export async function resolveRecipientByCode(
 
   if (error || !data) return null;
 
-  const patient = data.patient as unknown as {
-    first_name: string | null;
-    full_name: string;
-  } | null;
   const campaign = data.campaign as unknown as {
     title: string;
     status: "draft" | "active" | "closed";
@@ -59,17 +53,11 @@ export async function resolveRecipientByCode(
 
   if (!campaign) return null;
 
-  const firstName =
-    patient?.first_name?.trim() ||
-    patient?.full_name?.trim().split(/\s+/)[0] ||
-    "there";
-
   return {
     recipientId: data.id,
     practiceId: data.practice_id,
     campaignId: data.campaign_id,
     patientId: data.patient_id,
-    patientFirstName: firstName,
     campaignTitle: campaign.title,
     campaignStatus: campaign.status,
     questions: Array.isArray(campaign.questions) ? campaign.questions : [],
@@ -131,7 +119,6 @@ export async function getPublicSurveyView(
 
   return {
     status: "ok",
-    patientFirstName: r.patientFirstName,
     campaignTitle: r.campaignTitle,
     questions: r.questions,
     creditAmountCents: r.creditAmountCents,

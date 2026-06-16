@@ -350,23 +350,26 @@ export type CreditStatus = "none" | "promised" | "redeemed" | "expired";
 export interface Patient {
   id: string;
   practice_id: string;
-  full_name: string;
-  first_name: string | null;
-  phone: string | null;
-  email: string | null;
   external_ref: string | null;
+  // Opaque de-identification key (migration 037) — external_ref or a salted
+  // name hash. No patient name/phone/email is ever stored.
+  bridge_key: string | null;
   // Metrics (migration 033) — derived from imported revenue/visit data
   total_collected_cents: number;
   visit_count: number;
   first_seen: string | null;
   last_seen: string | null;
-  name_key: string | null;
   attributes: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
 
-/** A patient aggregated from raw CSV rows, ready to upsert. */
+/**
+ * A patient aggregated from raw CSV rows. BROWSER-ONLY: this carries the name
+ * fields for the import preview, but it is NEVER sent to the server — the
+ * import dialog converts it to a DeidentifiedPatient (computing bridge_key and
+ * dropping all identity) before the network call.
+ */
 export interface AggregatedPatient {
   full_name: string;
   first_name: string | null;
@@ -379,6 +382,19 @@ export interface AggregatedPatient {
   first_seen: string | null;
   last_seen: string | null;
   attributes: Record<string, unknown>;
+}
+
+/**
+ * The de-identified shape that actually crosses the wire to the server. No
+ * name/phone/email — only an opaque bridge_key + aggregate metrics.
+ */
+export interface DeidentifiedPatient {
+  bridge_key: string;
+  external_ref: string | null;
+  total_collected_cents: number;
+  visit_count: number;
+  first_seen: string | null;
+  last_seen: string | null;
 }
 
 export type DetectedColumnRole =
@@ -414,27 +430,6 @@ export type PatientSegment = "top_value" | "lapsed" | "repeat" | "new";
 /** A patient row plus which campaigns they're already enrolled in. */
 export interface PatientListItem extends Patient {
   enrolledCampaignIds: string[];
-}
-
-export interface PatientSheetSource {
-  id: string;
-  practice_id: string;
-  spreadsheet_id: string;
-  spreadsheet_url: string | null;
-  sheet_title: string | null;
-  last_synced_at: string | null;
-  last_row_count: number | null;
-  last_status: string | null;
-  last_error: string | null;
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface SheetSyncResult {
-  inserted: number;
-  updated: number;
-  rowCount: number;
 }
 
 export type FlyerBackgroundMode = "solid" | "image";
@@ -537,7 +532,6 @@ export interface PullQuote {
 /** Narrow, safe shape returned to the anonymous public survey page. */
 export interface PublicSurveyView {
   status: "ok" | "not_found" | "closed" | "already_responded";
-  patientFirstName?: string;
   campaignTitle?: string;
   questions?: SurveyQuestion[];
   creditAmountCents?: number;

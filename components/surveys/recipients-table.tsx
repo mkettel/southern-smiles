@@ -15,8 +15,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toCsv } from "@/lib/survey/csv";
 import { markCreditRedeemed } from "@/actions/surveys";
+import { patientLabel } from "@/lib/survey/label";
 import type { SurveyRecipient, CreditStatus } from "@/lib/types";
-import { Download, Printer, Check, FileText } from "lucide-react";
+import { Download, Printer, Check } from "lucide-react";
 
 const CREDIT_BADGE: Record<CreditStatus, { label: string; className: string }> = {
   none: { label: "Not sent", className: "bg-muted text-muted-foreground" },
@@ -44,15 +45,22 @@ export function RecipientsTable({
   const router = useRouter();
   const [redeeming, setRedeeming] = useState<string | null>(null);
 
+  // De-identified join file: opaque keys + survey link only, no names. The
+  // practice joins this against their own retained name+address list (by
+  // external_ref, else bridge_key) to address letters — or uses the in-app
+  // Mail merge tool, which does that join locally in the browser.
   function downloadMergeCsv() {
     const origin = window.location.origin;
     const rows = recipients.map((r) => ({
-      full_name: r.patient?.full_name ?? "",
-      first_name: r.patient?.first_name ?? "",
+      bridge_key: r.patient?.bridge_key ?? "",
+      external_ref: r.patient?.external_ref ?? "",
       survey_url: `${origin}/survey/${r.code}`,
       code: r.code,
     }));
-    const csv = toCsv(["full_name", "first_name", "survey_url", "code"], rows);
+    const csv = toCsv(
+      ["bridge_key", "external_ref", "survey_url", "code"],
+      rows
+    );
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -116,7 +124,7 @@ export function RecipientsTable({
                 return (
                   <TableRow key={r.id}>
                     <TableCell className="font-medium">
-                      {r.patient?.full_name ?? "—"}
+                      {r.patient ? patientLabel(r.patient) : "—"}
                     </TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground">
                       {r.code}
@@ -146,14 +154,6 @@ export function RecipientsTable({
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <a
-                          href={`/api/flyer/${campaignId}?recipientId=${r.id}`}
-                          className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium hover:bg-muted transition-colors"
-                          title={`Download ${r.patient?.full_name ?? "this patient"}'s flyer`}
-                        >
-                          <FileText className="h-3.5 w-3.5" />
-                          Flyer
-                        </a>
                         {r.credit_status === "promised" && (
                           <Button
                             variant="outline"

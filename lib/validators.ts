@@ -145,14 +145,6 @@ export const surveyCampaignSchema = z.object({
   credit_expires_days: z.number().int().min(1).max(3650).nullable().optional(),
 });
 
-export const patientImportRowSchema = z.object({
-  full_name: z.string().min(1, "Name is required").max(200),
-  first_name: z.string().max(100).nullable().optional(),
-  phone: z.string().max(40).nullable().optional(),
-  email: z.string().max(200).nullable().optional(),
-  external_ref: z.string().max(100).nullable().optional(),
-});
-
 export const surveySubmissionSchema = z.object({
   code: z.string().min(4).max(40),
   answers: z.record(z.string().max(64), z.unknown()),
@@ -162,27 +154,21 @@ export const redeemCreditSchema = z.object({
   recipient_id: uuidLike,
 });
 
-export const aggregatedPatientSchema = z.object({
-  full_name: z.string().min(1).max(200),
-  first_name: z.string().max(100).nullable().optional(),
-  name_key: z.string().min(1).max(220),
-  email: z.string().max(200).nullable().optional(),
-  phone: z.string().max(40).nullable().optional(),
+// De-identified import payload. NOTE: there are intentionally NO name/phone/
+// email fields here — this is the server boundary, so even a malicious client
+// cannot smuggle PHI through the import action. Identity is hashed to
+// bridge_key in the browser before it reaches the wire.
+export const deidentifiedPatientSchema = z.object({
+  bridge_key: z.string().min(1).max(200),
   external_ref: z.string().max(100).nullable().optional(),
   total_collected_cents: z.number().int().min(0).max(1_000_000_000),
   visit_count: z.number().int().min(0).max(100_000),
   first_seen: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   last_seen: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  attributes: z.record(z.string().max(64), z.unknown()).default({}),
 });
 
-export const importPatientDataSchema = z.object({
-  records: z.array(aggregatedPatientSchema).min(1).max(10000),
-});
-
-export const saveSheetSourceSchema = z.object({
-  url: z.string().min(1, "Paste a Google Sheets link").max(500),
-  sheetTitle: z.string().max(200).nullable().optional(),
+export const importDeidentifiedPatientsSchema = z.object({
+  records: z.array(deidentifiedPatientSchema).min(1).max(10000),
 });
 
 export const flyerConfigSchema = z.object({

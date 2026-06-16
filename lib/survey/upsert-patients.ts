@@ -1,39 +1,36 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { AggregatedPatient } from "@/lib/types";
+import type { DeidentifiedPatient } from "@/lib/types";
 
 /**
- * Upsert aggregated patient records into the patients table for a practice.
- * Matches existing patients by external_ref (preferred) else name_key:
+ * Upsert de-identified patient records into the patients table for a practice.
+ * Matches existing patients by external_ref (preferred) else bridge_key, and
  * refreshes the value/recency/frequency metrics (the import is the
- * authoritative snapshot) and coalesces contact fields (never wipes them).
+ * authoritative snapshot). No name/phone/email is ever read or written — the
+ * browser already hashed identity into bridge_key before sending.
  *
- * Shared by the CSV-upload action and the Google Sheets sync. The caller is
- * responsible for auth (requireAdmin) and cache revalidation.
+ * The caller is responsible for auth (requireAdmin) and cache revalidation.
  */
-export async function upsertAggregatedPatients(
+export async function upsertDeidentifiedPatients(
   supabase: SupabaseClient,
   practiceId: string,
-  records: AggregatedPatient[]
+  records: DeidentifiedPatient[]
 ): Promise<{ inserted: number; updated: number } | { error: string }> {
   type ExistingPatient = {
     id: string;
-    name_key: string | null;
+    bridge_key: string | null;
     external_ref: string | null;
-    email: string | null;
-    phone: string | null;
-    attributes: Record<string, unknown> | null;
   };
 
   const { data: existing } = await supabase
     .from("patients")
-    .select("id, name_key, external_ref, email, phone, attributes")
+    .select("id, bridge_key, external_ref")
     .eq("practice_id", practiceId);
 
   const byRef = new Map<string, ExistingPatient>();
   const byKey = new Map<string, ExistingPatient>();
   for (const e of (existing ?? []) as ExistingPatient[]) {
     if (e.external_ref) byRef.set(e.external_ref, e);
-    if (e.name_key) byKey.set(e.name_key, e);
+    if (e.bridge_key) byKey.set(e.bridge_key, e);
   }
 
   const inserts: Record<string, unknown>[] = [];
@@ -41,12 +38,12 @@ export async function upsertAggregatedPatients(
 
   for (const r of records) {
     const match =
-      (r.external_ref && byRef.get(r.external_ref)) || byKey.get(r.name_key) || null;
+      (r.external_ref && byRef.get(r.external_ref)) ||
+      byKey.get(r.bridge_key) ||
+      null;
 
     const metrics = {
-      full_name: r.full_name,
-      first_name: r.first_name ?? null,
-      name_key: r.name_key,
+      bridge_key: r.bridge_key,
       external_ref: r.external_ref ?? match?.external_ref ?? null,
       total_collected_cents: r.total_collected_cents,
       visit_count: r.visit_count,
@@ -59,19 +56,10 @@ export async function upsertAggregatedPatients(
         id: match.id,
         practice_id: practiceId,
         ...metrics,
-        email: r.email ?? match.email ?? null,
-        phone: r.phone ?? match.phone ?? null,
-        attributes: { ...(match.attributes ?? {}), ...r.attributes },
         updated_at: new Date().toISOString(),
       });
     } else {
-      inserts.push({
-        practice_id: practiceId,
-        ...metrics,
-        email: r.email ?? null,
-        phone: r.phone ?? null,
-        attributes: r.attributes ?? {},
-      });
+      inserts.push({ practice_id: practiceId, ...metrics });
     }
   }
 
@@ -89,7 +77,9 @@ export async function upsertAggregatedPatients(
   let updated = 0;
   for (let i = 0; i < updates.length; i += CHUNK) {
     const slice = updates.slice(i, i + CHUNK);
-    const { error } = await supabase.from("patients").upsert(slice, { onConflict: "id" });
+    const { error } = await supabase
+      .from("patients")
+      .upsert(slice, { onConflict: "id" });
     if (error) return { error: error.message };
     updated += slice.length;
   }

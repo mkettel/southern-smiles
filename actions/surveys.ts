@@ -5,17 +5,17 @@ import { createClient } from "@/lib/supabase/server";
 import { calculateCondition } from "@/lib/conditions";
 import { getCurrentWeekStart } from "@/lib/constants";
 import { generateSurveyCode } from "@/lib/survey/code";
-import { upsertAggregatedPatients } from "@/lib/survey/upsert-patients";
+import { upsertDeidentifiedPatients } from "@/lib/survey/upsert-patients";
+import { patientLabel } from "@/lib/survey/label";
 import {
   surveyCampaignSchema,
-  patientImportRowSchema,
   redeemCreditSchema,
-  importPatientDataSchema,
+  importDeidentifiedPatientsSchema,
   patientFiltersSchema,
   campaignQuestionsSchema,
 } from "@/lib/validators";
 import type {
-  AggregatedPatient,
+  DeidentifiedPatient,
   CampaignStats,
   Patient,
   PatientFilters,
@@ -61,115 +61,35 @@ export async function getPatients(): Promise<Patient[]> {
   const { data } = await supabase
     .from("patients")
     .select("*")
-    .order("full_name");
+    .order("total_collected_cents", { ascending: false });
   return (data as Patient[]) ?? [];
 }
 
 /**
- * Import a list of patients (parsed from CSV upstream). Dedupes within the
- * practice by external_ref when present; otherwise inserts. Returns counts.
+ * Import de-identified patient records. The browser has already hashed each
+ * patient's identity into an opaque bridge_key and stripped all name/phone/
+ * email, so nothing identifying reaches this server. Upserts by external_ref
+ * when present, else by bridge_key, refreshing value/recency/frequency metrics
+ * (the import is the authoritative snapshot).
  */
-export async function importPatients(input: {
-  rows: Array<{
-    full_name: string;
-    first_name?: string | null;
-    phone?: string | null;
-    email?: string | null;
-    external_ref?: string | null;
-  }>;
+export async function importDeidentifiedPatients(input: {
+  records: DeidentifiedPatient[];
 }) {
   const { supabase, practiceId } = await requireAdmin();
 
-  if (!Array.isArray(input.rows) || input.rows.length === 0) {
-    return { error: "No patients to import" };
-  }
-  if (input.rows.length > 5000) {
-    return { error: "Too many rows in a single import (max 5000)" };
-  }
-
-  const parsedRows = [];
-  for (const row of input.rows) {
-    const parsed = patientImportRowSchema.safeParse(row);
-    if (!parsed.success) continue; // skip malformed rows silently
-    parsedRows.push(parsed.data);
-  }
-  if (parsedRows.length === 0) {
-    return { error: "No valid rows found (need at least a name column)" };
-  }
-
-  // Existing external_refs in this practice → skip those for dedupe.
-  const refs = parsedRows
-    .map((r) => r.external_ref?.trim())
-    .filter((r): r is string => !!r);
-  const existingRefs = new Set<string>();
-  if (refs.length > 0) {
-    const { data: existing } = await supabase
-      .from("patients")
-      .select("external_ref")
-      .eq("practice_id", practiceId)
-      .in("external_ref", refs);
-    for (const e of existing ?? []) {
-      if (e.external_ref) existingRefs.add(e.external_ref);
-    }
-  }
-
-  const toInsert = parsedRows
-    .filter((r) => !(r.external_ref && existingRefs.has(r.external_ref.trim())))
-    .map((r) => ({
-      practice_id: practiceId,
-      full_name: r.full_name.trim(),
-      first_name:
-        r.first_name?.trim() || r.full_name.trim().split(/\s+/)[0] || null,
-      phone: r.phone?.trim() || null,
-      email: r.email?.trim() || null,
-      external_ref: r.external_ref?.trim() || null,
-    }));
-
-  let inserted = 0;
-  if (toInsert.length > 0) {
-    const { error, count } = await supabase
-      .from("patients")
-      .insert(toInsert, { count: "exact" });
-    if (error) return { error: error.message };
-    inserted = count ?? toInsert.length;
-  }
-
-  revalidatePath("/admin/surveys");
-  return {
-    success: true,
-    inserted,
-    skipped: parsedRows.length - toInsert.length,
-  };
-}
-
-/**
- * Import aggregated patient records (from the smart importer). Upserts by
- * external_ref when present, else by name_key. Refreshes value/recency/
- * frequency metrics (the import is the authoritative snapshot) and fills
- * contact fields when provided (coalesce — never wipes existing contacts).
- */
-export async function importPatientData(input: { records: AggregatedPatient[] }) {
-  const { supabase, practiceId } = await requireAdmin();
-
-  const parsed = importPatientDataSchema.safeParse(input);
+  const parsed = importDeidentifiedPatientsSchema.safeParse(input);
   if (!parsed.success) return { error: "Invalid import data" };
 
-  // Normalize Zod's optional/undefined fields to the strict AggregatedPatient shape.
-  const records: AggregatedPatient[] = parsed.data.records.map((r) => ({
-    full_name: r.full_name,
-    first_name: r.first_name ?? null,
-    name_key: r.name_key,
-    email: r.email ?? null,
-    phone: r.phone ?? null,
+  const records: DeidentifiedPatient[] = parsed.data.records.map((r) => ({
+    bridge_key: r.bridge_key,
     external_ref: r.external_ref ?? null,
     total_collected_cents: r.total_collected_cents,
     visit_count: r.visit_count,
     first_seen: r.first_seen ?? null,
     last_seen: r.last_seen ?? null,
-    attributes: r.attributes ?? {},
   }));
 
-  const result = await upsertAggregatedPatients(supabase, practiceId, records);
+  const result = await upsertDeidentifiedPatients(supabase, practiceId, records);
   if ("error" in result) return { error: result.error };
 
   revalidatePath("/admin/surveys");
@@ -195,7 +115,8 @@ export async function getPatientsFiltered(
     .limit(2000);
 
   if (f.search && f.search.trim()) {
-    query = query.ilike("full_name", `%${f.search.trim()}%`);
+    // Names are no longer stored — search the practice's own chart id.
+    query = query.ilike("external_ref", `%${f.search.trim()}%`);
   }
   if (typeof f.minValueCents === "number") {
     query = query.gte("total_collected_cents", f.minValueCents);
@@ -393,6 +314,31 @@ export async function getCampaignRecipients(
 }
 
 /**
+ * De-identified join data for the client-side Mail merge tool: per recipient,
+ * only the opaque key(s) and the survey code. No names. The browser joins this
+ * against the practice's own retained name+address list locally.
+ */
+export async function getCampaignMergeData(campaignId: string): Promise<
+  { bridge_key: string | null; external_ref: string | null; code: string }[]
+> {
+  const { supabase } = await requireAdmin();
+  const { data } = await supabase
+    .from("survey_recipients")
+    .select("code, patient:patients(bridge_key, external_ref)")
+    .eq("campaign_id", campaignId)
+    .order("created_at");
+
+  return ((data ?? []) as unknown as {
+    code: string;
+    patient: { bridge_key: string | null; external_ref: string | null } | null;
+  }[]).map((r) => ({
+    bridge_key: r.patient?.bridge_key ?? null,
+    external_ref: r.patient?.external_ref ?? null,
+    code: r.code,
+  }));
+}
+
+/**
  * Mint unique survey codes for patients in a campaign. Without patientIds it
  * enrolls every practice patient not already in the campaign. Insert-and-retry
  * guards against the (astronomically unlikely) code collision.
@@ -486,26 +432,19 @@ export async function unenrollAll(campaignId: string) {
 }
 
 /**
- * Add a one-off custom person to a campaign for testing (not from the CSV /
- * patient import). Creates a patient with a null name_key so it stays separate
- * from import dedupe, enrolls them with a real survey code, and returns the
- * survey link so you can run the flow end-to-end.
+ * Add a one-off test recipient to a campaign (not from the patient import).
+ * Mints a patient with a synthetic, opaque bridge_key (no PHI) so it stays
+ * separate from import dedupe, enrolls them with a real survey code, and
+ * returns the survey link so you can run the flow end-to-end.
  */
-export async function addManualRecipient(
-  campaignId: string,
-  input: { fullName: string; email?: string | null }
-) {
+export async function addManualRecipient(campaignId: string) {
   const { supabase, practiceId } = await requireAdmin();
-  const fullName = (input.fullName ?? "").trim();
-  if (!fullName) return { error: "Enter a name" };
 
   const { data: patient, error: pErr } = await supabase
     .from("patients")
     .insert({
       practice_id: practiceId,
-      full_name: fullName,
-      first_name: fullName.split(/\s+/)[0],
-      email: input.email?.trim() || null,
+      bridge_key: `manual:${generateSurveyCode()}`,
       attributes: { source: "manual" },
     })
     .select("id")
@@ -785,7 +724,7 @@ export async function getResponseFeed(
   const { supabase } = await requireAdmin();
   let query = supabase
     .from("survey_responses")
-    .select("*, patient:patients(id, full_name, first_name)")
+    .select("*, patient:patients(id, external_ref, bridge_key)")
     .order("submitted_at", { ascending: false })
     .limit(limit);
   if (campaignId) query = query.eq("campaign_id", campaignId);
@@ -839,7 +778,7 @@ export async function getPullQuotes(
 
   const { data: responses } = await supabase
     .from("survey_responses")
-    .select("answers, submitted_at, patient:patients(full_name)")
+    .select("answers, submitted_at, patient:patients(external_ref, bridge_key)")
     .eq("campaign_id", campaignId)
     .order("submitted_at", { ascending: false })
     .limit(limit);
@@ -847,12 +786,15 @@ export async function getPullQuotes(
   const quotes: PullQuote[] = [];
   for (const r of responses ?? []) {
     const answers = (r.answers as Record<string, unknown>) ?? {};
-    const patient = r.patient as unknown as { full_name: string } | null;
+    const patient = r.patient as unknown as {
+      external_ref: string | null;
+      bridge_key: string | null;
+    } | null;
     for (const q of textQuestions) {
       const v = answers[q.id];
       if (typeof v === "string" && v.trim()) {
         quotes.push({
-          patientName: patient?.full_name ?? "A patient",
+          patientName: patient ? patientLabel(patient) : "A patient",
           questionLabel: q.label,
           text: v.trim(),
           submittedAt: r.submitted_at as string,

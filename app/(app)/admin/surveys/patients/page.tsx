@@ -2,11 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getProfile } from "@/actions/auth";
 import { getPatientsFiltered, getCampaigns } from "@/actions/surveys";
-import { getSheetSource } from "@/actions/patient-sources";
 import { Card, CardContent } from "@/components/ui/card";
 import { ImportPatientsDialog } from "@/components/surveys/import-patients-dialog";
 import { PatientsTable } from "@/components/surveys/patients-table";
-import { SheetConnection } from "@/components/surveys/sheet-connection";
 import type { Profile } from "@/lib/types";
 import { ArrowLeft } from "lucide-react";
 
@@ -16,10 +14,9 @@ export default async function PatientsPage() {
   const profile = (await getProfile()) as Profile;
   if (profile.role !== "admin") redirect("/dashboard");
 
-  const [patients, campaigns, sheet] = await Promise.all([
+  const [patients, campaigns] = await Promise.all([
     getPatientsFiltered({}),
     getCampaigns(),
-    getSheetSource(),
   ]);
 
   const totalValue = patients.reduce((s, p) => s + p.total_collected_cents, 0);
@@ -52,11 +49,6 @@ export default async function PatientsPage() {
           <ImportPatientsDialog />
         </div>
       </div>
-
-      <SheetConnection
-        source={sheet.source}
-        googleConfigured={sheet.googleConfigured}
-      />
 
       {patients.length === 0 ? (
         <Card>

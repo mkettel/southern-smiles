@@ -17,7 +17,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { addManualRecipient } from "@/actions/surveys";
 import { UserPlus, ExternalLink, Copy } from "lucide-react";
 
@@ -25,33 +24,22 @@ export function AddTestRecipientDialog({ campaignId }: { campaignId: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
   const [link, setLink] = useState<string | null>(null);
 
   async function handleAdd() {
-    if (!fullName.trim()) {
-      toast.error("Enter a name");
-      return;
-    }
     setLoading(true);
-    const res = await addManualRecipient(campaignId, {
-      fullName,
-      email: email || null,
-    });
+    const res = await addManualRecipient(campaignId);
     setLoading(false);
     if (res.error || !("surveyPath" in res)) {
       toast.error(typeof res.error === "string" ? res.error : "Could not add");
       return;
     }
     setLink(`${window.location.origin}${res.surveyPath}`);
-    toast.success(`Added ${fullName.trim()} — survey link ready`);
+    toast.success("Test recipient added — survey link ready");
     router.refresh();
   }
 
   function reset() {
-    setFullName("");
-    setEmail("");
     setLink(null);
   }
 
@@ -76,8 +64,9 @@ export function AddTestRecipientDialog({ campaignId }: { campaignId: string }) {
           <DialogHeader>
             <DialogTitle>Add a test person</DialogTitle>
             <DialogDescription>
-              Enrolls a one-off person (not from your patient list) with a real
-              survey code, so you can run the flyer → QR → survey flow yourself.
+              Enrolls a one-off anonymous test recipient (not from your patient
+              list) with a real survey code, so you can run the flyer → QR →
+              survey flow yourself.
             </DialogDescription>
           </DialogHeader>
 
@@ -112,26 +101,11 @@ export function AddTestRecipientDialog({ campaignId }: { campaignId: string }) {
               </p>
             </div>
           ) : (
-            <div className="space-y-4 py-2">
-              <div className="space-y-2">
-                <Label htmlFor="tr-name">Name</Label>
-                <Input
-                  id="tr-name"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Test Patient"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="tr-email">Email (optional)</Label>
-                <Input
-                  id="tr-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                />
-              </div>
+            <div className="py-2">
+              <p className="text-sm text-muted-foreground">
+                This mints an anonymous test recipient with a real survey code.
+                No name or contact info is stored.
+              </p>
             </div>
           )}
 

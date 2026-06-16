@@ -11,6 +11,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { EditQuestionsDialog } from "@/components/surveys/edit-questions-dialog";
+import { patientLabel } from "@/lib/survey/label";
 import type { SurveyResponse, SurveyQuestion } from "@/lib/types";
 import { ChevronRight } from "lucide-react";
 
@@ -69,7 +70,7 @@ export function ResponseFeed({
               className="flex w-full items-center justify-between gap-3 border-b px-1 py-2.5 text-left text-sm transition-colors last:border-0 hover:bg-muted/50"
             >
               <span className="font-medium">
-                {r.patient?.full_name ?? "A patient"}
+                {r.patient ? patientLabel(r.patient) : "A patient"}
               </span>
               <span className="flex items-center gap-1 text-muted-foreground">
                 {r.referral_source ? `via ${r.referral_source} · ` : ""}
@@ -88,7 +89,7 @@ export function ResponseFeed({
           <DialogContent className="max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
-                {active?.patient?.full_name ?? "Response"}
+                {active?.patient ? patientLabel(active.patient) : "Response"}
               </DialogTitle>
               <DialogDescription>
                 {active &&

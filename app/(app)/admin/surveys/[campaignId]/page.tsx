@@ -20,6 +20,7 @@ import { RecipientsTable } from "@/components/surveys/recipients-table";
 import { ReferralChart } from "@/components/surveys/referral-chart";
 import { ResponseFeed } from "@/components/surveys/response-feed";
 import { FlyerDesigner } from "@/components/surveys/flyer-designer";
+import { MailMerge } from "@/components/surveys/mail-merge";
 import { getPracticeSettings } from "@/actions/settings";
 import { isImageGenConfigured } from "@/lib/ai/image";
 import {
@@ -224,6 +225,21 @@ export default async function CampaignDetailPage({
             practiceName={settings.name}
             creditLabel={creditLabel}
             aiEnabled={aiEnabled}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Mail merge — print name-addressed letters entirely in the browser */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Mail merge</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <MailMerge
+            campaignId={campaignId}
+            doc={flyerDocument}
+            practiceName={settings.name}
+            creditLabel={creditLabel}
           />
         </CardContent>
       </Card>

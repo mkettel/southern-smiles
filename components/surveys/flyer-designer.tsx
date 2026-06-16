@@ -44,7 +44,6 @@ import {
 import {
   BringToFront,
   Copy,
-  Download,
   Eye,
   Frame,
   ImageIcon,
@@ -851,32 +850,6 @@ export function FlyerDesigner({
     }
   }
 
-  async function generatePdf() {
-    setBusy("gen");
-    toast.info("Rendering your flyers — large batches can take a minute or two…");
-    try {
-      const res = await fetch(`/api/flyer/${campaignId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(docRef.current),
-      });
-      if (!res.ok) {
-        const detail = await res.text().catch(() => "");
-        toast.error(detail.slice(0, 200) || "Could not generate flyers");
-        return;
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `flyers-${campaignId.slice(0, 8)}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } finally {
-      setBusy(null);
-    }
-  }
-
   async function aiGenerate() {
     if (!aiBrief.trim()) {
       toast.error("Describe the flyer you want");
@@ -1310,10 +1283,10 @@ export function FlyerDesigner({
           <Eye className="mr-1.5 h-4 w-4" />
           {busy === "preview" ? "Rendering…" : "Print preview"}
         </Button>
-        <Button variant="outline" onClick={generatePdf} disabled={busy !== null}>
-          <Download className="mr-1.5 h-4 w-4" />
-          {busy === "gen" ? "Generating…" : "Generate flyers (PDF)"}
-        </Button>
+        <span className="text-xs text-muted-foreground">
+          Save your design, then use <strong>Mail merge</strong> below to print
+          name-addressed letters.
+        </span>
         {mounted && (
           <span className="text-xs text-muted-foreground">
             {lastSavedAt && formatSavedAt(lastSavedAt)

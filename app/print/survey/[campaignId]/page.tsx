@@ -3,6 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import QRCode from "qrcode";
 import { getProfile } from "@/actions/auth";
 import { getCampaign, getCampaignRecipients } from "@/actions/surveys";
+import { patientLabel } from "@/lib/survey/label";
 import type { Profile } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +37,13 @@ export default async function SurveyPrintSheet({
         width: 180,
         errorCorrectionLevel: "M",
       });
-      return { id: r.id, name: r.patient?.full_name ?? "", code: r.code, url, svg };
+      return {
+        id: r.id,
+        name: r.patient ? patientLabel(r.patient) : "",
+        code: r.code,
+        url,
+        svg,
+      };
     })
   );
 
@@ -47,7 +54,8 @@ export default async function SurveyPrintSheet({
           <h1 className="text-xl font-bold">{campaign.title} — QR sheet</h1>
           <p className="text-sm text-muted-foreground">
             {cards.length} code{cards.length === 1 ? "" : "s"}. Each QR is unique
-            to one patient — use these for mail-merge or printing.
+            to one patient. Labels are anonymized ids — use the Mail merge tool
+            to print name-addressed letters.
           </p>
         </div>
       </div>

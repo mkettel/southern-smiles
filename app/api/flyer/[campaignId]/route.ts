@@ -5,7 +5,6 @@
 import QRCode from "qrcode";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
-import { getCampaignRecipients } from "@/actions/surveys";
 import { getPracticeSettings } from "@/actions/settings";
 import { flyerConfigSchema, flyerDocumentSchema } from "@/lib/validators";
 import { buildFlyerHtml } from "@/lib/flyer/render-html";
@@ -79,59 +78,34 @@ function toDocument(
   );
 }
 
+/**
+ * Build a single SAMPLE page for the design preview. This route NEVER reads
+ * patient rows — it would otherwise pull names server-side, putting us back in
+ * HIPAA scope. Real, name-addressed letters are produced entirely client-side
+ * by the Mail merge tool (components/surveys/mail-merge.tsx), where the
+ * practice's name list never leaves the browser.
+ */
 async function buildRenderData(
   campaign: CampaignRow,
-  campaignId: string,
   origin: string,
-  practiceName: string,
-  preview: boolean,
-  recipientId: string | null
-): Promise<FlyerRenderData[] | null> {
+  practiceName: string
+): Promise<FlyerRenderData[]> {
   const creditLabel = `$${Math.round((campaign.credit_amount_cents ?? 0) / 100)}`;
-  const recipients = await getCampaignRecipients(campaignId);
-
-  let source = recipients;
-  if (recipientId) {
-    source = recipients.filter((r) => r.id === recipientId);
-    if (source.length === 0) return null;
-  } else if (preview) {
-    source = recipients.slice(0, 1);
-  }
-
-  const makeQr = (url: string) =>
-    QRCode.toDataURL(url, { margin: 1, width: 600, errorCorrectionLevel: "M" });
-
-  if (source.length === 0) {
-    const url = `${origin}/survey/SAMPLE`;
-    return [
-      {
-        firstName: "Jane",
-        fullName: "Jane Sample",
-        practiceName,
-        creditLabel,
-        surveyUrl: url.replace(/^https?:\/\//, ""),
-        qrDataUrl: await makeQr(url),
-      },
-    ];
-  }
-
-  return Promise.all(
-    source.map(async (r) => {
-      const url = `${origin}/survey/${r.code}`;
-      const first =
-        r.patient?.first_name?.trim() ||
-        r.patient?.full_name?.trim().split(/\s+/)[0] ||
-        "there";
-      return {
-        firstName: first,
-        fullName: r.patient?.full_name ?? "",
-        practiceName,
-        creditLabel,
-        surveyUrl: url.replace(/^https?:\/\//, ""),
-        qrDataUrl: await makeQr(url),
-      };
-    })
-  );
+  const url = `${origin}/survey/SAMPLE`;
+  return [
+    {
+      firstName: "Jane",
+      fullName: "Jane Sample",
+      practiceName,
+      creditLabel,
+      surveyUrl: url.replace(/^https?:\/\//, ""),
+      qrDataUrl: await QRCode.toDataURL(url, {
+        margin: 1,
+        width: 600,
+        errorCorrectionLevel: "M",
+      }),
+    },
+  ];
 }
 
 function pdfResponse(buffer: Buffer, campaignId: string, preview: boolean) {
@@ -154,7 +128,6 @@ async function render(
 
   const { searchParams, origin } = new URL(request.url);
   const preview = searchParams.get("preview") === "1";
-  const recipientId = searchParams.get("recipientId");
 
   const campaign = await loadCampaign(supabase, campaignId);
   if (!campaign) return new Response("Campaign not found", { status: 404 });
@@ -169,15 +142,7 @@ async function render(
     ? ensureDocumentSafety(documentOverride)
     : toDocument(campaign.flyer_config, campaign, logoUrl);
 
-  const data = await buildRenderData(
-    campaign,
-    campaignId,
-    origin,
-    settings.name,
-    preview,
-    recipientId
-  );
-  if (!data) return new Response("Recipient not found", { status: 404 });
+  const data = await buildRenderData(campaign, origin, settings.name);
 
   try {
     const html = await buildFlyerHtml(doc, data);

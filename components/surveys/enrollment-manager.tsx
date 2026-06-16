@@ -22,6 +22,7 @@ import {
   unenrollAll,
 } from "@/actions/surveys";
 import { cn } from "@/lib/utils";
+import { patientLabel } from "@/lib/survey/label";
 import type { PatientListItem } from "@/lib/types";
 import { Users, Check } from "lucide-react";
 
@@ -64,7 +65,7 @@ export function EnrollmentManager({
     const minCents = minDollars ? parseFloat(minDollars) * 100 : 0;
     const q = search.trim().toLowerCase();
     return patients.filter((p) => {
-      if (q && !p.full_name.toLowerCase().includes(q)) return false;
+      if (q && !patientLabel(p).toLowerCase().includes(q)) return false;
       if (minCents && p.total_collected_cents < minCents) return false;
       if (repeatOnly && p.visit_count <= 1) return false;
       if (lapsedOnly) {
@@ -223,7 +224,7 @@ export function EnrollmentManager({
                       checked={selected.has(p.id)}
                       onChange={() => toggle(p.id)}
                     />
-                    <span className="flex-1 font-medium">{p.full_name}</span>
+                    <span className="flex-1 font-medium">{patientLabel(p)}</span>
                     <span className="tabular-nums text-muted-foreground">
                       ${Math.round(p.total_collected_cents / 100).toLocaleString()}
                     </span>

@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { EnrollDialog } from "@/components/surveys/enroll-dialog";
 import { deletePatients } from "@/actions/surveys";
+import { patientLabel } from "@/lib/survey/label";
 import { cn } from "@/lib/utils";
 import type { PatientListItem, SurveyCampaign } from "@/lib/types";
 import { Trash2, Users } from "lucide-react";
@@ -83,7 +84,7 @@ export function PatientsTable({
     const minCents = minDollars ? parseFloat(minDollars) * 100 : 0;
     const q = search.trim().toLowerCase();
     return patients.filter((p) => {
-      if (q && !p.full_name.toLowerCase().includes(q)) return false;
+      if (q && !patientLabel(p).toLowerCase().includes(q)) return false;
       if (minCents && p.total_collected_cents < minCents) return false;
       if (repeatOnly && p.visit_count <= 1) return false;
       if (lapsedOnly) {
@@ -161,7 +162,7 @@ export function PatientsTable({
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search name…"
+          placeholder="Search id…"
           className="w-48"
         />
         <div className="flex items-center gap-1.5">
@@ -258,11 +259,11 @@ export function PatientsTable({
                         type="checkbox"
                         checked={isSel}
                         onChange={() => toggle(p.id)}
-                        aria-label={`Select ${p.full_name}`}
+                        aria-label={`Select ${patientLabel(p)}`}
                       />
                     </TableCell>
                     <TableCell className="font-medium">
-                      {p.full_name}
+                      {patientLabel(p)}
                       {p.enrolledCampaignIds.length > 0 && (
                         <span className="ml-2 text-xs text-muted-foreground">
                           · enrolled

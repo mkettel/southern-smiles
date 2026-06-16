@@ -25,7 +25,6 @@ export default async function SurveyPage({
     return (
       <SurveyForm
         code={code}
-        patientFirstName={view.patientFirstName!}
         questions={view.questions!}
         creditAmountCents={view.creditAmountCents!}
       />

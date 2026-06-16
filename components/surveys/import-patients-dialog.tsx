@@ -19,7 +19,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { aggregatePatients } from "@/lib/survey/patient-import";
-import { importPatientData } from "@/actions/surveys";
+import { computeBridgeKey } from "@/lib/survey/bridge";
+import { importDeidentifiedPatients } from "@/actions/surveys";
+import { getPatientSalt } from "@/actions/patient-identity";
+import type { DeidentifiedPatient } from "@/lib/types";
 import { Upload } from "lucide-react";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -52,7 +55,34 @@ export function ImportPatientsDialog() {
       return;
     }
     setLoading(true);
-    const res = await importPatientData({ records: result.patients });
+
+    // De-identify in the browser: hash each patient's identity into an opaque
+    // bridge_key and drop every name/phone/email BEFORE anything is sent. The
+    // server only ever receives the de-identified records below.
+    const saltRes = await getPatientSalt();
+    if ("error" in saltRes) {
+      setLoading(false);
+      toast.error(saltRes.error);
+      return;
+    }
+    const salt = saltRes.salt;
+
+    const records: DeidentifiedPatient[] = await Promise.all(
+      result.patients.map(async (p) => ({
+        bridge_key: await computeBridgeKey({
+          externalRef: p.external_ref,
+          nameKey: p.name_key,
+          salt,
+        }),
+        external_ref: p.external_ref,
+        total_collected_cents: p.total_collected_cents,
+        visit_count: p.visit_count,
+        first_seen: p.first_seen,
+        last_seen: p.last_seen,
+      }))
+    );
+
+    const res = await importDeidentifiedPatients({ records });
     setLoading(false);
 
     if (!("inserted" in res)) {
@@ -93,6 +123,9 @@ export function ImportPatientsDialog() {
               Upload or paste any patient CSV — a contact list or a revenue
               report. We detect the columns, skip title/total rows, and
               aggregate revenue, visit count, and last-visit date per patient.
+              Names never leave your browser — only anonymized keys and metrics
+              are saved. <strong>Keep this CSV file</strong> — you&apos;ll need
+              it to address survey letters at mail-merge time.
             </DialogDescription>
           </DialogHeader>
 

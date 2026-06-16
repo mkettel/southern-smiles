@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogTrigger,
-  DialogPortal,
-  DialogOverlay,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -18,13 +17,14 @@ import {
   QrCode,
   Send,
   BarChart3,
+  ShieldCheck,
 } from "lucide-react";
 
 const STEPS = [
   {
     icon: Users,
     title: "1 · Import your patients",
-    body: "Upload a CSV of the patient list (name, optional phone/email). Patients are saved permanently, so insights about a person build up across every mailing.",
+    body: "Upload a CSV of your patient list. Only anonymous stats (visit count, spend, recency) are saved — names, phones, and emails are never stored. Those stay in your file, so keep it. Insights about each person still build up across every mailing.",
   },
   {
     icon: FilePlus2,
@@ -34,7 +34,7 @@ const STEPS = [
   {
     icon: QrCode,
     title: "3 · Enroll & print",
-    body: "“Enroll all patients” mints a unique QR code per patient. Print the QR sheet, or download the Merge CSV (name + link) for your mail house. Each code maps to exactly one patient — so a scan already knows who they are and the $50 can’t be claimed by anyone else.",
+    body: "“Enroll all patients” mints a unique QR code per patient. To print, open Mail merge and upload your patient list again — your browser matches each person to their code and builds personalized letters (“Dear Jane” + QR) to print or save as PDF for your mail house. The names are matched in your browser and never sent to us. Each code maps to exactly one patient, so the $50 can’t be claimed by anyone else.",
   },
   {
     icon: Send,
@@ -44,7 +44,7 @@ const STEPS = [
   {
     icon: BarChart3,
     title: "5 · Patients scan → you get insights",
-    body: "The QR opens a private, no-login form that greets the patient by name. Responses tie to that patient (one per code). You’ll see your response rate, where patients come from, their best quotes, and a $50 credit ledger to mark credits redeemed when used.",
+    body: "The QR opens a private, no-login form. Responses tie to that patient’s code (one per code). You’ll see your response rate, where patients come from, their best quotes, and a $50 credit ledger to mark credits redeemed when used.",
   },
 ];
 
@@ -60,35 +60,55 @@ export function HowItWorks() {
         <HelpCircle className="h-4 w-4" />
         How it works
       </DialogTrigger>
-      <DialogPortal>
-        <DialogOverlay />
-        <DialogContent className="max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>How patient surveys work</DialogTitle>
-            <DialogDescription>
-              Mail a personalized letter with a QR code, capture private
-              feedback, and learn who your referrers and biggest fans are.
-            </DialogDescription>
-          </DialogHeader>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>How patient surveys work</DialogTitle>
+          <DialogDescription>
+            Mail a personalized letter with a QR code, capture private feedback,
+            and learn who your referrers and biggest fans are.
+          </DialogDescription>
+        </DialogHeader>
 
-          <ol className="space-y-4 py-2">
-            {STEPS.map((s) => {
-              const Icon = s.icon;
-              return (
-                <li key={s.title} className="flex gap-3">
-                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <ol className="py-1">
+          {STEPS.map((s, i) => {
+            const Icon = s.icon;
+            const last = i === STEPS.length - 1;
+            return (
+              <li key={s.title} className="flex gap-3.5">
+                <div className="flex flex-col items-center">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                     <Icon className="h-4 w-4" />
                   </span>
-                  <div>
-                    <p className="text-sm font-medium">{s.title}</p>
-                    <p className="text-sm text-muted-foreground">{s.body}</p>
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-        </DialogContent>
-      </DialogPortal>
+                  {!last && <span className="my-1 w-px flex-1 bg-border" />}
+                </div>
+                <div className={cn("flex-1", last ? "pb-0" : "pb-6")}>
+                  <p className="pt-1.5 text-sm font-medium leading-tight">
+                    {s.title}
+                  </p>
+                  <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                    {s.body}
+                  </p>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+
+        <div className="flex gap-3 rounded-lg border border-primary/20 bg-primary/5 p-4">
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <ShieldCheck className="h-4 w-4" />
+          </span>
+          <div>
+            <p className="text-sm font-medium">Private by design</p>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Patient names, phones, and emails never reach our servers — they
+              stay on your computer and are only matched to survey codes inside
+              your browser. No protected patient information is stored here, so
+              the system stays out of HIPAA scope.
+            </p>
+          </div>
+        </div>
+      </DialogContent>
     </Dialog>
   );
 }

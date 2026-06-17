@@ -283,6 +283,80 @@ export interface MyTaskItem {
 }
 
 // ============================================================
+// Bills
+// ============================================================
+
+export type BillCategory =
+  | "Rent"
+  | "Equipment Loans"
+  | "Marketing"
+  | "Lab Fees"
+  | "Dental Supplies"
+  | "Software"
+  | "Utilities"
+  | "Insurance"
+  | "Professional Services"
+  | "Miscellaneous";
+
+export type BillStatus = "unpaid" | "paid";
+
+export type BillAgingBucket =
+  | "current"
+  | "30"
+  | "60"
+  | "90"
+  | "120_plus";
+
+export interface BillVendor {
+  id: string;
+  practice_id: string;
+  name: string;
+  notes: string | null;
+  is_misc: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Bill {
+  id: string;
+  practice_id: string;
+  vendor_id: string;
+  category: BillCategory;
+  invoice_date: string;
+  due_date: string;
+  amount_cents: number;
+  notes: string | null;
+  status: BillStatus;
+  paid_date: string | null;
+  created_at: string;
+  updated_at: string;
+  vendor?: BillVendor;
+}
+
+export interface BillVendorSummary extends BillVendor {
+  bill_count: number;
+  unpaid_count: number;
+  unpaid_total_cents: number;
+}
+
+export interface BillsSummary {
+  total_unpaid_cents: number;
+  total_paid_this_month_cents: number;
+  unpaid_by_aging: Record<BillAgingBucket, number>;
+  unpaid_by_vendor: { vendor_id: string; vendor_name: string; total_cents: number }[];
+  unpaid_by_category: { category: BillCategory; total_cents: number }[];
+  due_this_week: Bill[];
+  due_this_month: Bill[];
+  overdue: Bill[];
+}
+
+export interface BillsDashboardData {
+  vendors: BillVendorSummary[];
+  bills: Bill[];
+  summary: BillsSummary;
+}
+
+// ============================================================
 // Composite / view types for the UI
 // ============================================================
 

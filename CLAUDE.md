@@ -61,6 +61,13 @@ The 5 conditions are determined by effective % change (inverted for `good_direct
 
 ## Important Conventions
 
+### Local Change Handoff Workflow
+
+- Monzer tests and iterates on changes locally first.
+- Once the local version feels right, changes should be packaged for Matt to review/proofread.
+- Matt is responsible for applying Supabase changes, final code review, and making updates live.
+- Prefer preparing a PR-style branch and summary for Matt rather than treating local changes as production-ready.
+
 ### shadcn/ui v4 (base-ui)
 
 This project uses shadcn/ui v4 which is built on `@base-ui/react`, NOT Radix UI. Key differences:

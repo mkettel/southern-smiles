@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useState, useMemo } from "react";
+import Link from "next/link";
 import { StatHistoryChart } from "@/components/stats/stat-history-chart";
 import { ConditionDisplay } from "@/components/stats/condition-display";
 import { formatStatValue, formatPercentChange } from "@/lib/utils";
@@ -20,11 +21,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { StatName } from "@/components/stats/stat-name";
 import type { StatEntry, StatType, OicLogEntry } from "@/lib/types";
 import { calculateCondition } from "@/lib/conditions";
 import type { ConditionName } from "@/lib/conditions";
-import { ChevronRight, MessageSquareText, Users } from "lucide-react";
+import { ChevronRight, MessageSquareText, ReceiptText, Users } from "lucide-react";
 import { EntryRowActions } from "@/components/stats/entry-row-actions";
 import { ConditionPicker } from "@/components/stats/condition-picker";
 
@@ -38,6 +40,7 @@ interface StatDetailViewProps {
   entries: StatEntry[];
   oicEntries?: OicLogEntry[];
   isAdmin?: boolean;
+  isBillsStat?: boolean;
 }
 
 /** A single week's data: aggregated total + individual contributor entries */
@@ -66,6 +69,7 @@ export function StatDetailView({
   entries,
   oicEntries = [],
   isAdmin = false,
+  isBillsStat = false,
 }: StatDetailViewProps) {
   const employees = useMemo(() => {
     const map = new Map<string, string>();
@@ -195,14 +199,22 @@ export function StatDetailView({
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold">
-          <StatName name={statName} description={statDescription} />
-        </h1>
-        <p className="text-muted-foreground">
-          {divisionLabel} &middot; {postTitle}
-          {currentEmployeeName && <> &middot; {currentEmployeeName}</>}
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">
+            <StatName name={statName} description={statDescription} />
+          </h1>
+          <p className="text-muted-foreground">
+            {divisionLabel} &middot; {postTitle}
+            {currentEmployeeName && <> &middot; {currentEmployeeName}</>}
+          </p>
+        </div>
+        {isBillsStat && (
+          <Button nativeButton={false} render={<Link href="/admin/bills" />}>
+            <ReceiptText className="h-4 w-4" />
+            Open Bills tracker
+          </Button>
+        )}
       </div>
 
       {hasMultipleEmployees && (

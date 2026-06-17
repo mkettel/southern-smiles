@@ -40,6 +40,11 @@ export default async function StatDetailPage({
   ]);
 
   const isAdmin = profile?.role === "admin";
+  const isBillsStat =
+    isAdmin &&
+    stat.name.toLowerCase() === "bills" &&
+    stat.stat_type === "dollar" &&
+    typedStat.post?.division?.number === 7;
 
   if (!isAdmin && (typedStat.is_private || typedStat.post?.division?.is_private)) {
     return (
@@ -60,6 +65,7 @@ export default async function StatDetailPage({
       entries={entries}
       oicEntries={oicEntries}
       isAdmin={isAdmin}
+      isBillsStat={isBillsStat}
     />
   );
 }

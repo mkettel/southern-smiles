@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BILL_CATEGORIES } from "@/lib/bills";
 
 // Relaxed UUID pattern — accepts any UUID-shaped string without enforcing
 // RFC 4122 version/variant bits (our seed data uses hand-crafted UUIDs).
@@ -125,6 +126,31 @@ export const taskSchema = z.object({
 export const taskCommentSchema = z.object({
   message: z.string().min(1, "Message cannot be empty").max(4000),
 });
+
+export const billVendorSchema = z.object({
+  name: z.string().trim().min(1, "Vendor name is required").max(160),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+export const billSchema = z
+  .object({
+    vendor_id: uuidLike,
+    category: z.enum(BILL_CATEGORIES),
+    invoice_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+    due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+    amount_cents: z.number().int().min(0, "Amount must be 0 or greater"),
+    notes: z.string().max(4000).nullable().optional(),
+    status: z.enum(["unpaid", "paid"]).default("unpaid"),
+    paid_date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date")
+      .nullable()
+      .optional(),
+  })
+  .refine((value) => value.status === "unpaid" || Boolean(value.paid_date), {
+    message: "Paid date is required when a bill is paid",
+    path: ["paid_date"],
+  });
 
 // ============================================================
 // Patient surveys & referral insights

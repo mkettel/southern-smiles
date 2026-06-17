@@ -19,12 +19,16 @@ interface DashboardViewerProps {
 export function DashboardViewer({ stats, isAdmin = false }: DashboardViewerProps) {
   const [view, setView] = useState<ViewMode>("grouped");
 
+  // Read the persisted view on mount only — a lazy useState initializer would
+  // run during SSR (no localStorage) and cause a hydration mismatch, so the
+  // effect is the correct pattern here despite the set-state-in-effect rule.
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(VIEW_STORAGE_KEY) as
         | ViewMode
         | null;
       if (saved === "grouped" || saved === "wall" || saved === "canvas") {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setView(saved);
       }
     } catch {

@@ -26,6 +26,7 @@ import {
   CheckSquare,
   Download,
   Mailbox,
+  ReceiptText,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -57,6 +58,7 @@ const adminOnlyLinks: NavLink[] = [
   { href: "/admin/tasks", label: "Command Center", icon: CheckSquare },
   { href: "/admin/organization", label: "Organization", icon: Building2 },
   { href: "/admin/stats", label: "Manage Stats", icon: BarChart3 },
+  { href: "/admin/bills", label: "Bills", icon: ReceiptText },
   { href: "/admin/surveys", label: "Patient Surveys", icon: Mailbox },
   { href: "/admin/export", label: "Export & Analyze", icon: Download },
   { href: "/admin/employees", label: "Manage Team", icon: Settings },
@@ -162,10 +164,13 @@ export function Sidebar({
   const [collapsed, setCollapsed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
-  // Hydrate from localStorage to avoid a flash of the wrong state.
+  // Hydrate from localStorage to avoid a flash of the wrong state. Reading on
+  // mount (not via a lazy initializer) is required to avoid an SSR hydration
+  // mismatch, so the set-state-in-effect calls below are intentional.
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(STORAGE_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (saved === "1") setCollapsed(true);
     } catch {
       // ignore

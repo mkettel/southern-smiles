@@ -1,9 +1,6 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "@/actions/auth";
-import {
-  getAdminDashboard,
-  getMissingSubmissions,
-} from "@/actions/dashboard";
+import { getAdminDashboard, getMissingSubmissions } from "@/actions/dashboard";
 import { getCurrentWeekStart, formatWeekLabel } from "@/lib/constants";
 import { DashboardViewer } from "@/components/dashboard/dashboard-viewer";
 import { MissingSubmissions } from "@/components/dashboard/missing-submissions";
@@ -30,7 +27,7 @@ export default async function DashboardPage({
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <h1 className="text-2xl font-bold">Survial Board</h1>
           <p className="text-muted-foreground">{formatWeekLabel(weekStart)}</p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
@@ -41,7 +38,20 @@ export default async function DashboardPage({
                 href="/admin/export"
                 className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-3 text-sm font-medium whitespace-nowrap hover:bg-muted transition-colors sm:flex-none"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M3 3v18h18" />
+                  <path d="m19 9-5 5-4-4-3 3" />
+                </svg>
                 Export Data
               </Link>
               <a
@@ -50,7 +60,21 @@ export default async function DashboardPage({
                 rel="noopener noreferrer"
                 className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-3 text-sm font-medium whitespace-nowrap hover:bg-muted transition-colors sm:flex-none"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
                 Export PDF
               </a>
             </div>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/types";
 import {
@@ -26,6 +26,7 @@ import {
   CheckSquare,
   Download,
   Mailbox,
+  ReceiptText,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -57,6 +58,7 @@ const adminOnlyLinks: NavLink[] = [
   { href: "/admin/tasks", label: "Command Center", icon: CheckSquare },
   { href: "/admin/organization", label: "Organization", icon: Building2 },
   { href: "/admin/stats", label: "Manage Stats", icon: BarChart3 },
+  { href: "/admin/bills", label: "Bills", icon: ReceiptText },
   { href: "/admin/surveys", label: "Patient Surveys", icon: Mailbox },
   { href: "/admin/export", label: "Export & Analyze", icon: Download },
   { href: "/admin/employees", label: "Manage Team", icon: Settings },
@@ -160,18 +162,6 @@ export function Sidebar({
   const pathname = usePathname();
   const isAdmin = role === "admin";
   const [collapsed, setCollapsed] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-
-  // Hydrate from localStorage to avoid a flash of the wrong state.
-  useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (saved === "1") setCollapsed(true);
-    } catch {
-      // ignore
-    }
-    setHydrated(true);
-  }, []);
 
   function toggle() {
     setCollapsed((c) => {
@@ -197,9 +187,7 @@ export function Sidebar({
         className="hidden md:block shrink-0"
         style={{
           width: spacerWidth,
-          transition: hydrated
-            ? `width ${TRANSITION_MS}ms ${SPRING_EASING}`
-            : undefined,
+          transition: `width ${TRANSITION_MS}ms ${SPRING_EASING}`,
         }}
         aria-hidden
       />
@@ -212,9 +200,7 @@ export function Sidebar({
           bottom: FLOAT_INSET,
           left: FLOAT_INSET,
           width: sidebarWidth,
-          transition: hydrated
-            ? `width ${TRANSITION_MS}ms ${SPRING_EASING}`
-            : undefined,
+          transition: `width ${TRANSITION_MS}ms ${SPRING_EASING}`,
         }}
       >
         {/* Edge toggle — always visible affordance for collapse / expand. */}
@@ -252,9 +238,7 @@ export function Sidebar({
               opacity: collapsed ? 0 : 1,
               transform: collapsed ? "scale(0.92)" : "scale(1)",
               pointerEvents: collapsed ? "none" : "auto",
-              transition: hydrated
-                ? `opacity ${TRANSITION_MS}ms ${SPRING_EASING}, transform ${TRANSITION_MS}ms ${SPRING_EASING}`
-                : undefined,
+              transition: `opacity ${TRANSITION_MS}ms ${SPRING_EASING}, transform ${TRANSITION_MS}ms ${SPRING_EASING}`,
             }}
             aria-hidden={collapsed}
           >
@@ -285,9 +269,7 @@ export function Sidebar({
               opacity: collapsed ? 1 : 0,
               transform: collapsed ? "scale(1)" : "scale(0.6)",
               pointerEvents: collapsed ? "auto" : "none",
-              transition: hydrated
-                ? `opacity ${TRANSITION_MS}ms ${SPRING_EASING}, transform ${TRANSITION_MS}ms ${SPRING_EASING}`
-                : undefined,
+              transition: `opacity ${TRANSITION_MS}ms ${SPRING_EASING}, transform ${TRANSITION_MS}ms ${SPRING_EASING}`,
             }}
             aria-hidden={!collapsed}
           >
@@ -303,7 +285,7 @@ export function Sidebar({
               link={link}
               active={
                 pathname === link.href ||
-                pathname.startsWith(link.href + "/")
+  pathname.startsWith(link.href + "/")
               }
               collapsed={collapsed}
             />

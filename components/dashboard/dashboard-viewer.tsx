@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { LayoutList, LayoutGrid, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatCard } from "./stat-card";
@@ -16,21 +16,11 @@ interface DashboardViewerProps {
   isAdmin?: boolean;
 }
 
-export function DashboardViewer({ stats, isAdmin = false }: DashboardViewerProps) {
+export function DashboardViewer({
+  stats,
+  isAdmin = false,
+}: DashboardViewerProps) {
   const [view, setView] = useState<ViewMode>("grouped");
-
-  useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(VIEW_STORAGE_KEY) as
-        | ViewMode
-        | null;
-      if (saved === "grouped" || saved === "wall" || saved === "canvas") {
-        setView(saved);
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
 
   function selectView(next: ViewMode) {
     setView(next);

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/types";
 import {
@@ -162,6 +162,21 @@ export function Sidebar({
   const pathname = usePathname();
   const isAdmin = role === "admin";
   const [collapsed, setCollapsed] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+
+  // Hydrate from localStorage to avoid a flash of the wrong state. Reading on
+  // mount (not via a lazy initializer) is required to avoid an SSR hydration
+  // mismatch, so the set-state-in-effect calls below are intentional.
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(STORAGE_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (saved === "1") setCollapsed(true);
+    } catch {
+      // ignore
+    }
+    setHydrated(true);
+  }, []);
 
   function toggle() {
     setCollapsed((c) => {
@@ -187,7 +202,9 @@ export function Sidebar({
         className="hidden md:block shrink-0"
         style={{
           width: spacerWidth,
-          transition: `width ${TRANSITION_MS}ms ${SPRING_EASING}`,
+          transition: hydrated
+            ? `width ${TRANSITION_MS}ms ${SPRING_EASING}`
+            : undefined,
         }}
         aria-hidden
       />
@@ -200,7 +217,9 @@ export function Sidebar({
           bottom: FLOAT_INSET,
           left: FLOAT_INSET,
           width: sidebarWidth,
-          transition: `width ${TRANSITION_MS}ms ${SPRING_EASING}`,
+          transition: hydrated
+            ? `width ${TRANSITION_MS}ms ${SPRING_EASING}`
+            : undefined,
         }}
       >
         {/* Edge toggle — always visible affordance for collapse / expand. */}
@@ -238,7 +257,9 @@ export function Sidebar({
               opacity: collapsed ? 0 : 1,
               transform: collapsed ? "scale(0.92)" : "scale(1)",
               pointerEvents: collapsed ? "none" : "auto",
-              transition: `opacity ${TRANSITION_MS}ms ${SPRING_EASING}, transform ${TRANSITION_MS}ms ${SPRING_EASING}`,
+              transition: hydrated
+                ? `opacity ${TRANSITION_MS}ms ${SPRING_EASING}, transform ${TRANSITION_MS}ms ${SPRING_EASING}`
+                : undefined,
             }}
             aria-hidden={collapsed}
           >
@@ -269,7 +290,9 @@ export function Sidebar({
               opacity: collapsed ? 1 : 0,
               transform: collapsed ? "scale(1)" : "scale(0.6)",
               pointerEvents: collapsed ? "auto" : "none",
-              transition: `opacity ${TRANSITION_MS}ms ${SPRING_EASING}, transform ${TRANSITION_MS}ms ${SPRING_EASING}`,
+              transition: hydrated
+                ? `opacity ${TRANSITION_MS}ms ${SPRING_EASING}, transform ${TRANSITION_MS}ms ${SPRING_EASING}`
+                : undefined,
             }}
             aria-hidden={!collapsed}
           >
@@ -285,7 +308,7 @@ export function Sidebar({
               link={link}
               active={
                 pathname === link.href ||
-  pathname.startsWith(link.href + "/")
+                pathname.startsWith(link.href + "/")
               }
               collapsed={collapsed}
             />

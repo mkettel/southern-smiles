@@ -2,7 +2,6 @@ import {
   endOfMonth,
   endOfWeek,
   format,
-  isAfter,
   isBefore,
   isSameMonth,
   isWithinInterval,
@@ -183,11 +182,4 @@ export function buildBillsSummary(
       .filter((bill) => isBillOverdue(bill, referenceDate))
       .sort((a, b) => a.due_date.localeCompare(b.due_date)),
   };
-}
-
-export function isPastDueDate(date: string, referenceDate = new Date()): boolean {
-  const due = new Date(date + "T00:00:00");
-  const today = new Date(referenceDate);
-  today.setHours(0, 0, 0, 0);
-  return isBefore(due, today) && !isAfter(due, today);
 }

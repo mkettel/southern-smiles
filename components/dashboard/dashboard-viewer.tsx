@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { LayoutList, LayoutGrid, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatCard } from "./stat-card";
@@ -16,11 +16,25 @@ interface DashboardViewerProps {
   isAdmin?: boolean;
 }
 
-export function DashboardViewer({
-  stats,
-  isAdmin = false,
-}: DashboardViewerProps) {
+export function DashboardViewer({ stats, isAdmin = false }: DashboardViewerProps) {
   const [view, setView] = useState<ViewMode>("grouped");
+
+  // Read the persisted view on mount only — a lazy useState initializer would
+  // run during SSR (no localStorage) and cause a hydration mismatch, so the
+  // effect is the correct pattern here despite the set-state-in-effect rule.
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(VIEW_STORAGE_KEY) as
+        | ViewMode
+        | null;
+      if (saved === "grouped" || saved === "wall" || saved === "canvas") {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setView(saved);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   function selectView(next: ViewMode) {
     setView(next);

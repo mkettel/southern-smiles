@@ -48,7 +48,7 @@ async function ensureMiscVendor(
 
   if (existing) return existing as BillVendor;
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("bill_vendors")
     .insert({
       practice_id: practiceId,
@@ -57,6 +57,18 @@ async function ensureMiscVendor(
     })
     .select("*")
     .single();
+
+  // A concurrent render may have created the misc vendor first, tripping the
+  // one-misc-per-practice unique index. Fall back to re-selecting it.
+  if (error) {
+    const { data: raced } = await supabase
+      .from("bill_vendors")
+      .select("*")
+      .eq("practice_id", practiceId)
+      .eq("is_misc", true)
+      .maybeSingle();
+    return (raced as BillVendor | null) ?? null;
+  }
 
   return (data as BillVendor | null) ?? null;
 }

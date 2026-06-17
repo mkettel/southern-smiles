@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 037: Bills tracking
+-- Migration 038: Bills tracking
 -- ============================================================
 
 CREATE TABLE bill_vendors (

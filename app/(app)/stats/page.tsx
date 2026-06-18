@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { addDays, format } from "date-fns";
-import { CalendarDays, CalendarRange } from "lucide-react";
+import { CalendarDays, CalendarRange, CheckCircle2, ListChecks } from "lucide-react";
 import { getProfile } from "@/actions/auth";
 import { getStatsWorkspace } from "@/actions/stats-workspace";
 import { getCurrentWeekStart, formatWeekLabel } from "@/lib/constants";
@@ -28,6 +28,23 @@ export default async function StatsPage({
   const weekStart = params.week ?? getCurrentWeekStart();
   const mode = params.mode === "weekly" ? "weekly" : "daily";
   const data = await getStatsWorkspace(weekStart);
+
+  const dates = getWorkspaceDates(weekStart);
+  const today = format(new Date(), "yyyy-MM-dd");
+  const showTodayChecklist =
+    mode === "daily" && !data.setupRequired && dates.includes(today);
+  const dailyStats = data.stats.filter(
+    (item) =>
+      item.stat.daily_tracking_enabled && item.stat.weekly_formula !== "manual",
+  );
+  const enteredToday = dailyStats.filter((item) =>
+    item.dailyEntries.some(
+      (entry) =>
+        entry.entry_date === today &&
+        (entry.input_value != null || entry.value != null),
+    ),
+  ).length;
+  const allDoneToday = dailyStats.length > 0 && enteredToday === dailyStats.length;
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
@@ -61,6 +78,31 @@ export default async function StatsPage({
         })}
       </div>
 
+      {showTodayChecklist && dailyStats.length > 0 && (
+        <div
+          className={cn(
+            "flex items-center gap-2 rounded-lg border p-3 text-sm",
+            allDoneToday
+              ? "border-emerald-500/30 bg-emerald-500/5"
+              : "border-border bg-card",
+          )}
+        >
+          {allDoneToday ? (
+            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+          ) : (
+            <ListChecks className="h-4 w-4 text-muted-foreground" />
+          )}
+          <span className="font-medium">
+            Today, {format(new Date(`${today}T00:00:00`), "EEE")}
+          </span>
+          <span className="text-muted-foreground">
+            {allDoneToday
+              ? "all stats entered"
+              : `${enteredToday} of ${dailyStats.length} entered`}
+          </span>
+        </div>
+      )}
+
       {data.setupRequired ? (
         <Card className="border-amber-500/40 bg-amber-500/5">
           <CardContent className="py-8 text-center">
@@ -73,7 +115,7 @@ export default async function StatsPage({
           key={`${mode}:${weekStart}`}
           mode={mode}
           weekStart={weekStart}
-          dates={getWorkspaceDates(weekStart)}
+          dates={dates}
           stats={data.stats}
           isAdmin={data.isAdmin}
         />

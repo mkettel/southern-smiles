@@ -163,7 +163,7 @@ export async function getStatsExport(
         .order("display_order"),
       supabase
         .from("stat_entries")
-        .select("stat_id, week_start, value, profile:profiles(full_name)")
+        .select("stat_id, week_start, value, profile:profiles!stat_entries_profile_id_fkey(full_name)")
         .gte("week_start", queryStart)
         .lte("week_start", end)
         .order("week_start", { ascending: true }),

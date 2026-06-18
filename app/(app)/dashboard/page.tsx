@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "@/actions/auth";
-import { getAdminDashboard, getMissingSubmissions } from "@/actions/dashboard";
+import { getAdminDashboard, getWeeklyCoverage } from "@/actions/dashboard";
 import { getCurrentWeekStart, formatWeekLabel } from "@/lib/constants";
 import { DashboardViewer } from "@/components/dashboard/dashboard-viewer";
-import { MissingSubmissions } from "@/components/dashboard/missing-submissions";
+import { WeeklyCoverage } from "@/components/dashboard/weekly-coverage";
 import { WeekSelector } from "@/components/dashboard/week-selector";
 import Link from "next/link";
 
@@ -18,9 +18,9 @@ export default async function DashboardPage({
   const weekStart = params.week ?? getCurrentWeekStart();
   const isAdmin = profile.role === "admin";
 
-  const [stats, missing] = await Promise.all([
+  const [stats, coverage] = await Promise.all([
     getAdminDashboard(weekStart),
-    isAdmin ? getMissingSubmissions(weekStart) : Promise.resolve([]),
+    isAdmin ? getWeeklyCoverage(weekStart) : Promise.resolve(null),
   ]);
 
   return (
@@ -81,7 +81,7 @@ export default async function DashboardPage({
           )}
           {!isAdmin && (
             <Link
-              href={`/enter?week=${weekStart}`}
+              href={`/stats?mode=daily&week=${weekStart}`}
               className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground whitespace-nowrap hover:bg-primary/80 transition-colors"
             >
               Enter Stats
@@ -90,9 +90,7 @@ export default async function DashboardPage({
         </div>
       </div>
 
-      {isAdmin && missing.length > 0 && (
-        <MissingSubmissions missing={missing} />
-      )}
+      {isAdmin && coverage && <WeeklyCoverage coverage={coverage} />}
 
       {stats.length > 0 ? (
         <DashboardViewer stats={stats} isAdmin={isAdmin} />

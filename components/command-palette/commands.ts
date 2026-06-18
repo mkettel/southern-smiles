@@ -67,11 +67,11 @@ export function buildCommands({ role }: BuildOpts): CommandItem[] {
     {
       id: "nav-enter",
       label: "Enter Stats",
-      keywords: ["log", "weekly", "submit"],
+      keywords: ["log", "weekly", "daily", "submit"],
       group: "Navigate",
       icon: ClipboardEdit,
       type: "navigate",
-      href: "/enter",
+      href: "/stats?mode=daily",
     },
     {
       id: "nav-tasks",

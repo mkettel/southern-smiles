@@ -216,26 +216,18 @@ export function BillsDashboard({ initialData }: BillsDashboardProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-lg font-semibold">Bills</h2>
-          <p className="text-sm text-muted-foreground">
-            Track unpaid invoices, vendor folders, and paid history.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" onClick={openNewVendor}>
-            <Folder className="h-4 w-4" />
-            Vendor
-          </Button>
-          <Button onClick={openNewBill}>
-            <Plus className="h-4 w-4" />
-            Bill
-          </Button>
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <Button variant="outline" onClick={openNewVendor}>
+          <Folder className="h-4 w-4" />
+          Vendor
+        </Button>
+        <Button onClick={openNewBill}>
+          <Plus className="h-4 w-4" />
+          Bill
+        </Button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-[280px_repeat(3,minmax(0,1fr))]">
         <SummaryCard
           icon={<WalletCards className="h-4 w-4" />}
           label="Total unpaid"

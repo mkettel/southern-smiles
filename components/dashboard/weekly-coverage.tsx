@@ -1,7 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, CalendarCheck2, Check, ChevronDown } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarCheck2,
+  Check,
+  ChevronDown,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
   CoverageState,
@@ -70,12 +75,20 @@ function StatRow({ stat }: { stat: StatCoverage }) {
   );
 }
 
-function PersonBlock({ person }: { person: PersonCoverage }) {
+function PersonBlock({
+  person,
+  showName,
+}: {
+  person: PersonCoverage;
+  showName: boolean;
+}) {
   return (
     <div className="border-t border-border pt-3 first:border-t-0 first:pt-0">
-      <div className="mb-1 text-sm font-medium">
-        {person.profile.full_name}
-      </div>
+      {showName && (
+        <div className="mb-1 text-sm font-semibold">
+          {person.profile.full_name}
+        </div>
+      )}
       {person.stats.map((stat) => (
         <StatRow key={stat.statId} stat={stat} />
       ))}
@@ -97,7 +110,11 @@ function ProgressBar({ filled, total }: { filled: number; total: number }) {
   );
 }
 
-export function WeeklyCoverage({ coverage }: { coverage: WeeklyCoverageResult }) {
+export function WeeklyCoverage({
+  coverage,
+}: {
+  coverage: WeeklyCoverageResult;
+}) {
   if (coverage.setupRequired || coverage.people.length === 0) return null;
 
   // Caught up: collapse to a single positive line — no per-person grid, no nagging.
@@ -111,7 +128,10 @@ export function WeeklyCoverage({ coverage }: { coverage: WeeklyCoverageResult })
             <Check className="h-3 w-3" /> on track
           </span>
         </div>
-        <ProgressBar filled={coverage.filledSlots} total={coverage.totalSlots} />
+        <ProgressBar
+          filled={coverage.filledSlots}
+          total={coverage.totalSlots}
+        />
       </div>
     );
   }
@@ -126,7 +146,13 @@ export function WeeklyCoverage({ coverage }: { coverage: WeeklyCoverageResult })
     }
   }
 
-  return <BehindPanel coverage={coverage} behindPeople={behindPeople} behindCount={behindStatIds.size} />;
+  return (
+    <BehindPanel
+      coverage={coverage}
+      behindPeople={behindPeople}
+      behindCount={behindStatIds.size}
+    />
+  );
 }
 
 function BehindPanel({
@@ -199,7 +225,11 @@ function BehindPanel({
 
             <div className="space-y-3">
               {behindPeople.map((person) => (
-                <PersonBlock key={person.profile.id} person={person} />
+                <PersonBlock
+                  key={person.profile.id}
+                  person={person}
+                  showName={behindPeople.length > 1}
+                />
               ))}
             </div>
           </div>

@@ -477,10 +477,23 @@ export async function getWeeklyCoverage(
 
   const { data: callerProfile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("*")
     .eq("id", user.id)
     .single();
-  if (callerProfile?.role !== "admin") return empty;
+  if (!callerProfile) return empty;
+  const caller = callerProfile as Profile;
+  const isAdmin = caller.role === "admin";
+
+  // Non-admins only see coverage for the stats on the posts they hold.
+  let scopedPostIds: string[] | null = null;
+  if (!isAdmin) {
+    const { data: myPosts } = await supabase
+      .from("employee_posts")
+      .select("post_id")
+      .eq("profile_id", user.id);
+    scopedPostIds = myPosts?.map((p) => p.post_id) ?? [];
+    if (!scopedPostIds.length) return empty;
+  }
 
   const week = weekStart ?? getCurrentWeekStart();
   const monday = new Date(`${week}T00:00:00`);
@@ -491,11 +504,13 @@ export async function getWeeklyCoverage(
   const lastDay = dates[dates.length - 1];
   const labels = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 
-  const { data: stats } = await supabase
+  let statsQuery = supabase
     .from("stats")
     .select("*, post:posts(*)")
     .eq("is_active", true)
     .order("display_order");
+  if (scopedPostIds) statsQuery = statsQuery.in("post_id", scopedPostIds);
+  const { data: stats } = await statsQuery;
 
   const statIds = (stats ?? []).map((s) => s.id);
   if (!statIds.length) return empty;
@@ -520,21 +535,24 @@ export async function getWeeklyCoverage(
   );
   const weeklySet = new Set((weekly ?? []).map((w) => w.stat_id));
 
-  // Map post → active employees so coverage is grouped by responsible person.
-  const postIds = [...new Set((stats ?? []).map((s) => s.post_id))];
-  const { data: assignments } = await supabase
-    .from("employee_posts")
-    .select("*, profile:profiles(*)")
-    .in("post_id", postIds);
+  // For admins, group coverage by responsible person (post → employees).
+  // Non-admins only see their own stats, attributed to themselves.
   const postEmployeesMap = new Map<string, Profile[]>();
-  assignments?.forEach((a) => {
-    const profile = a.profile as unknown as Profile | null;
-    if (profile && profile.is_active !== false) {
-      const list = postEmployeesMap.get(a.post_id) ?? [];
-      list.push(profile);
-      postEmployeesMap.set(a.post_id, list);
-    }
-  });
+  if (isAdmin) {
+    const postIds = [...new Set((stats ?? []).map((s) => s.post_id))];
+    const { data: assignments } = await supabase
+      .from("employee_posts")
+      .select("*, profile:profiles(*)")
+      .in("post_id", postIds);
+    assignments?.forEach((a) => {
+      const profile = a.profile as unknown as Profile | null;
+      if (profile && profile.is_active !== false) {
+        const list = postEmployeesMap.get(a.post_id) ?? [];
+        list.push(profile);
+        postEmployeesMap.set(a.post_id, list);
+      }
+    });
+  }
 
   const unassigned = {
     id: "unassigned",
@@ -585,7 +603,12 @@ export async function getWeeklyCoverage(
       behind,
     };
 
-    for (const employee of employees.length ? employees : [unassigned]) {
+    const targets = isAdmin
+      ? employees.length
+        ? employees
+        : [unassigned]
+      : [caller];
+    for (const employee of targets) {
       let person = personMap.get(employee.id);
       if (!person) {
         person = { profile: employee, stats: [], behindCount: 0 };

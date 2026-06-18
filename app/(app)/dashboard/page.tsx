@@ -20,7 +20,7 @@ export default async function DashboardPage({
 
   const [stats, coverage] = await Promise.all([
     getAdminDashboard(weekStart),
-    isAdmin ? getWeeklyCoverage(weekStart) : Promise.resolve(null),
+    getWeeklyCoverage(weekStart),
   ]);
 
   return (
@@ -90,7 +90,7 @@ export default async function DashboardPage({
         </div>
       </div>
 
-      {isAdmin && coverage && <WeeklyCoverage coverage={coverage} />}
+      {coverage && <WeeklyCoverage coverage={coverage} />}
 
       {stats.length > 0 ? (
         <DashboardViewer stats={stats} isAdmin={isAdmin} />

@@ -60,11 +60,12 @@ export default async function EmployeeDetailPage({
 
   const statIds = stats?.map((s) => s.id) ?? [];
 
-  // Get recent entries for THIS employee only
+  // Get recent entries for this employee's assigned stats.
+  // Under the unified model there is one canonical row per stat/week and
+  // profile_id is only the last editor, so scope by assigned stats (not editor).
   const { data: entries } = await supabase
     .from("stat_entries")
     .select("*, stat:stats(*)")
-    .eq("profile_id", profileId)
     .in("stat_id", statIds)
     .order("week_start", { ascending: false })
     .limit(50);

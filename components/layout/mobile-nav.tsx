@@ -9,7 +9,6 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/s
 import {
   Menu,
   LayoutDashboard,
-  ClipboardEdit,
   Settings,
   FileText,
   BarChart3,
@@ -39,7 +38,7 @@ interface NavLink {
 
 const sharedLinks: NavLink[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/enter", label: "Enter Stats", icon: ClipboardEdit },
+  { href: "/stats", label: "Stats", icon: BarChart3 },
   { href: "/tasks", label: "My Tasks", icon: CheckSquare },
   { href: "/oic-log", label: "OIC Log", icon: FileText },
   { href: "/org-board", label: "Org Board", icon: Network },

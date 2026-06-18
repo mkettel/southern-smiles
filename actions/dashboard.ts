@@ -1,5 +1,6 @@
 "use server";
 
+import { addDays, format } from "date-fns";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentWeekStart, getLastNWeeks } from "@/lib/constants";
 import { calculateCondition, type ConditionName } from "@/lib/conditions";
@@ -88,7 +89,7 @@ export async function getAdminDashboard(
   // Get all entries for current week, previous week, and sparkline range
   const { data: entries } = await supabase
     .from("stat_entries")
-    .select("*, profile:profiles(*)")
+    .select("*, profile:profiles!stat_entries_profile_id_fkey(*)")
     .in("stat_id", statIds)
     .gte("week_start", sparklineWeeks[0])
     .lte("week_start", week)
@@ -372,15 +373,12 @@ export async function getMissingSubmissions(weekStart?: string) {
   // Get all entries for this week
   const { data: entries } = await supabase
     .from("stat_entries")
-    .select("stat_id, profile_id")
+    .select("stat_id")
     .eq("week_start", week);
 
-  const entrySet = new Set(
-    entries?.map((e) => `${e.profile_id}:${e.stat_id}`) ?? []
-  );
+  const entrySet = new Set(entries?.map((e) => e.stat_id) ?? []);
 
   // Find missing
-  const missing: { profile: Profile; missingStats: string[] }[] = [];
   const profileMap = new Map<string, { profile: Profile; missingStats: string[] }>();
 
   for (const assignment of activeAssignments) {
@@ -391,7 +389,7 @@ export async function getMissingSubmissions(weekStart?: string) {
     );
 
     for (const stat of assignedStats) {
-      if (!entrySet.has(`${profile.id}:${stat.id}`)) {
+      if (!entrySet.has(stat.id)) {
         if (!profileMap.has(profile.id)) {
           profileMap.set(profile.id, { profile, missingStats: [] });
         }
@@ -401,4 +399,208 @@ export async function getMissingSubmissions(weekStart?: string) {
   }
 
   return Array.from(profileMap.values());
+}
+
+// ============================================================
+// Weekly entry coverage (replaces the binary "missing submissions"
+// view for the daily-tracking model). Shows per-person, per-stat
+// completion across the work week. Today is never flagged as late;
+// only a skipped *past* weekday counts as "behind".
+// ============================================================
+
+export type CoverageState = "entered" | "today" | "upcoming" | "skipped";
+
+export interface CoverageDay {
+  date: string;
+  label: string;
+  state: CoverageState;
+}
+
+export interface StatCoverage {
+  statId: string;
+  statName: string;
+  /** Manual/weekly-only stats have no daily dots — just a weekly entered flag. */
+  isManual: boolean;
+  days: CoverageDay[];
+  weeklyEntered: boolean;
+  behind: boolean;
+}
+
+export interface PersonCoverage {
+  profile: Profile;
+  stats: StatCoverage[];
+  behindCount: number;
+}
+
+export interface WeeklyCoverageResult {
+  people: PersonCoverage[];
+  totalSlots: number;
+  filledSlots: number;
+  anyBehind: boolean;
+  /** True when migration 039 isn't applied yet (no daily table/columns). */
+  setupRequired: boolean;
+}
+
+/** Detect a missing daily-tracking schema so the dashboard degrades gracefully. */
+function coverageSetupMissing(
+  error: { code?: string; message?: string } | null,
+): boolean {
+  const m = error?.message?.toLowerCase() ?? "";
+  return Boolean(
+    error &&
+      (m.includes("daily_stat_entries") ||
+        m.includes("weekly_formula") ||
+        m.includes("daily_tracking_enabled") ||
+        error.code === "PGRST204" ||
+        error.code === "PGRST205" ||
+        error.code === "42P01" ||
+        error.code === "42703"),
+  );
+}
+
+export async function getWeeklyCoverage(
+  weekStart?: string,
+): Promise<WeeklyCoverageResult> {
+  const empty: WeeklyCoverageResult = {
+    people: [],
+    totalSlots: 0,
+    filledSlots: 0,
+    anyBehind: false,
+    setupRequired: false,
+  };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const { data: callerProfile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (callerProfile?.role !== "admin") return empty;
+
+  const week = weekStart ?? getCurrentWeekStart();
+  const monday = new Date(`${week}T00:00:00`);
+  const dates = Array.from({ length: 5 }, (_, i) =>
+    format(addDays(monday, i), "yyyy-MM-dd"),
+  );
+  const today = format(new Date(), "yyyy-MM-dd");
+  const lastDay = dates[dates.length - 1];
+  const labels = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+
+  const { data: stats } = await supabase
+    .from("stats")
+    .select("*, post:posts(*)")
+    .eq("is_active", true)
+    .order("display_order");
+
+  const statIds = (stats ?? []).map((s) => s.id);
+  if (!statIds.length) return empty;
+
+  const [{ data: daily, error: dailyError }, { data: weekly }] =
+    await Promise.all([
+      supabase
+        .from("daily_stat_entries")
+        .select("stat_id, entry_date")
+        .in("stat_id", statIds)
+        .eq("week_start", week),
+      supabase
+        .from("stat_entries")
+        .select("stat_id")
+        .in("stat_id", statIds)
+        .eq("week_start", week),
+    ]);
+  if (coverageSetupMissing(dailyError)) return { ...empty, setupRequired: true };
+
+  const dailySet = new Set(
+    (daily ?? []).map((d) => `${d.stat_id}:${d.entry_date}`),
+  );
+  const weeklySet = new Set((weekly ?? []).map((w) => w.stat_id));
+
+  // Map post → active employees so coverage is grouped by responsible person.
+  const postIds = [...new Set((stats ?? []).map((s) => s.post_id))];
+  const { data: assignments } = await supabase
+    .from("employee_posts")
+    .select("*, profile:profiles(*)")
+    .in("post_id", postIds);
+  const postEmployeesMap = new Map<string, Profile[]>();
+  assignments?.forEach((a) => {
+    const profile = a.profile as unknown as Profile | null;
+    if (profile && profile.is_active !== false) {
+      const list = postEmployeesMap.get(a.post_id) ?? [];
+      list.push(profile);
+      postEmployeesMap.set(a.post_id, list);
+    }
+  });
+
+  const unassigned = {
+    id: "unassigned",
+    full_name: "Unassigned",
+  } as unknown as Profile;
+
+  const personMap = new Map<string, PersonCoverage>();
+  let totalSlots = 0;
+  let filledSlots = 0;
+  let anyBehind = false;
+
+  for (const stat of stats ?? []) {
+    const isManual =
+      stat.weekly_formula === "manual" || stat.daily_tracking_enabled === false;
+    const days: CoverageDay[] = [];
+    let behind = false;
+
+    if (!isManual) {
+      dates.forEach((date, i) => {
+        const entered = dailySet.has(`${stat.id}:${date}`);
+        let state: CoverageState;
+        if (entered) state = "entered";
+        else if (date < today) state = "skipped";
+        else if (date === today) state = "today";
+        else state = "upcoming";
+        if (state === "skipped") behind = true;
+        // Progress counts only days that are actually due (past or today).
+        if (date <= today) {
+          totalSlots++;
+          if (entered) filledSlots++;
+        }
+        days.push({ date, label: labels[i], state });
+      });
+    } else if (today > lastDay && !weeklySet.has(stat.id)) {
+      // Manual stats aren't "late" until the week is fully over.
+      behind = true;
+    }
+
+    if (behind) anyBehind = true;
+
+    const employees = postEmployeesMap.get(stat.post_id) ?? [];
+    const coverage: StatCoverage = {
+      statId: stat.id,
+      statName: stat.name,
+      isManual,
+      days,
+      weeklyEntered: weeklySet.has(stat.id),
+      behind,
+    };
+
+    for (const employee of employees.length ? employees : [unassigned]) {
+      let person = personMap.get(employee.id);
+      if (!person) {
+        person = { profile: employee, stats: [], behindCount: 0 };
+        personMap.set(employee.id, person);
+      }
+      person.stats.push(coverage);
+      if (behind) person.behindCount++;
+    }
+  }
+
+  return {
+    people: Array.from(personMap.values()),
+    totalSlots,
+    filledSlots,
+    anyBehind,
+    setupRequired: false,
+  };
 }

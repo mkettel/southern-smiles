@@ -20,6 +20,7 @@ import { StatFormDialog } from "@/components/admin/stat-form-dialog";
 import { StatToggleButton } from "@/components/admin/stat-toggle-button";
 import { PrivacyToggleButton } from "@/components/admin/privacy-toggle-button";
 import { StatName } from "@/components/stats/stat-name";
+import { StatFormulaControl } from "@/components/admin/stat-formula-control";
 import { Plus, Pencil } from "lucide-react";
 import type { Profile, Post } from "@/lib/types";
 
@@ -61,6 +62,7 @@ export default async function ManageStatsPage() {
                 <TableHead>Name</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Direction</TableHead>
+                <TableHead>Weekly Formula</TableHead>
                 <TableHead>Post</TableHead>
                 <TableHead>Division</TableHead>
                 <TableHead>Status</TableHead>
@@ -95,6 +97,9 @@ export default async function ManageStatsPage() {
                         ? "Higher is better"
                         : "Lower is better"}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <StatFormulaControl stat={stat} stats={stats} />
                   </TableCell>
                   <TableCell>{stat.post?.title}</TableCell>
                   <TableCell>
@@ -147,10 +152,10 @@ export default async function ManageStatsPage() {
               {stats.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
+                    colSpan={9}
                     className="text-center text-muted-foreground py-8"
                   >
-                    No stats defined yet. Click "Add Stat" to create one.
+                    No stats defined yet. Click Add Stat to create one.
                   </TableCell>
                 </TableRow>
               )}

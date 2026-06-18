@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { divisionSchema, postSchema, statDefinitionSchema, departmentSchema, sectionSchema } from "@/lib/validators";
 import type { ConditionName } from "@/lib/conditions";
+import type { WeeklyFormula } from "@/lib/types";
 
 async function requireAdmin() {
   const supabase = await createClient();
@@ -192,7 +193,12 @@ export async function createStat(input: {
   const parsed = statDefinitionSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
-  const { error } = await supabase.from("stats").insert({ ...parsed.data, practice_id: practiceId });
+  const { error } = await supabase.from("stats").insert({
+    ...parsed.data,
+    practice_id: practiceId,
+    weekly_formula: parsed.data.stat_type === "percentage" ? "average" : "sum",
+    daily_tracking_enabled: true,
+  });
   if (error) return { error: error.message };
 
   revalidatePath("/admin/stats");
@@ -220,6 +226,37 @@ export async function updateStat(
   revalidatePath("/admin/stats");
   revalidatePath("/dashboard");
   revalidatePath("/enter");
+  return { success: true };
+}
+
+export async function updateStatFormula(
+  id: string,
+  input: { weekly_formula: WeeklyFormula; formula_source_stat_id?: string | null },
+) {
+  const { supabase } = await requireAdmin();
+  if (
+    input.weekly_formula === "collections_per_staff" &&
+    !input.formula_source_stat_id
+  ) {
+    return { error: "Choose the collections source stat" };
+  }
+
+  const { error } = await supabase
+    .from("stats")
+    .update({
+      weekly_formula: input.weekly_formula,
+      daily_tracking_enabled: input.weekly_formula !== "manual",
+      formula_source_stat_id:
+        input.weekly_formula === "collections_per_staff"
+          ? input.formula_source_stat_id
+          : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/stats");
+  revalidatePath("/stats");
   return { success: true };
 }
 

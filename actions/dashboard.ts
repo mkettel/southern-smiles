@@ -372,15 +372,12 @@ export async function getMissingSubmissions(weekStart?: string) {
   // Get all entries for this week
   const { data: entries } = await supabase
     .from("stat_entries")
-    .select("stat_id, profile_id")
+    .select("stat_id")
     .eq("week_start", week);
 
-  const entrySet = new Set(
-    entries?.map((e) => `${e.profile_id}:${e.stat_id}`) ?? []
-  );
+  const entrySet = new Set(entries?.map((e) => e.stat_id) ?? []);
 
   // Find missing
-  const missing: { profile: Profile; missingStats: string[] }[] = [];
   const profileMap = new Map<string, { profile: Profile; missingStats: string[] }>();
 
   for (const assignment of activeAssignments) {
@@ -391,7 +388,7 @@ export async function getMissingSubmissions(weekStart?: string) {
     );
 
     for (const stat of assignedStats) {
-      if (!entrySet.has(`${profile.id}:${stat.id}`)) {
+      if (!entrySet.has(stat.id)) {
         if (!profileMap.has(profile.id)) {
           profileMap.set(profile.id, { profile, missingStats: [] });
         }

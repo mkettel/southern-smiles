@@ -5,6 +5,7 @@ import type { ConditionName, GoodDirection } from "./conditions";
 // ============================================================
 
 export type StatType = "dollar" | "percentage" | "count";
+export type WeeklyFormula = "sum" | "average" | "manual" | "collections_per_staff";
 export type UserRole = "admin" | "employee";
 
 export interface Division {
@@ -91,6 +92,9 @@ export interface Stat {
   display_order: number;
   is_active: boolean;
   is_private: boolean;
+  daily_tracking_enabled: boolean;
+  weekly_formula: WeeklyFormula;
+  formula_source_stat_id: string | null;
   /** Admin-assigned lifetime condition for this stat. Null = not set. */
   overall_condition: import("./conditions").ConditionName | null;
   created_at: string;
@@ -113,7 +117,26 @@ export interface StatEntry {
   playbook_response: string | null;
   submitted_at: string;
   updated_at: string;
+  calculated_value?: number | null;
+  is_manual_override?: boolean;
+  updated_by?: string | null;
   // Joined
+  stat?: Stat;
+  profile?: Profile;
+}
+
+export interface DailyStatEntry {
+  id: string;
+  practice_id: string;
+  stat_id: string;
+  profile_id: string;
+  entry_date: string;
+  week_start: string;
+  input_value?: number | null;
+  value: number | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
   stat?: Stat;
   profile?: Profile;
 }
@@ -397,6 +420,24 @@ export interface MyStatForEntry {
   previousValue: number | null;
   previousWeekStart: string | null;
   existingEntry: StatEntry | null;
+}
+
+export interface DailyStatForEntry {
+  stat: Stat;
+  post: Post;
+  week_start: string;
+  week_total: number;
+  weekly_entry: StatEntry | null;
+  daily_entries: DailyStatEntry[];
+}
+
+export interface AdminDailyTrackedStat {
+  stat: Stat;
+  post: Post;
+  division: Division | null;
+  employees: Profile[];
+  week_total: number;
+  entry_count: number;
 }
 
 // ============================================================

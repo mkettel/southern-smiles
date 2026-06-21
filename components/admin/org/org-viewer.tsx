@@ -53,21 +53,30 @@ export function OrgViewer({ isAdmin, ...data }: OrgViewerProps) {
   }
 
   return (
-    <div className={cn("space-y-4", view === "tree" && "max-w-4xl mx-auto")}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="inline-flex rounded-md border bg-muted/30 p-0.5">
-          <ViewButton
-            active={view === "tree"}
-            onClick={() => selectView("tree")}
-            icon={<ListTree className="h-3.5 w-3.5" />}
-            label="Tree"
-          />
-          <ViewButton
-            active={view === "board"}
-            onClick={() => selectView("board")}
-            icon={<LayoutGrid className="h-3.5 w-3.5" />}
-            label="Board"
-          />
+    <div className={cn("space-y-2", view === "tree" && "max-w-4xl mx-auto")}>
+      <div className="flex min-h-8 flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 items-baseline gap-2">
+            <h1 className="shrink-0 text-lg font-semibold leading-none">Org Board</h1>
+            <p className="hidden truncate text-xs text-muted-foreground lg:block">
+              Divisions, departments, sections, and responsibilities
+            </p>
+          </div>
+
+          <div className="inline-flex shrink-0 rounded-md border bg-muted/30 p-0.5">
+            <ViewButton
+              active={view === "tree"}
+              onClick={() => selectView("tree")}
+              icon={<ListTree className="h-3.5 w-3.5" />}
+              label="Tree"
+            />
+            <ViewButton
+              active={view === "board"}
+              onClick={() => selectView("board")}
+              icon={<LayoutGrid className="h-3.5 w-3.5" />}
+              label="Board"
+            />
+          </div>
         </div>
 
         {isAdmin && (

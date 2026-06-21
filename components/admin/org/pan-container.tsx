@@ -8,7 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import { Maximize, Minimize, Minus, Plus, RotateCcw } from "lucide-react";
+import { Maximize, Minimize, Minus, Plus, Scan } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface PanContainerProps {
@@ -16,17 +16,20 @@ interface PanContainerProps {
   className?: string;
   minZoom?: number;
   maxZoom?: number;
+  fitOnMount?: boolean;
 }
 
 const ZOOM_STEP = 0.1;
+const WHEEL_ZOOM_SENSITIVITY = 0.002;
+const MAX_WHEEL_ZOOM_STEP = 0.025;
 const DEFAULT_MIN = 0.4;
 const DEFAULT_MAX = 2;
 
 /**
- * Pan + zoom container. Click-and-drag background to pan, Ctrl/Cmd + wheel
- * to zoom, wheel alone → horizontal pan. Content is scaled via CSS `zoom`
- * so scrollbars adjust automatically and interactive descendants keep their
- * correct hit targets.
+ * Pan + zoom container. Click-and-drag background to pan and Ctrl/Cmd + wheel
+ * to zoom. Unmodified wheel gestures keep native two-axis scrolling. Content
+ * is scaled via CSS `zoom` so scrollbars adjust automatically and interactive
+ * descendants keep their correct hit targets.
  *
  * Drag only initiates on elements tagged `data-pan-handle`.
  */
@@ -35,9 +38,12 @@ export function PanContainer({
   className,
   minZoom = DEFAULT_MIN,
   maxZoom = DEFAULT_MAX,
+  fitOnMount = false,
 }: PanContainerProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const hasFittedRef = useRef(false);
   const [zoom, setZoom] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -55,9 +61,69 @@ export function PanContainer({
   );
 
   const zoomBy = useCallback(
-    (delta: number) => setZoom((z) => clampZoom(z + delta)),
+    (delta: number, origin?: { x: number; y: number }) => {
+      const viewport = viewportRef.current;
+      setZoom((current) => {
+        const next = clampZoom(current + delta);
+        if (!viewport || next === current) return next;
+
+        const x = origin?.x ?? viewport.clientWidth / 2;
+        const y = origin?.y ?? viewport.clientHeight / 2;
+        const startLeft = viewport.scrollLeft;
+        const startTop = viewport.scrollTop;
+        const ratio = next / current;
+
+        requestAnimationFrame(() => {
+          viewport.scrollLeft = (startLeft + x) * ratio - x;
+          viewport.scrollTop = (startTop + y) * ratio - y;
+        });
+
+        return next;
+      });
+    },
     [clampZoom]
   );
+
+  const fitToViewport = useCallback(() => {
+    const viewport = viewportRef.current;
+    const content = contentRef.current;
+    const child = content?.firstElementChild as HTMLElement | null;
+    if (!viewport || !child) return;
+
+    const rect = child.getBoundingClientRect();
+    const naturalWidth = rect.width / zoom;
+    const naturalHeight = rect.height / zoom;
+    if (naturalWidth <= 0 || naturalHeight <= 0) return;
+
+    const next = clampZoom(
+      Math.min(
+        1,
+        (viewport.clientWidth - 16) / naturalWidth,
+        (viewport.clientHeight - 16) / naturalHeight
+      )
+    );
+
+    setZoom(next);
+    requestAnimationFrame(() => {
+      viewport.scrollLeft = 0;
+      viewport.scrollTop = 0;
+    });
+  }, [clampZoom, zoom]);
+
+  useEffect(() => {
+    if (!fitOnMount || hasFittedRef.current) return;
+    hasFittedRef.current = true;
+
+    let frame = 0;
+    const timeout = window.setTimeout(() => {
+      frame = requestAnimationFrame(fitToViewport);
+    }, 360);
+
+    return () => {
+      window.clearTimeout(timeout);
+      cancelAnimationFrame(frame);
+    };
+  }, [fitOnMount, fitToViewport]);
 
   const handlePointerDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -128,24 +194,28 @@ export function PanContainer({
     return () => document.removeEventListener("fullscreenchange", onChange);
   }, []);
 
-  // Wheel: ctrl/cmd → zoom; plain vertical wheel → horizontal pan.
+  // Intercept only zoom gestures; native scrolling preserves the trackpad axis.
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
     const listener = (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
-        setZoom((z) => clampZoom(z + (e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP)));
+        const rect = viewport.getBoundingClientRect();
+        const delta = Math.max(
+          -MAX_WHEEL_ZOOM_STEP,
+          Math.min(MAX_WHEEL_ZOOM_STEP, -e.deltaY * WHEEL_ZOOM_SENSITIVITY)
+        );
+        zoomBy(delta, {
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top,
+        });
         return;
-      }
-      if (!e.shiftKey && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-        viewport.scrollLeft += e.deltaY;
-        e.preventDefault();
       }
     };
     viewport.addEventListener("wheel", listener, { passive: false });
     return () => viewport.removeEventListener("wheel", listener);
-  }, [clampZoom]);
+  }, [zoomBy]);
 
   return (
     <div
@@ -167,7 +237,7 @@ export function PanContainer({
         )}
       >
         {/* `zoom` scales layout, so scrollbar extents stay correct. */}
-        <div style={{ zoom }}>{children}</div>
+        <div ref={contentRef} style={{ zoom }}>{children}</div>
       </div>
 
       {/* Zoom / fullscreen controls — bottom-left so they don't collide with the chat widget */}
@@ -199,12 +269,12 @@ export function PanContainer({
         </button>
         <div className="w-px h-4 bg-border mx-0.5" />
         <button
-          onClick={() => setZoom(1)}
+          onClick={fitToViewport}
           className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-          aria-label="Reset zoom"
-          title="Reset zoom"
+          aria-label="Fit board to view"
+          title="Fit board to view"
         >
-          <RotateCcw className="h-3.5 w-3.5" />
+          <Scan className="h-3.5 w-3.5" />
         </button>
         <div className="w-px h-4 bg-border mx-0.5" />
         <button

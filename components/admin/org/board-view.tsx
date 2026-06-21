@@ -149,15 +149,10 @@ export function BoardView({
   }, [posts]);
 
   return (
-    <div className="space-y-2">
-      <p className="text-xs text-muted-foreground">
-        Drag to pan · scroll to move · ⌘/Ctrl + scroll to zoom
-        {isEditing && (
-          <span className="ml-2 text-foreground">· Edit mode on</span>
-        )}
-      </p>
-
-      <PanContainer className="border rounded-lg bg-background h-[calc(100vh-240px)] min-h-[500px]">
+      <PanContainer
+        fitOnMount
+        className="border rounded-lg bg-background h-[calc(100vh-145px)] min-h-[500px]"
+      >
         <div
           data-pan-handle
           className="flex gap-2 p-4 min-w-max min-h-full items-stretch"
@@ -189,7 +184,6 @@ export function BoardView({
           )}
         </div>
       </PanContainer>
-    </div>
   );
 }
 

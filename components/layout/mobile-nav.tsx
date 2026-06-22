@@ -37,10 +37,10 @@ interface NavLink {
 }
 
 const sharedLinks: NavLink[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard", label: "OIC", icon: LayoutDashboard },
   { href: "/stats", label: "Stats", icon: BarChart3 },
   { href: "/tasks", label: "My Tasks", icon: CheckSquare },
-  { href: "/oic-log", label: "OIC Log", icon: FileText },
+  { href: "/oic-log", label: "Action Log", icon: FileText },
   { href: "/org-board", label: "Org Board", icon: Network },
 ];
 

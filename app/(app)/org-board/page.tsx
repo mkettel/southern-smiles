@@ -52,24 +52,15 @@ export default async function OrgBoardPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Org Board</h1>
-        <p className="text-muted-foreground">
-          Organizational structure: divisions, departments, sections, and responsibilities
-        </p>
-      </div>
-
-      <OrgViewer
-        isAdmin={isAdmin}
-        divisions={divisions as Division[]}
-        posts={posts as Post[]}
-        departments={departments as Department[]}
-        statsByPost={statsByPost}
-        employeesByPost={employeesByPost}
-        employees={employeeList ?? []}
-        currentUserName={profile.full_name}
-      />
-    </div>
+    <OrgViewer
+      isAdmin={isAdmin}
+      divisions={divisions as Division[]}
+      posts={posts as Post[]}
+      departments={departments as Department[]}
+      statsByPost={statsByPost}
+      employeesByPost={employeesByPost}
+      employees={employeeList ?? []}
+      currentUserName={profile.full_name}
+    />
   );
 }

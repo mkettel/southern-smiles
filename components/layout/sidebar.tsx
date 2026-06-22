@@ -46,10 +46,10 @@ interface NavLink {
 }
 
 const sharedLinks: NavLink[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard", label: "OIC", icon: LayoutDashboard },
   { href: "/stats", label: "Stats", icon: BarChart3 },
   { href: "/tasks", label: "My Tasks", icon: CheckSquare },
-  { href: "/oic-log", label: "OIC Log", icon: FileText },
+  { href: "/oic-log", label: "Action Log", icon: FileText },
   { href: "/org-board", label: "Org Board", icon: Network },
 ];
 
@@ -163,19 +163,17 @@ export function Sidebar({
   const [collapsed, setCollapsed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
-  // Hydrate from localStorage to avoid a flash of the wrong state. Reading on
-  // mount (not via a lazy initializer) is required to avoid an SSR hydration
-  // mismatch, so the set-state-in-effect calls below are intentional.
+  // Org Board opens in focus mode. Other routes retain the user's saved choice.
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(STORAGE_KEY);
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (saved === "1") setCollapsed(true);
+      setCollapsed(pathname === "/org-board" || saved === "1");
     } catch {
-      // ignore
+      setCollapsed(pathname === "/org-board");
     }
     setHydrated(true);
-  }, []);
+  }, [pathname]);
 
   function toggle() {
     setCollapsed((c) => {

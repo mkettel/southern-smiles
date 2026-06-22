@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { calculateCondition } from "@/lib/conditions";
 import { getCurrentWeekStart } from "@/lib/constants";
 import { generateSurveyCode, normalizeSurveyCode } from "@/lib/survey/code";
+import { calculateCreditTotals } from "@/lib/survey/credit-totals";
 import { upsertDeidentifiedPatients } from "@/lib/survey/upsert-patients";
 import { patientLabel } from "@/lib/survey/label";
 import {
@@ -797,26 +798,22 @@ export async function getCampaignStats(
 
   const { data: recipients } = await supabase
     .from("survey_recipients")
-    .select("sent_at, first_viewed_at, credit_status, credit_amount_cents")
+    .select("id, sent_at, first_viewed_at, credit_status, credit_amount_cents")
     .eq("campaign_id", campaignId);
 
-  const { count: responseCount } = await supabase
+  const { data: responseRows } = await supabase
     .from("survey_responses")
-    .select("id", { count: "exact", head: true })
+    .select("recipient_id")
     .eq("campaign_id", campaignId);
 
   const recs = recipients ?? [];
   const sentCount = recs.filter((r) => r.sent_at).length;
   const openedCount = recs.filter((r) => r.first_viewed_at).length;
-  const responses = responseCount ?? 0;
-
-  let creditPromisedCents = 0;
-  let creditRedeemedCents = 0;
-  for (const r of recs) {
-    const amt = r.credit_amount_cents ?? 0;
-    if (r.credit_status === "promised") creditPromisedCents += amt;
-    if (r.credit_status === "redeemed") creditRedeemedCents += amt;
-  }
+  const responses = responseRows?.length ?? 0;
+  const respondedRecipientIds = new Set(
+    (responseRows ?? []).map((response) => response.recipient_id)
+  );
+  const creditTotals = calculateCreditTotals(recs, respondedRecipientIds);
 
   return {
     campaign: campaign as SurveyCampaign,
@@ -826,9 +823,9 @@ export async function getCampaignStats(
     responseCount: responses,
     openRate: sentCount > 0 ? openedCount / sentCount : 0,
     responseRate: sentCount > 0 ? responses / sentCount : 0,
-    creditPromisedCents,
-    creditRedeemedCents,
-    creditOutstandingCents: creditPromisedCents,
+    creditPromisedCents: creditTotals.promisedCents,
+    creditRedeemedCents: creditTotals.redeemedCents,
+    creditOutstandingCents: creditTotals.outstandingCents,
   };
 }
 

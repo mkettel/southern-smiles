@@ -785,9 +785,15 @@ function BillFormDialog({
     selectedVendorId !== "all"
       ? selectedVendorId
       : vendors.find((vendor) => vendor.is_misc)?.id ?? vendors[0]?.id ?? "";
+  const defaultVendorCategory =
+    vendors.find((vendor) => vendor.id === defaultVendor)?.default_category ??
+    "Miscellaneous";
   const [vendorId, setVendorId] = useState(bill?.vendor_id ?? defaultVendor);
   const [category, setCategory] = useState<BillCategory>(
-    bill?.category ?? "Miscellaneous",
+    bill?.category ?? defaultVendorCategory,
+  );
+  const [categoryManuallyChanged, setCategoryManuallyChanged] = useState(
+    Boolean(bill),
   );
   const [invoiceDate, setInvoiceDate] = useState(
     bill?.invoice_date ?? todayString(),
@@ -843,9 +849,24 @@ function BillFormDialog({
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <Label className="mb-1 text-xs">Vendor</Label>
-              <Select value={vendorId} onValueChange={(value) => setVendorId(value ?? "")}>
+              <Select
+                value={vendorId}
+                onValueChange={(value) => {
+                  const nextVendorId = value ?? "";
+                  setVendorId(nextVendorId);
+                  const nextVendor = vendors.find(
+                    (vendor) => vendor.id === nextVendorId,
+                  );
+                  if (!categoryManuallyChanged && nextVendor) {
+                    setCategory(nextVendor.default_category);
+                  }
+                }}
+              >
                 <SelectTrigger className="w-full">
-                  <SelectValue />
+                  <span className="min-w-0 flex-1 truncate text-left">
+                    {vendors.find((vendor) => vendor.id === vendorId)?.name ??
+                      "Select vendor"}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   {vendors.map((vendor) => (
@@ -858,7 +879,13 @@ function BillFormDialog({
             </div>
             <div>
               <Label className="mb-1 text-xs">Category</Label>
-              <Select value={category} onValueChange={(value) => setCategory((value ?? "Miscellaneous") as BillCategory)}>
+              <Select
+                value={category}
+                onValueChange={(value) => {
+                  setCategory((value ?? "Miscellaneous") as BillCategory);
+                  setCategoryManuallyChanged(true);
+                }}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -970,11 +997,18 @@ function VendorFormDialog({
   onSaved: (data: BillsDashboardData) => void;
 }) {
   const [name, setName] = useState(vendor?.name ?? "");
+  const [defaultCategory, setDefaultCategory] = useState<BillCategory>(
+    vendor?.default_category ?? "Miscellaneous",
+  );
   const [notes, setNotes] = useState(vendor?.notes ?? "");
   const [isPending, startTransition] = useTransition();
 
   function submit() {
-    const payload = { name, notes: notes.trim() || null };
+    const payload = {
+      name,
+      default_category: defaultCategory,
+      notes: notes.trim() || null,
+    };
     startTransition(async () => {
       const result = vendor
         ? await updateBillVendor(vendor.id, payload)
@@ -1004,6 +1038,26 @@ function VendorFormDialog({
               onChange={(event) => setName(event.target.value)}
               placeholder="Vendor name"
             />
+          </div>
+          <div>
+            <Label className="mb-1 text-xs">Default category</Label>
+            <Select
+              value={defaultCategory}
+              onValueChange={(value) =>
+                setDefaultCategory((value ?? "Miscellaneous") as BillCategory)
+              }
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {BILL_CATEGORIES.map((category) => (
+                  <SelectItem key={category} value={category}>
+                    {category}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label className="mb-1 text-xs">Notes</Label>

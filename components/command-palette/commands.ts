@@ -10,6 +10,7 @@ import {
   Bell,
   MessageSquarePlus,
   Wrench,
+  ReceiptText,
   User,
   Plus,
   PenSquare,
@@ -45,13 +46,14 @@ export type CommandItem = CommandBase &
 
 interface BuildOpts {
   role: UserRole;
+  canAccessBills?: boolean;
 }
 
 /**
  * Build the full command list for the current user. Admin-only commands are
  * filtered out for non-admins so they never show up in search results.
  */
-export function buildCommands({ role }: BuildOpts): CommandItem[] {
+export function buildCommands({ role, canAccessBills = false }: BuildOpts): CommandItem[] {
   const isAdmin = role === "admin";
 
   const navShared: CommandItem[] = [
@@ -112,6 +114,16 @@ export function buildCommands({ role }: BuildOpts): CommandItem[] {
   ];
 
   const navAdmin: CommandItem[] = [
+    {
+      id: "nav-admin-bills",
+      label: "Bills",
+      keywords: ["admin", "vendors", "invoices", "payments"],
+      group: "Navigate",
+      icon: ReceiptText,
+      hint: isAdmin ? "Admin" : "Bills",
+      type: "navigate",
+      href: "/admin/bills",
+    },
     {
       id: "nav-admin-tasks",
       label: "Command Center",
@@ -228,7 +240,11 @@ export function buildCommands({ role }: BuildOpts): CommandItem[] {
     },
   ];
 
-  return [...navShared, ...(isAdmin ? navAdmin : []), ...actions];
+  return [
+    ...navShared,
+    ...(isAdmin ? navAdmin : canAccessBills ? navAdmin.filter((item) => item.id === "nav-admin-bills") : []),
+    ...actions,
+  ];
 }
 
 /** Filter commands by the user's query — case-insensitive substring match. */

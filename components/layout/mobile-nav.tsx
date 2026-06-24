@@ -28,6 +28,7 @@ interface MobileNavProps {
   openRequestCount?: number;
   newRequestCount?: number;
   practiceName?: string;
+  canAccessBills?: boolean;
 }
 
 interface NavLink {
@@ -56,10 +57,15 @@ const adminOnlyLinks: NavLink[] = [
   { href: "/admin/settings", label: "Settings", icon: Wrench },
 ];
 
-export function MobileNav({ role, openRequestCount = 0, newRequestCount = 0, practiceName = "Stats & Conditions" }: MobileNavProps) {
+const billsOfficerLinks: NavLink[] = [
+  { href: "/admin/bills", label: "Bills", icon: ReceiptText },
+];
+
+export function MobileNav({ role, openRequestCount = 0, newRequestCount = 0, practiceName = "Stats & Conditions", canAccessBills = false }: MobileNavProps) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const isAdmin = role === "admin";
+  const accessLinks = isAdmin ? adminOnlyLinks : canAccessBills ? billsOfficerLinks : [];
 
   function renderLink(link: NavLink, badge?: number) {
     const Icon = link.icon;
@@ -104,7 +110,7 @@ export function MobileNav({ role, openRequestCount = 0, newRequestCount = 0, pra
         <nav className="p-3 space-y-1">
           {sharedLinks.map((link) => renderLink(link))}
 
-          {isAdmin && (
+          {accessLinks.length > 0 && (
             <>
               <div className="pt-4 pb-1 px-3">
                 <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
@@ -112,7 +118,7 @@ export function MobileNav({ role, openRequestCount = 0, newRequestCount = 0, pra
                   Admin
                 </div>
               </div>
-              {adminOnlyLinks.map((link) =>
+              {accessLinks.map((link) =>
                 renderLink(
                   link,
                   link.href === "/requests" ? openRequestCount : undefined

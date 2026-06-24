@@ -37,6 +37,7 @@ interface SidebarProps {
   practiceName?: string;
   logoUrl?: string | null;
   showNameWithLogo?: boolean;
+  canAccessBills?: boolean;
 }
 
 interface NavLink {
@@ -64,6 +65,10 @@ const adminOnlyLinks: NavLink[] = [
   { href: "/admin/updates", label: "Updates", icon: Bell },
   { href: "/requests", label: "Requests", icon: MessageSquarePlus },
   { href: "/admin/settings", label: "Settings", icon: Wrench },
+];
+
+const billsOfficerLinks: NavLink[] = [
+  { href: "/admin/bills", label: "Bills", icon: ReceiptText },
 ];
 
 const STORAGE_KEY = "sidebar-collapsed";
@@ -157,9 +162,11 @@ export function Sidebar({
   practiceName = "Stats & Conditions",
   logoUrl,
   showNameWithLogo = true,
+  canAccessBills = false,
 }: SidebarProps) {
   const pathname = usePathname();
   const isAdmin = role === "admin";
+  const accessLinks = isAdmin ? adminOnlyLinks : canAccessBills ? billsOfficerLinks : [];
   const [collapsed, setCollapsed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
@@ -311,7 +318,7 @@ export function Sidebar({
             />
           ))}
 
-          {isAdmin && (
+          {accessLinks.length > 0 && (
             <>
               <div className={cn("pt-4 pb-1", collapsed ? "px-0" : "px-3")}>
                 {collapsed ? (
@@ -323,7 +330,7 @@ export function Sidebar({
                   </div>
                 )}
               </div>
-              {adminOnlyLinks.map((link) => (
+              {accessLinks.map((link) => (
                 <NavItem
                   key={link.href}
                   link={link}

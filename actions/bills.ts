@@ -2,12 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentWeekStart } from "@/lib/constants";
 import { calculateCondition } from "@/lib/conditions";
 import { billSchema, billVendorSchema } from "@/lib/validators";
 import {
   buildBillsSummary,
   buildVendorSummaries,
+  isBillsManagedStat,
   todayString,
 } from "@/lib/bills";
 import type {
@@ -17,7 +19,50 @@ import type {
   BillVendor,
 } from "@/lib/types";
 
-async function requireAdmin() {
+async function canAccessBillsByAssignment(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  profile: { role: string; practice_id: string | null } | null,
+  userId: string,
+) {
+  if (profile?.role === "admin") return true;
+  if (!profile?.practice_id) return false;
+
+  const { data: assignments } = await supabase
+    .from("employee_posts")
+    .select("post:posts(title, division:divisions(number))")
+    .eq("profile_id", userId);
+
+  return Boolean(
+    (assignments ?? []).some((assignment) => {
+      const post = assignment.post as {
+        title?: string | null;
+        division?: { number?: number | null } | null;
+      } | null;
+      return (
+        post?.division?.number === 3 &&
+        post.title?.trim().toLowerCase() === "bills payment officer"
+      );
+    }),
+  );
+}
+
+export async function getCanAccessBills() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return false;
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, practice_id")
+    .eq("id", user.id)
+    .single();
+
+  return canAccessBillsByAssignment(supabase, profile, user.id);
+}
+
+async function requireBillsAccess() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -30,13 +75,20 @@ async function requireAdmin() {
     .eq("id", user.id)
     .single();
 
-  if (profile?.role !== "admin") throw new Error("Admin access required");
+  const canAccess = await canAccessBillsByAssignment(supabase, profile, user.id);
+  if (!canAccess || !profile?.practice_id) {
+    throw new Error("Bills access required");
+  }
 
-  return { supabase, user, practiceId: profile.practice_id as string };
+  return {
+    supabase: createAdminClient(),
+    user,
+    practiceId: profile.practice_id as string,
+  };
 }
 
 async function ensureMiscVendor(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ReturnType<typeof createAdminClient>,
   practiceId: string,
 ): Promise<BillVendor | null> {
   const { data: existing } = await supabase
@@ -74,7 +126,7 @@ async function ensureMiscVendor(
 }
 
 async function syncBillsStat(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ReturnType<typeof createAdminClient>,
   practiceId: string,
   profileId: string,
 ) {
@@ -92,59 +144,72 @@ async function syncBillsStat(
 
   const { data: stats } = await supabase
     .from("stats")
-    .select("id, good_direction, post:posts(id, division:divisions(number))")
+    .select("id, name, stat_type, good_direction, post:posts(id, division:divisions(number))")
     .eq("practice_id", practiceId)
     .eq("is_active", true)
-    .eq("stat_type", "dollar")
-    .ilike("name", "Bills");
+    .eq("stat_type", "dollar");
 
-  const billsStat = (stats ?? []).find((stat) => {
-    const post = stat.post as { division?: { number?: number } } | null;
-    return post?.division?.number === 7;
-  }) as
-    | {
-        id: string;
-        good_direction: "up" | "down";
-      }
-    | undefined;
+  const billsStats = (stats ?? []).filter((stat) =>
+    isBillsManagedStat(stat as unknown as Parameters<typeof isBillsManagedStat>[0]),
+  ) as {
+    id: string;
+    good_direction: "up" | "down";
+  }[];
 
-  if (!billsStat) return;
+  if (!billsStats.length) return;
 
   const weekStart = getCurrentWeekStart();
-  const { data: previous } = await supabase
-    .from("stat_entries")
-    .select("value")
-    .eq("stat_id", billsStat.id)
-    .lt("week_start", weekStart)
-    .order("week_start", { ascending: false })
-    .limit(1)
+  for (const billsStat of billsStats) {
+    const { data: previous } = await supabase
+      .from("stat_entries")
+      .select("value")
+      .eq("stat_id", billsStat.id)
+      .lt("week_start", weekStart)
+      .order("week_start", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const previousValue =
+      previous?.value === null || previous?.value === undefined
+        ? null
+        : Number(previous.value);
+    const condition = calculateCondition(
+      totalDollars,
+      previousValue,
+      billsStat.good_direction,
+    );
+
+    await supabase.from("stat_entries").upsert(
+      {
+        stat_id: billsStat.id,
+        profile_id: profileId,
+        practice_id: practiceId,
+        week_start: weekStart,
+        value: totalDollars,
+        previous_value: previousValue,
+        percent_change: condition.percentChange,
+        auto_condition: condition.condition,
+        final_condition: condition.condition,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "stat_id,week_start" },
+    );
+  }
+}
+
+async function validateBillVendor(
+  supabase: ReturnType<typeof createAdminClient>,
+  practiceId: string,
+  vendorId: string,
+) {
+  const { data: vendor } = await supabase
+    .from("bill_vendors")
+    .select("id")
+    .eq("id", vendorId)
+    .eq("practice_id", practiceId)
     .maybeSingle();
 
-  const previousValue =
-    previous?.value === null || previous?.value === undefined
-      ? null
-      : Number(previous.value);
-  const condition = calculateCondition(
-    totalDollars,
-    previousValue,
-    billsStat.good_direction,
-  );
-
-  await supabase.from("stat_entries").upsert(
-    {
-      stat_id: billsStat.id,
-      profile_id: profileId,
-      practice_id: practiceId,
-      week_start: weekStart,
-      value: totalDollars,
-      previous_value: previousValue,
-      percent_change: condition.percentChange,
-      auto_condition: condition.condition,
-      final_condition: condition.condition,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "stat_id,profile_id,week_start" },
-  );
+  return Boolean(vendor);
 }
 
 function revalidateBillsPaths() {
@@ -153,7 +218,7 @@ function revalidateBillsPaths() {
 }
 
 export async function getBillsDashboardData(): Promise<BillsDashboardData | null> {
-  const { supabase, practiceId } = await requireAdmin();
+  const { supabase, user, practiceId } = await requireBillsAccess();
   await ensureMiscVendor(supabase, practiceId);
 
   const [{ data: vendorsData }, { data: billsData }] = await Promise.all([
@@ -172,6 +237,7 @@ export async function getBillsDashboardData(): Promise<BillsDashboardData | null
 
   const vendors = (vendorsData ?? []) as BillVendor[];
   const bills = (billsData ?? []) as Bill[];
+  await syncBillsStat(supabase, practiceId, user.id);
 
   return {
     vendors: buildVendorSummaries(vendors, bills),
@@ -182,15 +248,17 @@ export async function getBillsDashboardData(): Promise<BillsDashboardData | null
 
 export async function createBillVendor(input: {
   name: string;
+  default_category?: string;
   notes?: string | null;
 }) {
-  const { supabase, practiceId } = await requireAdmin();
+  const { supabase, practiceId } = await requireBillsAccess();
   const parsed = billVendorSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
   const { error } = await supabase.from("bill_vendors").insert({
     practice_id: practiceId,
     name: parsed.data.name,
+    default_category: parsed.data.default_category,
     notes: parsed.data.notes?.trim() || null,
   });
 
@@ -204,10 +272,11 @@ export async function updateBillVendor(
   id: string,
   input: {
     name: string;
+    default_category?: string;
     notes?: string | null;
   },
 ) {
-  const { supabase } = await requireAdmin();
+  const { supabase, practiceId } = await requireBillsAccess();
   const parsed = billVendorSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
 
@@ -215,16 +284,19 @@ export async function updateBillVendor(
     .from("bill_vendors")
     .select("is_misc")
     .eq("id", id)
+    .eq("practice_id", practiceId)
     .single();
 
   const { error } = await supabase
     .from("bill_vendors")
     .update({
       name: vendor?.is_misc ? "Miscellaneous" : parsed.data.name,
+      default_category: parsed.data.default_category,
       notes: parsed.data.notes?.trim() || null,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("practice_id", practiceId);
 
   if (error) return { error: error.message };
 
@@ -242,9 +314,12 @@ export async function createBill(input: {
   status?: BillStatus;
   paid_date?: string | null;
 }) {
-  const { supabase, user, practiceId } = await requireAdmin();
+  const { supabase, user, practiceId } = await requireBillsAccess();
   const parsed = billSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
+  if (!(await validateBillVendor(supabase, practiceId, parsed.data.vendor_id))) {
+    return { error: "Pick a valid vendor" };
+  }
 
   const { error } = await supabase.from("bills").insert({
     practice_id: practiceId,
@@ -273,9 +348,12 @@ export async function updateBill(
     paid_date?: string | null;
   },
 ) {
-  const { supabase, user, practiceId } = await requireAdmin();
+  const { supabase, user, practiceId } = await requireBillsAccess();
   const parsed = billSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.flatten().fieldErrors };
+  if (!(await validateBillVendor(supabase, practiceId, parsed.data.vendor_id))) {
+    return { error: "Pick a valid vendor" };
+  }
 
   const { error } = await supabase
     .from("bills")
@@ -285,7 +363,8 @@ export async function updateBill(
       paid_date: parsed.data.status === "paid" ? parsed.data.paid_date : null,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("practice_id", practiceId);
 
   if (error) return { error: error.message };
 
@@ -295,7 +374,7 @@ export async function updateBill(
 }
 
 export async function markBillPaid(id: string) {
-  const { supabase, user, practiceId } = await requireAdmin();
+  const { supabase, user, practiceId } = await requireBillsAccess();
 
   const { error } = await supabase
     .from("bills")
@@ -304,7 +383,8 @@ export async function markBillPaid(id: string) {
       paid_date: todayString(),
       updated_at: new Date().toISOString(),
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("practice_id", practiceId);
 
   if (error) return { error: error.message };
 

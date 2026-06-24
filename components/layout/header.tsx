@@ -25,6 +25,7 @@ interface HeaderProps {
   practiceName?: string;
   unreadChangelogCount?: number;
   activeTaskCount?: number;
+  canAccessBills?: boolean;
 }
 
 export function Header({
@@ -34,6 +35,7 @@ export function Header({
   practiceName,
   unreadChangelogCount = 0,
   activeTaskCount = 0,
+  canAccessBills = false,
 }: HeaderProps) {
   const router = useRouter();
   const [imgError, setImgError] = useState(false);
@@ -48,7 +50,7 @@ export function Header({
 
   return (
     <header className="flex h-14 items-center justify-between border-b px-4 md:justify-end gap-2">
-      <MobileNav role={profile.role} openRequestCount={openRequestCount} newRequestCount={newRequestCount} practiceName={practiceName} />
+      <MobileNav role={profile.role} openRequestCount={openRequestCount} newRequestCount={newRequestCount} practiceName={practiceName} canAccessBills={canAccessBills} />
       <div className="flex items-center gap-1">
         <CommandPaletteButton />
         <ThemeToggle />

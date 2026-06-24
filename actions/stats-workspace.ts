@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentPracticeId } from "@/lib/practice";
 import { getCurrentWeekStart } from "@/lib/constants";
 import { calculateCondition } from "@/lib/conditions";
+import { isBillsManagedStat } from "@/lib/bills";
 import type { DailyStatEntry, Post, Profile, Stat, StatEntry } from "@/lib/types";
 
 export interface WorkspaceStat {
@@ -55,6 +56,9 @@ async function canEditStat(statId: string) {
     .eq("id", statId)
     .single();
   if (!stat) return { error: "Stat not found" as const };
+  if (isBillsManagedStat(stat as Stat & { post: Post })) {
+    return { error: "Bills is updated from the Bills tracker" as const };
+  }
 
   if (profile.role !== "admin") {
     const { data: assignment } = await supabase
@@ -190,12 +194,14 @@ export async function getStatsWorkspace(weekStart = getCurrentWeekStart()) {
   return {
     setupRequired: false,
     isAdmin: profile.role === "admin",
-    stats: (stats ?? []).map((stat) => ({
-      stat: stat as Stat,
-      post: stat.post as Post,
-      dailyEntries: ((daily ?? []) as DailyStatEntry[]).filter((entry) => entry.stat_id === stat.id),
-      weeklyEntry: ((weekly ?? []) as StatEntry[]).find((entry) => entry.stat_id === stat.id) ?? null,
-    })),
+    stats: (stats ?? [])
+      .filter((stat) => !isBillsManagedStat(stat as Stat & { post: Post }))
+      .map((stat) => ({
+        stat: stat as Stat,
+        post: stat.post as Post,
+        dailyEntries: ((daily ?? []) as DailyStatEntry[]).filter((entry) => entry.stat_id === stat.id),
+        weeklyEntry: ((weekly ?? []) as StatEntry[]).find((entry) => entry.stat_id === stat.id) ?? null,
+      })),
   };
 }
 

@@ -15,6 +15,7 @@ import type {
   BillsSummary,
   BillVendor,
   BillVendorSummary,
+  Stat,
 } from "@/lib/types";
 
 export const BILL_CATEGORIES = [
@@ -67,6 +68,24 @@ export function parseDollarAmountToCents(value: string): number {
 export function formatDateLabel(date: string | null): string {
   if (!date) return "—";
   return format(new Date(date + "T00:00:00"), "MMM d, yyyy");
+}
+
+export function isBillsManagedStat(
+  stat: Pick<Stat, "name" | "stat_type"> & {
+    post?: { division?: { number?: number | null } | null } | null;
+  },
+): boolean {
+  const divisionNumber = stat.post?.division?.number;
+  const normalizedName = stat.name
+    .trim()
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/\s+/g, " ");
+  return (
+    (normalizedName === "bill" || normalizedName === "bills") &&
+    stat.stat_type === "dollar" &&
+    (divisionNumber === 3 || divisionNumber === 7)
+  );
 }
 
 export function getAgingBucket(

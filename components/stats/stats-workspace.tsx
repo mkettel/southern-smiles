@@ -22,6 +22,7 @@ interface Props {
   dates: string[];
   stats: WorkspaceStat[];
   isAdmin: boolean;
+  billsManagedHidden?: boolean;
 }
 
 const FORMULA_LABELS = {
@@ -39,7 +40,7 @@ function dayLabel(date: string) {
   });
 }
 
-export function StatsWorkspace({ mode, weekStart, dates, stats, isAdmin }: Props) {
+export function StatsWorkspace({ mode, weekStart, dates, stats, isAdmin, billsManagedHidden = false }: Props) {
   const router = useRouter();
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -125,7 +126,11 @@ export function StatsWorkspace({ mode, weekStart, dates, stats, isAdmin }: Props
     return (
       <Card>
         <CardContent className="py-10 text-center text-sm text-muted-foreground">
-          {isAdmin ? "No active stats are configured." : "No stats are assigned to you."}
+          {billsManagedHidden
+            ? "Your Bills stat is updated automatically from the Bills tracker — there's nothing to enter here."
+            : isAdmin
+              ? "No active stats are configured."
+              : "No stats are assigned to you."}
         </CardContent>
       </Card>
     );

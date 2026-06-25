@@ -7,6 +7,8 @@ import { getCurrentWeekStart } from "@/lib/constants";
 import { calculateCondition } from "@/lib/conditions";
 import { billSchema, billVendorSchema } from "@/lib/validators";
 import {
+  BILLS_OFFICER_DIVISION,
+  BILLS_OFFICER_POST_TITLE,
   buildBillsSummary,
   buildVendorSummaries,
   isBillsManagedStat,
@@ -39,8 +41,8 @@ async function canAccessBillsByAssignment(
         division?: { number?: number | null } | null;
       } | null;
       return (
-        post?.division?.number === 3 &&
-        post.title?.trim().toLowerCase() === "bills payment officer"
+        post?.division?.number === BILLS_OFFICER_DIVISION &&
+        post.title?.trim().toLowerCase() === BILLS_OFFICER_POST_TITLE
       );
     }),
   );
@@ -149,30 +151,68 @@ async function syncBillsStat(
     .eq("is_active", true)
     .eq("stat_type", "dollar");
 
-  const billsStats = (stats ?? []).filter((stat) =>
-    isBillsManagedStat(stat as unknown as Parameters<typeof isBillsManagedStat>[0]),
-  ) as {
-    id: string;
-    good_direction: "up" | "down";
-  }[];
+  const billsStats = (stats ?? [])
+    .filter((stat) =>
+      isBillsManagedStat(
+        stat as unknown as Parameters<typeof isBillsManagedStat>[0],
+      ),
+    )
+    .map((stat) => {
+      const post = stat.post as { id?: string | null } | null;
+      return {
+        id: stat.id as string,
+        good_direction: stat.good_direction as "up" | "down",
+        postId: post?.id ?? null,
+      };
+    });
 
   if (!billsStats.length) return;
 
   const weekStart = getCurrentWeekStart();
   for (const billsStat of billsStats) {
-    const { data: previous } = await supabase
-      .from("stat_entries")
-      .select("value")
-      .eq("stat_id", billsStat.id)
-      .lt("week_start", weekStart)
-      .order("week_start", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const [{ data: previous }, { data: current }] = await Promise.all([
+      supabase
+        .from("stat_entries")
+        .select("value")
+        .eq("stat_id", billsStat.id)
+        .lt("week_start", weekStart)
+        .order("week_start", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("stat_entries")
+        .select("value, previous_value, profile_id")
+        .eq("stat_id", billsStat.id)
+        .eq("week_start", weekStart)
+        .maybeSingle(),
+    ]);
 
     const previousValue =
       previous?.value === null || previous?.value === undefined
         ? null
         : Number(previous.value);
+
+    // Skip the write when nothing changed — sync runs on every dashboard view,
+    // so this avoids churning stat_entries (and revalidation) on read paths.
+    if (
+      current &&
+      Number(current.value) === totalDollars &&
+      (current.previous_value === null || current.previous_value === undefined
+        ? null
+        : Number(current.previous_value)) === previousValue
+    ) {
+      continue;
+    }
+
+    // Attribute the entry to the stat's assigned employee, falling back to any
+    // existing entry owner, then the acting user. Assigned-employee-first means
+    // a sync also corrects rows previously stamped with whoever opened the
+    // tracker, instead of "entered by" flipping per viewer.
+    const entrantProfileId =
+      (await getAssignedProfileId(supabase, billsStat.postId)) ??
+      (current?.profile_id as string | null | undefined) ??
+      profileId;
+
     const condition = calculateCondition(
       totalDollars,
       previousValue,
@@ -182,7 +222,7 @@ async function syncBillsStat(
     await supabase.from("stat_entries").upsert(
       {
         stat_id: billsStat.id,
-        profile_id: profileId,
+        profile_id: entrantProfileId,
         practice_id: practiceId,
         week_start: weekStart,
         value: totalDollars,
@@ -195,6 +235,21 @@ async function syncBillsStat(
       { onConflict: "stat_id,week_start" },
     );
   }
+}
+
+async function getAssignedProfileId(
+  supabase: ReturnType<typeof createAdminClient>,
+  postId: string | null,
+): Promise<string | null> {
+  if (!postId) return null;
+  const { data } = await supabase
+    .from("employee_posts")
+    .select("profile_id")
+    .eq("post_id", postId)
+    .order("assigned_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  return (data?.profile_id as string | null | undefined) ?? null;
 }
 
 async function validateBillVendor(

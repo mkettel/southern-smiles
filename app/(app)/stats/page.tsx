@@ -118,6 +118,7 @@ export default async function StatsPage({
           dates={dates}
           stats={data.stats}
           isAdmin={data.isAdmin}
+          billsManagedHidden={data.billsManagedHidden ?? false}
         />
       )}
     </div>

@@ -1,6 +1,9 @@
 -- ============================================================
 -- Migration 040: Assigned Bills access
 -- ============================================================
+-- NOTE: division number (3) and post title ('bills payment officer')
+-- below are mirrored in lib/bills.ts as BILLS_OFFICER_DIVISION and
+-- BILLS_OFFICER_POST_TITLE. Keep the two in sync if either changes.
 
 CREATE OR REPLACE FUNCTION is_assigned_bills_officer()
 RETURNS boolean AS $$

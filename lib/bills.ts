@@ -31,6 +31,18 @@ export const BILL_CATEGORIES = [
   "Miscellaneous",
 ] as const satisfies readonly BillCategory[];
 
+// --- Bills access + sync configuration ---------------------------------
+// These mirror the seeded org structure. They are duplicated (as literals)
+// in supabase/migrations/040_add_assigned_bills_access.sql for the RLS
+// function `is_assigned_bills_officer()` — keep the two in sync if changed.
+//
+// Division that owns the manually-assigned Bills Payment Officer post.
+export const BILLS_OFFICER_DIVISION = 3;
+// Post title (compared case-insensitively, trimmed) that grants Bills access.
+export const BILLS_OFFICER_POST_TITLE = "bills payment officer";
+// Divisions whose "Bills" dollar stat is auto-synced from the tracker total.
+export const BILLS_STAT_DIVISIONS = [3, 7] as const;
+
 export const BILL_AGING_BUCKETS = [
   "current",
   "30",
@@ -84,7 +96,9 @@ export function isBillsManagedStat(
   return (
     (normalizedName === "bill" || normalizedName === "bills") &&
     stat.stat_type === "dollar" &&
-    (divisionNumber === 3 || divisionNumber === 7)
+    BILLS_STAT_DIVISIONS.includes(
+      divisionNumber as (typeof BILLS_STAT_DIVISIONS)[number],
+    )
   );
 }
 

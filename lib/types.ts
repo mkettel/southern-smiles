@@ -334,6 +334,7 @@ export interface BillVendor {
   id: string;
   practice_id: string;
   name: string;
+  default_category: BillCategory;
   notes: string | null;
   is_misc: boolean;
   created_at: string;

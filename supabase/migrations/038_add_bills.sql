@@ -6,6 +6,20 @@ CREATE TABLE bill_vendors (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   practice_id uuid NOT NULL REFERENCES practices(id) ON DELETE CASCADE,
   name text NOT NULL CHECK (char_length(trim(name)) BETWEEN 1 AND 160),
+  default_category text NOT NULL DEFAULT 'Miscellaneous' CHECK (
+    default_category IN (
+      'Rent',
+      'Equipment Loans',
+      'Marketing',
+      'Lab Fees',
+      'Dental Supplies',
+      'Software',
+      'Utilities',
+      'Insurance',
+      'Professional Services',
+      'Miscellaneous'
+    )
+  ),
   notes text CHECK (notes IS NULL OR char_length(notes) <= 2000),
   is_misc boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -103,14 +117,14 @@ SELECT id, 'Miscellaneous', true
 FROM practices
 ON CONFLICT DO NOTHING;
 
-INSERT INTO bill_vendors (practice_id, name, is_misc)
-SELECT practices.id, vendors.name, false
+INSERT INTO bill_vendors (practice_id, name, default_category, is_misc)
+SELECT practices.id, vendors.name, vendors.default_category, false
 FROM practices
 CROSS JOIN (
   VALUES
-    ('Glidewell Lab'),
-    ('MSG'),
-    ('Peak Dental Design'),
-    ('Renew Digital')
-) AS vendors(name)
+    ('Glidewell Lab', 'Lab Fees'),
+    ('MSG', 'Miscellaneous'),
+    ('Peak Dental Design', 'Lab Fees'),
+    ('Renew Digital', 'Equipment Loans')
+) AS vendors(name, default_category)
 ON CONFLICT DO NOTHING;

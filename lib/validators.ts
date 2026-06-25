@@ -129,6 +129,7 @@ export const taskCommentSchema = z.object({
 
 export const billVendorSchema = z.object({
   name: z.string().trim().min(1, "Vendor name is required").max(160),
+  default_category: z.enum(BILL_CATEGORIES).default("Miscellaneous"),
   notes: z.string().max(2000).nullable().optional(),
 });
 

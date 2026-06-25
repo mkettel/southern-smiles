@@ -5,6 +5,7 @@ import { getPracticeSettings } from "@/actions/settings";
 import { getConversations, getUnreadMessageCount, getPracticeMembers } from "@/actions/messages";
 import { getUnreadChangelogCount } from "@/actions/changelog";
 import { getMyActiveTaskCount } from "@/actions/tasks";
+import { getCanAccessBills } from "@/actions/bills";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { ChatWidget } from "@/components/messages/chat-widget";
@@ -24,7 +25,7 @@ export default async function AppLayout({
     redirect("/login");
   }
 
-  const [requestCounts, settings, conversations, unreadMessageCount, practiceMembers, unreadChangelogCount, activeTaskCount] =
+  const [requestCounts, settings, conversations, unreadMessageCount, practiceMembers, unreadChangelogCount, activeTaskCount, canAccessBills] =
     await Promise.all([
       profile.role === "admin"
         ? Promise.all([getOpenRequestCount(), getNewRequestCount()])
@@ -35,6 +36,7 @@ export default async function AppLayout({
       getPracticeMembers(),
       getUnreadChangelogCount(),
       getMyActiveTaskCount(),
+      getCanAccessBills(),
     ]);
 
   const [openRequestCount, newRequestCount] = requestCounts;
@@ -42,7 +44,7 @@ export default async function AppLayout({
   const logoUrl = settings.logo_url;
 
   return (
-    <CommandPaletteProvider profile={profile}>
+    <CommandPaletteProvider profile={profile} canAccessBills={canAccessBills}>
       <div className="flex h-screen overflow-hidden">
         <ThemeColorInjector primaryColor={settings.primary_color} />
         <Sidebar
@@ -52,6 +54,7 @@ export default async function AppLayout({
           practiceName={practiceName}
           logoUrl={logoUrl}
           showNameWithLogo={settings.show_name_with_logo}
+          canAccessBills={canAccessBills}
         />
         <div className="flex flex-1 flex-col overflow-hidden">
           <Header
@@ -61,6 +64,7 @@ export default async function AppLayout({
             practiceName={practiceName}
             unreadChangelogCount={unreadChangelogCount}
             activeTaskCount={activeTaskCount}
+            canAccessBills={canAccessBills}
           />
           <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
         </div>

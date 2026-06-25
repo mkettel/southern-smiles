@@ -37,10 +37,11 @@ export function useCommandPalette() {
 
 interface CommandPaletteProviderProps {
   profile: Profile;
+  canAccessBills?: boolean;
   children: ReactNode;
 }
 
-export function CommandPaletteProvider({ profile, children }: CommandPaletteProviderProps) {
+export function CommandPaletteProvider({ profile, canAccessBills = false, children }: CommandPaletteProviderProps) {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const isAdmin = profile.role === "admin";
@@ -64,7 +65,10 @@ export function CommandPaletteProvider({ profile, children }: CommandPaletteProv
     }
   }, [members, loadingMembers]);
 
-  const commands = useMemo(() => buildCommands({ role: profile.role }), [profile.role]);
+  const commands = useMemo(
+    () => buildCommands({ role: profile.role, canAccessBills }),
+    [profile.role, canAccessBills],
+  );
 
   const openPalette = useCallback(() => setPaletteOpen(true), []);
   const closePalette = useCallback(() => setPaletteOpen(false), []);

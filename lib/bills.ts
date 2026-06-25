@@ -15,6 +15,7 @@ import type {
   BillsSummary,
   BillVendor,
   BillVendorSummary,
+  Stat,
 } from "@/lib/types";
 
 export const BILL_CATEGORIES = [
@@ -29,6 +30,18 @@ export const BILL_CATEGORIES = [
   "Professional Services",
   "Miscellaneous",
 ] as const satisfies readonly BillCategory[];
+
+// --- Bills access + sync configuration ---------------------------------
+// These mirror the seeded org structure. They are duplicated (as literals)
+// in supabase/migrations/040_add_assigned_bills_access.sql for the RLS
+// function `is_assigned_bills_officer()` — keep the two in sync if changed.
+//
+// Division that owns the manually-assigned Bills Payment Officer post.
+export const BILLS_OFFICER_DIVISION = 3;
+// Post title (compared case-insensitively, trimmed) that grants Bills access.
+export const BILLS_OFFICER_POST_TITLE = "bills payment officer";
+// Divisions whose "Bills" dollar stat is auto-synced from the tracker total.
+export const BILLS_STAT_DIVISIONS = [3, 7] as const;
 
 export const BILL_AGING_BUCKETS = [
   "current",
@@ -67,6 +80,26 @@ export function parseDollarAmountToCents(value: string): number {
 export function formatDateLabel(date: string | null): string {
   if (!date) return "—";
   return format(new Date(date + "T00:00:00"), "MMM d, yyyy");
+}
+
+export function isBillsManagedStat(
+  stat: Pick<Stat, "name" | "stat_type"> & {
+    post?: { division?: { number?: number | null } | null } | null;
+  },
+): boolean {
+  const divisionNumber = stat.post?.division?.number;
+  const normalizedName = stat.name
+    .trim()
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/\s+/g, " ");
+  return (
+    (normalizedName === "bill" || normalizedName === "bills") &&
+    stat.stat_type === "dollar" &&
+    BILLS_STAT_DIVISIONS.includes(
+      divisionNumber as (typeof BILLS_STAT_DIVISIONS)[number],
+    )
+  );
 }
 
 export function getAgingBucket(

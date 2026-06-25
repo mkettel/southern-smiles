@@ -1,13 +1,13 @@
 import { redirect } from "next/navigation";
 import { ReceiptText } from "lucide-react";
 import { getProfile } from "@/actions/auth";
-import { getBillsDashboardData } from "@/actions/bills";
+import { getBillsDashboardData, getCanAccessBills } from "@/actions/bills";
 import { BillsDashboard } from "@/components/bills/bills-dashboard";
 
 export default async function AdminBillsPage() {
   const profile = await getProfile();
   if (!profile) redirect("/login");
-  if (profile.role !== "admin") redirect("/dashboard");
+  if (!(await getCanAccessBills())) redirect("/dashboard");
 
   const billsData = await getBillsDashboardData().catch(() => null);
 

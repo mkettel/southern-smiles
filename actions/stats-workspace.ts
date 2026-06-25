@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentPracticeId } from "@/lib/practice";
 import { getCurrentWeekStart } from "@/lib/constants";
 import { calculateCondition } from "@/lib/conditions";
+import { isBillsManagedStat } from "@/lib/bills";
 import type { DailyStatEntry, Post, Profile, Stat, StatEntry } from "@/lib/types";
 
 export interface WorkspaceStat {
@@ -55,6 +56,9 @@ async function canEditStat(statId: string) {
     .eq("id", statId)
     .single();
   if (!stat) return { error: "Stat not found" as const };
+  if (isBillsManagedStat(stat as Stat & { post: Post })) {
+    return { error: "Bills is updated from the Bills tracker" as const };
+  }
 
   if (profile.role !== "admin") {
     const { data: assignment } = await supabase
@@ -165,7 +169,7 @@ export async function getStatsWorkspace(weekStart = getCurrentWeekStart()) {
       .select("post_id")
       .eq("profile_id", user.id);
     postIds = assignments?.map((assignment) => assignment.post_id) ?? [];
-    if (!postIds.length) return { stats: [] as WorkspaceStat[], setupRequired: false, isAdmin: false };
+    if (!postIds.length) return { stats: [] as WorkspaceStat[], setupRequired: false, isAdmin: false, billsManagedHidden: false };
   }
 
   let query = supabase
@@ -175,27 +179,34 @@ export async function getStatsWorkspace(weekStart = getCurrentWeekStart()) {
     .order("display_order");
   if (postIds) query = query.in("post_id", postIds);
   const { data: stats, error } = await query;
-  if (isSetupMissing(error)) return { stats: [] as WorkspaceStat[], setupRequired: true, isAdmin: profile.role === "admin" };
+  if (isSetupMissing(error)) return { stats: [] as WorkspaceStat[], setupRequired: true, isAdmin: profile.role === "admin", billsManagedHidden: false };
   if (error) throw new Error(error.message);
 
   const statIds = stats?.map((stat) => stat.id) ?? [];
-  if (!statIds.length) return { stats: [] as WorkspaceStat[], setupRequired: false, isAdmin: profile.role === "admin" };
+  if (!statIds.length) return { stats: [] as WorkspaceStat[], setupRequired: false, isAdmin: profile.role === "admin", billsManagedHidden: false };
   const [{ data: daily, error: dailyError }, { data: weekly }] = await Promise.all([
     supabase.from("daily_stat_entries").select("*").in("stat_id", statIds).eq("week_start", weekStart),
     supabase.from("stat_entries").select("*").in("stat_id", statIds).eq("week_start", weekStart),
   ]);
-  if (isSetupMissing(dailyError)) return { stats: [] as WorkspaceStat[], setupRequired: true, isAdmin: profile.role === "admin" };
+  if (isSetupMissing(dailyError)) return { stats: [] as WorkspaceStat[], setupRequired: true, isAdmin: profile.role === "admin", billsManagedHidden: false };
   if (dailyError) throw new Error(dailyError.message);
+
+  const visibleStats = (stats ?? []).filter(
+    (stat) => !isBillsManagedStat(stat as Stat & { post: Post }),
+  );
 
   return {
     setupRequired: false,
     isAdmin: profile.role === "admin",
-    stats: (stats ?? []).map((stat) => ({
-      stat: stat as Stat,
-      post: stat.post as Post,
-      dailyEntries: ((daily ?? []) as DailyStatEntry[]).filter((entry) => entry.stat_id === stat.id),
-      weeklyEntry: ((weekly ?? []) as StatEntry[]).find((entry) => entry.stat_id === stat.id) ?? null,
-    })),
+    // True when every assigned stat was the system-managed Bills stat, so the
+    // empty state can explain it's auto-synced rather than say "nothing assigned".
+    billsManagedHidden: visibleStats.length === 0 && (stats ?? []).length > 0,
+    stats: visibleStats.map((stat) => ({
+        stat: stat as Stat,
+        post: stat.post as Post,
+        dailyEntries: ((daily ?? []) as DailyStatEntry[]).filter((entry) => entry.stat_id === stat.id),
+        weeklyEntry: ((weekly ?? []) as StatEntry[]).find((entry) => entry.stat_id === stat.id) ?? null,
+      })),
   };
 }
 

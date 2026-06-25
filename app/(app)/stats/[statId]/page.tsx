@@ -1,7 +1,9 @@
 import { getStatHistory } from "@/actions/stat-entries";
 import { getProfile } from "@/actions/auth";
+import { getCanAccessBills } from "@/actions/bills";
 import { createClient } from "@/lib/supabase/server";
 import { StatDetailView } from "@/components/stats/stat-detail-view";
+import { isBillsManagedStat } from "@/lib/bills";
 import type { Stat, OicLogEntry, Profile } from "@/lib/types";
 
 export default async function StatDetailPage({
@@ -33,18 +35,17 @@ export default async function StatDetailPage({
       : "";
 
   // Fetch stat history, OIC entries, and current user profile in parallel
-  const [entries, oicEntries, profile] = await Promise.all([
+  const [entries, oicEntries, profile, canAccessBills] = await Promise.all([
     getStatHistory(statId),
     getRelevantOicEntries(supabase, typedStat),
     getProfile() as Promise<Profile | null>,
+    getCanAccessBills(),
   ]);
 
   const isAdmin = profile?.role === "admin";
   const isBillsStat =
-    isAdmin &&
-    stat.name.toLowerCase() === "bills" &&
-    stat.stat_type === "dollar" &&
-    typedStat.post?.division?.number === 7;
+    canAccessBills &&
+    isBillsManagedStat(typedStat);
 
   if (!isAdmin && (typedStat.is_private || typedStat.post?.division?.is_private)) {
     return (

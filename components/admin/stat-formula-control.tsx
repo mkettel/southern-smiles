@@ -16,7 +16,7 @@ const LABELS: Record<WeeklyFormula, string> = {
   sum: "Daily total",
   average: "Daily average",
   manual: "Manual weekly",
-  collections_per_staff: "Collections / staff",
+  collections_per_staff: "Collections / staff-days",
 };
 
 export function StatFormulaControl({ stat, stats }: { stat: Stat; stats: Stat[] }) {

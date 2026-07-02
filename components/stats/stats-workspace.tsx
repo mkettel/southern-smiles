@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Calculator, RotateCcw, Save } from "lucide-react";
+import { Calculator, RotateCcw, Save, Search } from "lucide-react";
 import { toast } from "sonner";
 import {
   resetWeeklyOverride,
@@ -29,8 +29,41 @@ const FORMULA_LABELS = {
   sum: "Daily total",
   average: "Daily average",
   manual: "Manual weekly",
-  collections_per_staff: "Collections per staff average",
+  collections_per_staff: "Collections / staff-days",
 } as const;
+
+function todayString() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function divisionKey(item: WorkspaceStat) {
+  return item.post.division?.id ?? "unassigned";
+}
+
+function divisionLabel(item: WorkspaceStat) {
+  const division = item.post.division;
+  if (!division) return "Unassigned";
+  return `Division ${division.number} ${division.name}`;
+}
+
+function divisionNumber(item: WorkspaceStat) {
+  return item.post.division?.number ?? 999;
+}
+
+function divisionColor(item: WorkspaceStat) {
+  return item.post.division?.color || "#6b7280";
+}
+
+function getStaffDays(item: WorkspaceStat) {
+  return item.dailyEntries.reduce((sum, entry) => {
+    const value = entry.input_value == null ? null : Number(entry.input_value);
+    return value === null || !Number.isFinite(value) ? sum : sum + value;
+  }, 0);
+}
 
 function dayLabel(date: string) {
   return new Date(`${date}T00:00:00`).toLocaleDateString("en-US", {
@@ -40,9 +73,46 @@ function dayLabel(date: string) {
   });
 }
 
+function sortStats(items: WorkspaceStat[]) {
+  return [...items].sort((a, b) => {
+    const divisionCompare = divisionNumber(a) - divisionNumber(b);
+    if (divisionCompare !== 0) return divisionCompare;
+    const postCompare = a.post.title.localeCompare(b.post.title);
+    if (postCompare !== 0) return postCompare;
+    return a.stat.display_order - b.stat.display_order;
+  });
+}
+
+function groupByDivision(items: WorkspaceStat[]) {
+  const groups = new Map<
+    string,
+    { key: string; label: string; color: string; number: number; stats: WorkspaceStat[] }
+  >();
+
+  for (const item of sortStats(items)) {
+    const key = divisionKey(item);
+    const group =
+      groups.get(key) ??
+      {
+        key,
+        label: divisionLabel(item),
+        color: divisionColor(item),
+        number: divisionNumber(item),
+        stats: [],
+      };
+    group.stats.push(item);
+    groups.set(key, group);
+  }
+
+  return [...groups.values()].sort((a, b) => a.number - b.number);
+}
+
 export function StatsWorkspace({ mode, weekStart, dates, stats, isAdmin, billsManagedHidden = false }: Props) {
   const router = useRouter();
   const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [divisionFilter, setDivisionFilter] = useState("all");
+  const [missingTodayOnly, setMissingTodayOnly] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [dailyValues, setDailyValues] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
@@ -63,6 +133,61 @@ export function StatsWorkspace({ mode, weekStart, dates, stats, isAdmin, billsMa
     () => stats.filter((item) => item.stat.daily_tracking_enabled && item.stat.weekly_formula !== "manual"),
     [stats],
   );
+  const today = todayString();
+  const todayInWeek = dates.includes(today);
+  const modeStats = mode === "daily" ? dailyStats : stats;
+  const showOrganizer = isAdmin || modeStats.length > 8;
+  const divisionOptions = useMemo(() => {
+    const options = new Map<
+      string,
+      { key: string; label: string; color: string; number: number; count: number }
+    >();
+    for (const item of modeStats) {
+      const key = divisionKey(item);
+      const option =
+        options.get(key) ??
+        {
+          key,
+          label: divisionLabel(item),
+          color: divisionColor(item),
+          number: divisionNumber(item),
+          count: 0,
+        };
+      option.count += 1;
+      options.set(key, option);
+    }
+    return [...options.values()].sort((a, b) => a.number - b.number);
+  }, [modeStats]);
+  const visibleStats = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+    return modeStats.filter((item) => {
+      if (divisionFilter !== "all" && divisionKey(item) !== divisionFilter) {
+        return false;
+      }
+
+      if (normalizedSearch) {
+        const haystack = [
+          item.stat.name,
+          item.stat.abbreviation,
+          item.post.title,
+          item.post.division?.name,
+          item.post.division?.number ? `division ${item.post.division.number}` : null,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(normalizedSearch)) return false;
+      }
+
+      if (mode === "daily" && missingTodayOnly && todayInWeek) {
+        const key = `${item.stat.id}:${today}`;
+        return (dailyValues[key]?.trim() ?? "") === "";
+      }
+
+      return true;
+    });
+  }, [dailyValues, divisionFilter, missingTodayOnly, mode, modeStats, search, today, todayInWeek]);
+  const groupedStats = useMemo(() => groupByDivision(visibleStats), [visibleStats]);
 
   function saveDaily(item: WorkspaceStat, date: string) {
     const key = `${item.stat.id}:${date}`;
@@ -122,7 +247,7 @@ export function StatsWorkspace({ mode, weekStart, dates, stats, isAdmin, billsMa
     });
   }
 
-  if ((mode === "daily" ? dailyStats : stats).length === 0) {
+  if (modeStats.length === 0) {
     return (
       <Card>
         <CardContent className="py-10 text-center text-sm text-muted-foreground">
@@ -136,111 +261,212 @@ export function StatsWorkspace({ mode, weekStart, dates, stats, isAdmin, billsMa
     );
   }
 
+  const organizer = (
+    <div className="space-y-3 rounded-lg border bg-card/40 p-3">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+        <div className="relative w-full lg:max-w-sm">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search stat or post..."
+            className="pl-8"
+            aria-label="Search stats"
+          />
+        </div>
+        {mode === "daily" && todayInWeek && (
+          <Button
+            type="button"
+            variant={missingTodayOnly ? "default" : "outline"}
+            onClick={() => setMissingTodayOnly((current) => !current)}
+          >
+            Missing today
+          </Button>
+        )}
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        <Button
+          type="button"
+          variant={divisionFilter === "all" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setDivisionFilter("all")}
+        >
+          All
+        </Button>
+        {divisionOptions.map((division) => (
+          <Button
+            key={division.key}
+            type="button"
+            variant={divisionFilter === division.key ? "default" : "outline"}
+            size="sm"
+            onClick={() => setDivisionFilter(division.key)}
+            className="gap-1.5"
+          >
+            <span
+              className="h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: division.color }}
+            />
+            <span>{division.number === 999 ? "Unassigned" : `Div ${division.number}`}</span>
+            <span className="text-xs opacity-70">{division.count}</span>
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
+
+  const emptyFilteredState = (
+    <Card>
+      <CardContent className="py-8 text-center text-sm text-muted-foreground">
+        No stats match the current filters.
+      </CardContent>
+    </Card>
+  );
+
   if (mode === "weekly") {
     return (
-      <div className="grid gap-3 lg:grid-cols-2">
-        {stats.map((item) => {
-          const overridden = Boolean(item.weeklyEntry?.is_manual_override);
-          return (
-            <Card key={item.stat.id} size="sm">
-              <CardHeader>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <CardTitle className="text-base">{item.stat.name}</CardTitle>
-                    <p className="mt-1 text-xs text-muted-foreground">{item.post.title}</p>
-                  </div>
-                  <Badge variant={overridden ? "default" : "secondary"}>
-                    {overridden ? "Manual override" : FORMULA_LABELS[item.stat.weekly_formula]}
-                  </Badge>
+      <div className="space-y-4">
+        {showOrganizer && organizer}
+        {groupedStats.length === 0
+          ? emptyFilteredState
+          : groupedStats.map((group) => (
+              <section key={group.key} className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="h-3 w-3 rounded-full" style={{ backgroundColor: group.color }} />
+                  <h2 className="text-sm font-semibold">{group.label}</h2>
+                  <span className="text-xs text-muted-foreground">{group.stats.length} stats</span>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex gap-2">
-                  <Input
-                    type="number"
-                    min="0"
-                    step={item.stat.stat_type === "count" ? "1" : "0.01"}
-                    value={weeklyValues[item.stat.id] ?? ""}
-                    onChange={(event) => setWeeklyValues((current) => ({ ...current, [item.stat.id]: event.target.value }))}
-                    aria-label={`${item.stat.name} weekly value`}
-                  />
-                  <Button size="icon" onClick={() => saveWeekly(item)} disabled={isPending && pendingKey === item.stat.id} aria-label="Save weekly total">
-                    <Save className="h-4 w-4" />
-                  </Button>
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {group.stats.map((item) => {
+                    const overridden = Boolean(item.weeklyEntry?.is_manual_override);
+                    return (
+                      <Card
+                        key={item.stat.id}
+                        size="sm"
+                        style={{ borderLeftColor: group.color }}
+                        className="border-l-4"
+                      >
+                        <CardHeader>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <CardTitle className="text-base">{item.stat.name}</CardTitle>
+                              <p className="mt-1 text-xs text-muted-foreground">{item.post.title}</p>
+                            </div>
+                            <Badge variant={overridden ? "default" : "secondary"}>
+                              {overridden ? "Manual override" : FORMULA_LABELS[item.stat.weekly_formula]}
+                            </Badge>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div className="flex gap-2">
+                            <Input
+                              type="number"
+                              min="0"
+                              step={item.stat.stat_type === "count" ? "1" : "0.01"}
+                              value={weeklyValues[item.stat.id] ?? ""}
+                              onChange={(event) => setWeeklyValues((current) => ({ ...current, [item.stat.id]: event.target.value }))}
+                              aria-label={`${item.stat.name} weekly value`}
+                            />
+                            <Button size="icon" onClick={() => saveWeekly(item)} disabled={isPending && pendingKey === item.stat.id} aria-label="Save weekly total">
+                              <Save className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          {overridden && item.weeklyEntry?.calculated_value != null && (
+                            <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                              <span>Calculated: {formatStatValue(Number(item.weeklyEntry.calculated_value), item.stat.stat_type)}</span>
+                              <Button variant="ghost" size="sm" onClick={() => reset(item)}>
+                                <RotateCcw className="h-3.5 w-3.5" />
+                                Reset to calculated
+                              </Button>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
                 </div>
-                {overridden && item.weeklyEntry?.calculated_value != null && (
-                  <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                    <span>Calculated: {formatStatValue(Number(item.weeklyEntry.calculated_value), item.stat.stat_type)}</span>
-                    <Button variant="ghost" size="sm" onClick={() => reset(item)}>
-                      <RotateCcw className="h-3.5 w-3.5" />
-                      Reset to calculated
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
+              </section>
+            ))}
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      {dailyStats.map((item) => (
-        <Card key={item.stat.id}>
-          <CardHeader className="pb-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <CardTitle className="text-base">{item.stat.name}</CardTitle>
-                <p className="mt-1 text-xs text-muted-foreground">{item.post.title}</p>
-              </div>
+      {showOrganizer && organizer}
+      {groupedStats.length === 0
+        ? emptyFilteredState
+        : groupedStats.map((group) => (
+            <section key={group.key} className="space-y-2">
               <div className="flex items-center gap-2">
-                <Badge variant="outline">{FORMULA_LABELS[item.stat.weekly_formula]}</Badge>
-                {item.weeklyEntry && (
-                  <Badge variant="secondary">Week: {formatStatValue(Number(item.weeklyEntry.value), item.stat.stat_type)}</Badge>
-                )}
+                <span className="h-3 w-3 rounded-full" style={{ backgroundColor: group.color }} />
+                <h2 className="text-sm font-semibold">{group.label}</h2>
+                <span className="text-xs text-muted-foreground">{group.stats.length} stats</span>
               </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 sm:grid-cols-5">
-              {dates.map((date) => {
-                const key = `${item.stat.id}:${date}`;
-                const entry = item.dailyEntries.find((row) => row.entry_date === date);
-                const derived = item.stat.weekly_formula === "collections_per_staff";
-                return (
-                  <div key={date} className="space-y-1.5">
-                    <label htmlFor={key} className="block text-xs font-medium text-muted-foreground">{dayLabel(date)}</label>
-                    <div className="flex gap-1.5">
-                      <Input
-                        id={key}
-                        type="number"
-                        min="0"
-                        step={derived ? "0.5" : item.stat.stat_type === "count" ? "1" : "0.01"}
-                        value={dailyValues[key] ?? ""}
-                        placeholder={derived ? "Staff" : undefined}
-                        onChange={(event) => setDailyValues((current) => ({ ...current, [key]: event.target.value }))}
-                        onBlur={() => saveDaily(item, date)}
-                        onWheel={(event) => event.currentTarget.blur()}
-                      />
-                      <Button variant="outline" size="icon-sm" onClick={() => saveDaily(item, date)} disabled={isPending && pendingKey === key} aria-label="Save daily stat">
-                        <Save className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                    {derived && (
-                      <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                        <Calculator className="h-3 w-3" />
-                        {entry?.value == null ? "Needs Collections" : formatStatValue(Number(entry.value), item.stat.stat_type)}
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+              <div className="space-y-3">
+                {group.stats.map((item) => (
+                  <Card
+                    key={item.stat.id}
+                    style={{ borderLeftColor: group.color }}
+                    className="border-l-4"
+                  >
+                    <CardHeader className="pb-3">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <CardTitle className="text-base">{item.stat.name}</CardTitle>
+                          <p className="mt-1 text-xs text-muted-foreground">{item.post.title}</p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="outline">{FORMULA_LABELS[item.stat.weekly_formula]}</Badge>
+                          {item.stat.weekly_formula === "collections_per_staff" && (
+                            <Badge variant="secondary">{getStaffDays(item)} staff-days</Badge>
+                          )}
+                          {item.weeklyEntry && (
+                            <Badge variant="secondary">Week: {formatStatValue(Number(item.weeklyEntry.value), item.stat.stat_type)}</Badge>
+                          )}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid gap-3 sm:grid-cols-5">
+                        {dates.map((date) => {
+                          const key = `${item.stat.id}:${date}`;
+                          const entry = item.dailyEntries.find((row) => row.entry_date === date);
+                          const derived = item.stat.weekly_formula === "collections_per_staff";
+                          return (
+                            <div key={date} className="space-y-1.5">
+                              <label htmlFor={key} className="block text-xs font-medium text-muted-foreground">{dayLabel(date)}</label>
+                              <div className="flex gap-1.5">
+                                <Input
+                                  id={key}
+                                  type="number"
+                                  min="0"
+                                  step={derived ? "0.5" : item.stat.stat_type === "count" ? "1" : "0.01"}
+                                  value={dailyValues[key] ?? ""}
+                                  placeholder={derived ? "Staff worked" : undefined}
+                                  onChange={(event) => setDailyValues((current) => ({ ...current, [key]: event.target.value }))}
+                                  onBlur={() => saveDaily(item, date)}
+                                  onWheel={(event) => event.currentTarget.blur()}
+                                />
+                                <Button variant="outline" size="icon-sm" onClick={() => saveDaily(item, date)} disabled={isPending && pendingKey === key} aria-label="Save daily stat">
+                                  <Save className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                              {derived && (
+                                <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                                  <Calculator className="h-3 w-3" />
+                                  {entry?.value == null ? "Enter Collections first" : `Daily preview: ${formatStatValue(Number(entry.value), item.stat.stat_type)}`}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </section>
+          ))}
     </div>
   );
 }

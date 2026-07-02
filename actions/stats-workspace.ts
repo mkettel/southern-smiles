@@ -8,6 +8,7 @@ import { getCurrentPracticeId } from "@/lib/practice";
 import { getCurrentWeekStart } from "@/lib/constants";
 import { calculateCondition } from "@/lib/conditions";
 import { isBillsManagedStat } from "@/lib/bills";
+import { calculateCollectionsPerStaffWeek } from "@/lib/stat-formulas";
 import type { DailyStatEntry, Post, Profile, Stat, StatEntry } from "@/lib/types";
 
 export interface WorkspaceStat {
@@ -78,17 +79,51 @@ function rollupValue(stat: Stat, entries: { value: number | null }[]) {
     .map((entry) => (entry.value === null ? null : Number(entry.value)))
     .filter((value): value is number => value !== null && Number.isFinite(value));
   if (!values.length) return null;
-  if (stat.weekly_formula === "average" || stat.weekly_formula === "collections_per_staff") {
+  if (stat.weekly_formula === "average") {
     return values.reduce((sum, value) => sum + value, 0) / values.length;
   }
   return values.reduce((sum, value) => sum + value, 0);
 }
 
+async function calculateWeeklyValue(
+  admin: ReturnType<typeof createAdminClient>,
+  stat: Stat,
+  weekStart: string,
+) {
+  if (stat.weekly_formula !== "collections_per_staff") {
+    const { data: daily } = await admin
+      .from("daily_stat_entries")
+      .select("value")
+      .eq("stat_id", stat.id)
+      .eq("week_start", weekStart);
+    return rollupValue(stat, daily ?? []);
+  }
+
+  if (!stat.formula_source_stat_id) return null;
+
+  const [{ data: collectionsEntries }, { data: staffEntries }] = await Promise.all([
+    admin
+      .from("daily_stat_entries")
+      .select("value")
+      .eq("stat_id", stat.formula_source_stat_id)
+      .eq("week_start", weekStart),
+    admin
+      .from("daily_stat_entries")
+      .select("input_value")
+      .eq("stat_id", stat.id)
+      .eq("week_start", weekStart),
+  ]);
+
+  return calculateCollectionsPerStaffWeek(
+    collectionsEntries ?? [],
+    staffEntries ?? [],
+  );
+}
+
 async function syncWeekly(stat: Stat, weekStart: string, actorId: string, practiceId: string) {
   if (stat.weekly_formula === "manual") return;
   const admin = createAdminClient();
-  const [{ data: daily }, { data: existing }, { data: previous }] = await Promise.all([
-    admin.from("daily_stat_entries").select("value").eq("stat_id", stat.id).eq("week_start", weekStart),
+  const [{ data: existing }, { data: previous }] = await Promise.all([
     admin.from("stat_entries").select("*").eq("stat_id", stat.id).eq("week_start", weekStart).maybeSingle(),
     admin
       .from("stat_entries")
@@ -99,7 +134,7 @@ async function syncWeekly(stat: Stat, weekStart: string, actorId: string, practi
       .limit(1)
       .maybeSingle(),
   ]);
-  const calculated = rollupValue(stat, daily ?? []);
+  const calculated = await calculateWeeklyValue(admin, stat, weekStart);
   if (calculated === null) {
     if (existing && !existing.is_manual_override) {
       await admin.from("stat_entries").delete().eq("id", existing.id);
@@ -198,8 +233,6 @@ export async function getStatsWorkspace(weekStart = getCurrentWeekStart()) {
   return {
     setupRequired: false,
     isAdmin: profile.role === "admin",
-    // True when every assigned stat was the system-managed Bills stat, so the
-    // empty state can explain it's auto-synced rather than say "nothing assigned".
     billsManagedHidden: visibleStats.length === 0 && (stats ?? []).length > 0,
     stats: visibleStats.map((stat) => ({
         stat: stat as Stat,

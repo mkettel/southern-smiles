@@ -8,6 +8,7 @@ import { getCurrentPracticeId } from "@/lib/practice";
 import { getCurrentWeekStart } from "@/lib/constants";
 import { calculateCondition } from "@/lib/conditions";
 import { isBillsManagedStat } from "@/lib/bills";
+import { isCherryApprovedFinancingStat } from "@/lib/cherry-financing";
 import type { DailyStatEntry, Post, Profile, Stat, StatEntry } from "@/lib/types";
 
 export interface WorkspaceStat {
@@ -58,6 +59,9 @@ async function canEditStat(statId: string) {
   if (!stat) return { error: "Stat not found" as const };
   if (isBillsManagedStat(stat as Stat & { post: Post })) {
     return { error: "Bills is updated from the Bills tracker" as const };
+  }
+  if (isCherryApprovedFinancingStat(stat as Stat & { post: Post })) {
+    return { error: "Approved Financing is updated from Cherry approval imports" as const };
   }
 
   if (profile.role !== "admin") {
@@ -169,7 +173,15 @@ export async function getStatsWorkspace(weekStart = getCurrentWeekStart()) {
       .select("post_id")
       .eq("profile_id", user.id);
     postIds = assignments?.map((assignment) => assignment.post_id) ?? [];
-    if (!postIds.length) return { stats: [] as WorkspaceStat[], setupRequired: false, isAdmin: false, billsManagedHidden: false };
+    if (!postIds.length) {
+      return {
+        stats: [] as WorkspaceStat[],
+        setupRequired: false,
+        isAdmin: false,
+        billsManagedHidden: false,
+        approvedFinancingManagedHidden: false,
+      };
+    }
   }
 
   let query = supabase
@@ -179,20 +191,52 @@ export async function getStatsWorkspace(weekStart = getCurrentWeekStart()) {
     .order("display_order");
   if (postIds) query = query.in("post_id", postIds);
   const { data: stats, error } = await query;
-  if (isSetupMissing(error)) return { stats: [] as WorkspaceStat[], setupRequired: true, isAdmin: profile.role === "admin", billsManagedHidden: false };
+  if (isSetupMissing(error)) {
+    return {
+      stats: [] as WorkspaceStat[],
+      setupRequired: true,
+      isAdmin: profile.role === "admin",
+      billsManagedHidden: false,
+      approvedFinancingManagedHidden: false,
+    };
+  }
   if (error) throw new Error(error.message);
 
   const statIds = stats?.map((stat) => stat.id) ?? [];
-  if (!statIds.length) return { stats: [] as WorkspaceStat[], setupRequired: false, isAdmin: profile.role === "admin", billsManagedHidden: false };
+  if (!statIds.length) {
+    return {
+      stats: [] as WorkspaceStat[],
+      setupRequired: false,
+      isAdmin: profile.role === "admin",
+      billsManagedHidden: false,
+      approvedFinancingManagedHidden: false,
+    };
+  }
   const [{ data: daily, error: dailyError }, { data: weekly }] = await Promise.all([
     supabase.from("daily_stat_entries").select("*").in("stat_id", statIds).eq("week_start", weekStart),
     supabase.from("stat_entries").select("*").in("stat_id", statIds).eq("week_start", weekStart),
   ]);
-  if (isSetupMissing(dailyError)) return { stats: [] as WorkspaceStat[], setupRequired: true, isAdmin: profile.role === "admin", billsManagedHidden: false };
+  if (isSetupMissing(dailyError)) {
+    return {
+      stats: [] as WorkspaceStat[],
+      setupRequired: true,
+      isAdmin: profile.role === "admin",
+      billsManagedHidden: false,
+      approvedFinancingManagedHidden: false,
+    };
+  }
   if (dailyError) throw new Error(dailyError.message);
 
   const visibleStats = (stats ?? []).filter(
-    (stat) => !isBillsManagedStat(stat as Stat & { post: Post }),
+    (stat) =>
+      !isBillsManagedStat(stat as Stat & { post: Post }) &&
+      !isCherryApprovedFinancingStat(stat as Stat & { post: Post }),
+  );
+  const hiddenBillsStats = (stats ?? []).filter((stat) =>
+    isBillsManagedStat(stat as Stat & { post: Post }),
+  );
+  const hiddenApprovedFinancingStats = (stats ?? []).filter((stat) =>
+    isCherryApprovedFinancingStat(stat as Stat & { post: Post }),
   );
 
   return {
@@ -200,7 +244,9 @@ export async function getStatsWorkspace(weekStart = getCurrentWeekStart()) {
     isAdmin: profile.role === "admin",
     // True when every assigned stat was the system-managed Bills stat, so the
     // empty state can explain it's auto-synced rather than say "nothing assigned".
-    billsManagedHidden: visibleStats.length === 0 && (stats ?? []).length > 0,
+    billsManagedHidden: visibleStats.length === 0 && hiddenBillsStats.length > 0,
+    approvedFinancingManagedHidden:
+      visibleStats.length === 0 && hiddenApprovedFinancingStats.length > 0,
     stats: visibleStats.map((stat) => ({
         stat: stat as Stat,
         post: stat.post as Post,

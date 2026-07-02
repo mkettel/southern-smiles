@@ -26,6 +26,7 @@ import {
   Download,
   Mailbox,
   ReceiptText,
+  BadgeDollarSign,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -59,6 +60,7 @@ const adminOnlyLinks: NavLink[] = [
   { href: "/admin/organization", label: "Organization", icon: Building2 },
   { href: "/admin/stats", label: "Manage Stats", icon: BarChart3 },
   { href: "/admin/bills", label: "Bills", icon: ReceiptText },
+  { href: "/admin/cherry-financing", label: "Approved Financing", icon: BadgeDollarSign },
   { href: "/admin/surveys", label: "Patient Surveys", icon: Mailbox },
   { href: "/admin/export", label: "Export & Analyze", icon: Download },
   { href: "/admin/employees", label: "Manage Team", icon: Settings },

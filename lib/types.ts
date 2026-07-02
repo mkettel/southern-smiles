@@ -141,6 +141,21 @@ export interface DailyStatEntry {
   profile?: Profile;
 }
 
+export interface CherryFinancingApproval {
+  id: string;
+  practice_id: string;
+  source: "cherry_email";
+  source_message_id: string;
+  approved_at: string;
+  week_start: string;
+  amount_cents: number;
+  subject: string | null;
+  imported_by: string | null;
+  created_at: string;
+  updated_at: string;
+  importer?: Pick<Profile, "id" | "full_name" | "avatar_url" | "avatar_color"> | null;
+}
+
 export type ChangelogVisibility = "admin" | "everyone";
 
 export interface ChangelogEntry {

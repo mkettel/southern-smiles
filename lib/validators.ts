@@ -153,6 +153,13 @@ export const billSchema = z
     path: ["paid_date"],
   });
 
+export const cherryApprovalImportSchema = z.object({
+  messageId: z.string().trim().max(300).nullable().optional(),
+  subject: z.string().trim().min(1, "Subject is required").max(300),
+  body: z.string().trim().min(1, "Email body is required").max(20000),
+  receivedAt: z.string().datetime("Received date must be a valid timestamp"),
+});
+
 // ============================================================
 // Patient surveys & referral insights
 // ============================================================

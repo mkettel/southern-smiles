@@ -23,6 +23,7 @@ interface Props {
   stats: WorkspaceStat[];
   isAdmin: boolean;
   billsManagedHidden?: boolean;
+  approvedFinancingManagedHidden?: boolean;
 }
 
 const FORMULA_LABELS = {
@@ -132,7 +133,15 @@ function groupByDivision(items: WorkspaceStat[]) {
   return [...groups.values()].sort((a, b) => a.number - b.number);
 }
 
-export function StatsWorkspace({ mode, weekStart, dates, stats, isAdmin, billsManagedHidden = false }: Props) {
+export function StatsWorkspace({
+  mode,
+  weekStart,
+  dates,
+  stats,
+  isAdmin,
+  billsManagedHidden = false,
+  approvedFinancingManagedHidden = false,
+}: Props) {
   const router = useRouter();
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -278,6 +287,8 @@ export function StatsWorkspace({ mode, weekStart, dates, stats, isAdmin, billsMa
         <CardContent className="py-10 text-center text-sm text-muted-foreground">
           {billsManagedHidden
             ? "Your Bills stat is updated automatically from the Bills tracker — there's nothing to enter here."
+            : approvedFinancingManagedHidden
+              ? "Your Approved Financing stat is updated automatically from Cherry approval imports — there's nothing to enter here."
             : isAdmin
               ? "No active stats are configured."
               : "No stats are assigned to you."}

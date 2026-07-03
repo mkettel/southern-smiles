@@ -104,12 +104,12 @@ async function calculateWeeklyValue(
   const [{ data: collectionsEntries }, { data: staffEntries }] = await Promise.all([
     admin
       .from("daily_stat_entries")
-      .select("value")
+      .select("entry_date, value")
       .eq("stat_id", stat.formula_source_stat_id)
       .eq("week_start", weekStart),
     admin
       .from("daily_stat_entries")
-      .select("input_value")
+      .select("entry_date, input_value")
       .eq("stat_id", stat.id)
       .eq("week_start", weekStart),
   ]);
@@ -136,6 +136,9 @@ async function syncWeekly(stat: Stat, weekStart: string, actorId: string, practi
   ]);
   const calculated = await calculateWeeklyValue(admin, stat, weekStart);
   if (calculated === null) {
+    if (stat.weekly_formula === "collections_per_staff") {
+      return;
+    }
     if (existing && !existing.is_manual_override) {
       await admin.from("stat_entries").delete().eq("id", existing.id);
     }

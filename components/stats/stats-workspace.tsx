@@ -65,6 +65,31 @@ function getStaffDays(item: WorkspaceStat) {
   }, 0);
 }
 
+function getMissingStaffDaysForCollections(
+  item: WorkspaceStat,
+  allStats: WorkspaceStat[],
+  dailyValues: Record<string, string>,
+) {
+  if (item.stat.weekly_formula !== "collections_per_staff") return [];
+  if (!item.stat.formula_source_stat_id) return [];
+
+  const collectionsStat = allStats.find(
+    (candidate) => candidate.stat.id === item.stat.formula_source_stat_id,
+  );
+  if (!collectionsStat) return [];
+
+  return collectionsStat.dailyEntries
+    .filter((entry) => {
+      const value = entry.value == null ? null : Number(entry.value);
+      return value !== null && Number.isFinite(value);
+    })
+    .filter((entry) => {
+      const staffKey = `${item.stat.id}:${entry.entry_date}`;
+      return (dailyValues[staffKey]?.trim() ?? "") === "";
+    })
+    .map((entry) => entry.entry_date);
+}
+
 function dayLabel(date: string) {
   return new Date(`${date}T00:00:00`).toLocaleDateString("en-US", {
     weekday: "short",
@@ -277,9 +302,10 @@ export function StatsWorkspace({ mode, weekStart, dates, stats, isAdmin, billsMa
         {mode === "daily" && todayInWeek && (
           <Button
             type="button"
-            variant={missingTodayOnly ? "default" : "outline"}
-            onClick={() => setMissingTodayOnly((current) => !current)}
-          >
+          variant={missingTodayOnly ? "default" : "outline"}
+          aria-pressed={missingTodayOnly}
+          onClick={() => setMissingTodayOnly((current) => !current)}
+        >
             Missing today
           </Button>
         )}
@@ -289,6 +315,7 @@ export function StatsWorkspace({ mode, weekStart, dates, stats, isAdmin, billsMa
           type="button"
           variant={divisionFilter === "all" ? "default" : "outline"}
           size="sm"
+          aria-pressed={divisionFilter === "all"}
           onClick={() => setDivisionFilter("all")}
         >
           All
@@ -299,6 +326,7 @@ export function StatsWorkspace({ mode, weekStart, dates, stats, isAdmin, billsMa
             type="button"
             variant={divisionFilter === division.key ? "default" : "outline"}
             size="sm"
+            aria-pressed={divisionFilter === division.key}
             onClick={() => setDivisionFilter(division.key)}
             className="gap-1.5"
           >
@@ -338,6 +366,7 @@ export function StatsWorkspace({ mode, weekStart, dates, stats, isAdmin, billsMa
                 <div className="grid gap-3 lg:grid-cols-2">
                   {group.stats.map((item) => {
                     const overridden = Boolean(item.weeklyEntry?.is_manual_override);
+                    const missingStaffDates = getMissingStaffDaysForCollections(item, stats, dailyValues);
                     return (
                       <Card
                         key={item.stat.id}
@@ -379,6 +408,11 @@ export function StatsWorkspace({ mode, weekStart, dates, stats, isAdmin, billsMa
                               </Button>
                             </div>
                           )}
+                          {missingStaffDates.length > 0 && (
+                            <p className="rounded-md bg-amber-500/10 px-2.5 py-2 text-xs text-amber-700 dark:text-amber-300">
+                              Staff-days missing for {missingStaffDates.map(dayLabel).join(", ")}. Weekly total will pause until filled.
+                            </p>
+                          )}
                         </CardContent>
                       </Card>
                     );
@@ -403,67 +437,75 @@ export function StatsWorkspace({ mode, weekStart, dates, stats, isAdmin, billsMa
                 <span className="text-xs text-muted-foreground">{group.stats.length} stats</span>
               </div>
               <div className="space-y-3">
-                {group.stats.map((item) => (
-                  <Card
-                    key={item.stat.id}
-                    style={{ borderLeftColor: group.color }}
-                    className="border-l-4"
-                  >
-                    <CardHeader className="pb-3">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                          <CardTitle className="text-base">{item.stat.name}</CardTitle>
-                          <p className="mt-1 text-xs text-muted-foreground">{item.post.title}</p>
+                {group.stats.map((item) => {
+                  const missingStaffDates = getMissingStaffDaysForCollections(item, stats, dailyValues);
+                  return (
+                    <Card
+                      key={item.stat.id}
+                      style={{ borderLeftColor: group.color }}
+                      className="border-l-4"
+                    >
+                      <CardHeader className="pb-3">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <CardTitle className="text-base">{item.stat.name}</CardTitle>
+                            <p className="mt-1 text-xs text-muted-foreground">{item.post.title}</p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="outline">{FORMULA_LABELS[item.stat.weekly_formula]}</Badge>
+                            {item.stat.weekly_formula === "collections_per_staff" && (
+                              <Badge variant="secondary">{getStaffDays(item)} staff-days</Badge>
+                            )}
+                            {item.weeklyEntry && (
+                              <Badge variant="secondary">Week: {formatStatValue(Number(item.weeklyEntry.value), item.stat.stat_type)}</Badge>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="outline">{FORMULA_LABELS[item.stat.weekly_formula]}</Badge>
-                          {item.stat.weekly_formula === "collections_per_staff" && (
-                            <Badge variant="secondary">{getStaffDays(item)} staff-days</Badge>
-                          )}
-                          {item.weeklyEntry && (
-                            <Badge variant="secondary">Week: {formatStatValue(Number(item.weeklyEntry.value), item.stat.stat_type)}</Badge>
-                          )}
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid gap-3 sm:grid-cols-5">
-                        {dates.map((date) => {
-                          const key = `${item.stat.id}:${date}`;
-                          const entry = item.dailyEntries.find((row) => row.entry_date === date);
-                          const derived = item.stat.weekly_formula === "collections_per_staff";
-                          return (
-                            <div key={date} className="space-y-1.5">
-                              <label htmlFor={key} className="block text-xs font-medium text-muted-foreground">{dayLabel(date)}</label>
-                              <div className="flex gap-1.5">
-                                <Input
-                                  id={key}
-                                  type="number"
-                                  min="0"
-                                  step={derived ? "0.5" : item.stat.stat_type === "count" ? "1" : "0.01"}
-                                  value={dailyValues[key] ?? ""}
-                                  placeholder={derived ? "Staff worked" : undefined}
-                                  onChange={(event) => setDailyValues((current) => ({ ...current, [key]: event.target.value }))}
-                                  onBlur={() => saveDaily(item, date)}
-                                  onWheel={(event) => event.currentTarget.blur()}
-                                />
-                                <Button variant="outline" size="icon-sm" onClick={() => saveDaily(item, date)} disabled={isPending && pendingKey === key} aria-label="Save daily stat">
-                                  <Save className="h-3.5 w-3.5" />
-                                </Button>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {missingStaffDates.length > 0 && (
+                          <p className="rounded-md bg-amber-500/10 px-2.5 py-2 text-xs text-amber-700 dark:text-amber-300">
+                            Staff-days missing for {missingStaffDates.map(dayLabel).join(", ")}. Weekly total will pause until filled.
+                          </p>
+                        )}
+                        <div className="grid gap-3 sm:grid-cols-5">
+                          {dates.map((date) => {
+                            const key = `${item.stat.id}:${date}`;
+                            const entry = item.dailyEntries.find((row) => row.entry_date === date);
+                            const derived = item.stat.weekly_formula === "collections_per_staff";
+                            return (
+                              <div key={date} className="space-y-1.5">
+                                <label htmlFor={key} className="block text-xs font-medium text-muted-foreground">{dayLabel(date)}</label>
+                                <div className="flex gap-1.5">
+                                  <Input
+                                    id={key}
+                                    type="number"
+                                    min="0"
+                                    step={derived ? "0.5" : item.stat.stat_type === "count" ? "1" : "0.01"}
+                                    value={dailyValues[key] ?? ""}
+                                    placeholder={derived ? "Staff worked" : undefined}
+                                    onChange={(event) => setDailyValues((current) => ({ ...current, [key]: event.target.value }))}
+                                    onBlur={() => saveDaily(item, date)}
+                                    onWheel={(event) => event.currentTarget.blur()}
+                                  />
+                                  <Button variant="outline" size="icon-sm" onClick={() => saveDaily(item, date)} disabled={isPending && pendingKey === key} aria-label="Save daily stat">
+                                    <Save className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                                {derived && (
+                                  <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                                    <Calculator className="h-3 w-3" />
+                                    {entry?.value == null ? "Enter Collections first" : `Daily preview: ${formatStatValue(Number(entry.value), item.stat.stat_type)}`}
+                                  </p>
+                                )}
                               </div>
-                              {derived && (
-                                <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                                  <Calculator className="h-3 w-3" />
-                                  {entry?.value == null ? "Enter Collections first" : `Daily preview: ${formatStatValue(Number(entry.value), item.stat.stat_type)}`}
-                                </p>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                            );
+                          })}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             </section>
           ))}

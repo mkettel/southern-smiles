@@ -12,7 +12,6 @@ CREATE TABLE IF NOT EXISTS cherry_financing_approvals (
   approved_at timestamptz NOT NULL,
   week_start date NOT NULL,
   amount_cents integer NOT NULL CHECK (amount_cents >= 0),
-  subject text CHECK (subject IS NULL OR char_length(subject) <= 300),
   imported_by uuid REFERENCES profiles(id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),

@@ -32,7 +32,6 @@ test("parses the standard Cherry approved amount from Total Available", () => {
     approvedAt: "2026-05-19T15:46:54Z",
     weekStart: "2026-05-18",
     amountCents: 1_000_000,
-    subject: "Alex has been approved for $10,000 at Southern Smiles",
   });
 });
 
@@ -68,6 +67,17 @@ test("falls back to the subject amount when Total Available is missing", () => {
   assert.equal(result?.amountCents, 125_050);
 });
 
+test("parses Cherry amounts with cents and USD suffixes", () => {
+  const result = parseCherryApprovalEmail({
+    messageId: "message-usd",
+    subject: "Morgan has been approved for $10,000.00 USD at Southern Smiles",
+    receivedAt: "2026-06-29T12:00:00Z",
+    body: ["Total Available", "$10,000.00 USD"].join("\n"),
+  });
+
+  assert.equal(result?.amountCents, 1_000_000);
+});
+
 test("ignores non-approval Cherry emails", () => {
   const result = parseCherryApprovalEmail({
     messageId: "message-4",
@@ -82,6 +92,7 @@ test("ignores non-approval Cherry emails", () => {
 test("normalizes Cherry dollar strings to cents", () => {
   assert.equal(parseCherryDollarAmountToCents("$10,000"), 1_000_000);
   assert.equal(parseCherryDollarAmountToCents("$1,428.00"), 142_800);
+  assert.equal(parseCherryDollarAmountToCents("$10,000.00 USD"), 1_000_000);
   assert.equal(parseCherryDollarAmountToCents("not an amount"), null);
 });
 

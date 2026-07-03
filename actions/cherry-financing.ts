@@ -8,6 +8,7 @@ import { cherryApprovalImportSchema } from "@/lib/validators";
 import {
   importCherryApprovalForPractice,
   syncCherryApprovedFinancingStat,
+  syncNextCherryApprovedFinancingWeek,
 } from "@/lib/cherry-financing-sync";
 import type { CherryFinancingApproval, Profile } from "@/lib/types";
 
@@ -134,6 +135,12 @@ export async function deleteCherryApproval(approvalId: string) {
   if (error) return { error: error.message };
 
   await syncCherryApprovedFinancingStat(
+    supabase,
+    practiceId,
+    existing.week_start as string,
+    user.id,
+  );
+  await syncNextCherryApprovedFinancingWeek(
     supabase,
     practiceId,
     existing.week_start as string,

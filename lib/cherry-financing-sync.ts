@@ -63,7 +63,6 @@ export async function importCherryApprovalForPractice({
         approved_at: parsed.approvedAt,
         week_start: parsed.weekStart,
         amount_cents: parsed.amountCents,
-        subject: parsed.subject,
         imported_by: importedBy,
         updated_at: new Date().toISOString(),
       },
@@ -75,6 +74,12 @@ export async function importCherryApprovalForPractice({
   if (error) throw new Error(error.message);
 
   const weeklyTotalCents = await syncCherryApprovedFinancingStat(
+    supabase,
+    practiceId,
+    parsed.weekStart,
+    importedBy,
+  );
+  await syncNextCherryApprovedFinancingWeek(
     supabase,
     practiceId,
     parsed.weekStart,
@@ -210,6 +215,54 @@ export async function syncCurrentCherryApprovedFinancingStat(
     getCurrentWeekStart(),
     actorId,
   );
+}
+
+export async function syncNextCherryApprovedFinancingWeek(
+  supabase: AdminClient,
+  practiceId: string,
+  weekStart: string,
+  actorId: string | null,
+) {
+  const { data: stats } = await supabase
+    .from("stats")
+    .select("id, name, stat_type, post:posts(id, division:divisions(number))")
+    .eq("practice_id", practiceId)
+    .eq("is_active", true)
+    .eq("stat_type", "dollar");
+
+  const financingStatIds = ((stats ?? []) as unknown as (Stat & {
+    post?: { id?: string | null; division?: { number?: number | null } | null } | null;
+  })[])
+    .filter((stat) =>
+      stat.name.trim().toLowerCase() === "approved financing" &&
+      stat.post?.division?.number === 2,
+    )
+    .map((stat) => stat.id);
+
+  if (!financingStatIds.length) return;
+
+  const nextWeeks = new Set<string>();
+  for (const statId of financingStatIds) {
+    const { data: nextEntry } = await supabase
+      .from("stat_entries")
+      .select("week_start")
+      .eq("stat_id", statId)
+      .gt("week_start", weekStart)
+      .order("week_start", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (nextEntry?.week_start) nextWeeks.add(nextEntry.week_start as string);
+  }
+
+  for (const nextWeekStart of nextWeeks) {
+    await syncCherryApprovedFinancingStat(
+      supabase,
+      practiceId,
+      nextWeekStart,
+      actorId,
+    );
+  }
 }
 
 async function getAssignedProfileId(

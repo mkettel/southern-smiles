@@ -17,7 +17,6 @@ export interface CherryApprovalEmailResult {
   approvedAt: string;
   weekStart: string;
   amountCents: number;
-  subject: string;
 }
 
 export interface CherryApprovalImportPayload {
@@ -27,23 +26,45 @@ export interface CherryApprovalImportPayload {
   receivedAt: string;
 }
 
+const CHERRY_AMOUNT_PATTERN = String.raw`\$[\d,]+(?:\.\d{2})?(?:\s+USD)?`;
+
 const APPROVAL_SUBJECT_PATTERNS = [
-  /approved\s+for\s+purchases\s+up\s+to\s+\$[\d,]+(?:\.\d{2})?\s+at\s+southern\s+smiles/i,
-  /has\s+been\s+approved\s+for\s+\$[\d,]+(?:\.\d{2})?\s+at\s+southern\s+smiles/i,
-  /is\s+approved\s+for\s+purchases\s+up\s+to\s+\$[\d,]+(?:\.\d{2})?\s+at\s+southern\s+smiles/i,
+  new RegExp(
+    String.raw`approved\s+for\s+purchases\s+up\s+to\s+${CHERRY_AMOUNT_PATTERN}\s+at\s+southern\s+smiles`,
+    "i",
+  ),
+  new RegExp(
+    String.raw`has\s+been\s+approved\s+for\s+${CHERRY_AMOUNT_PATTERN}\s+at\s+southern\s+smiles`,
+    "i",
+  ),
+  new RegExp(
+    String.raw`is\s+approved\s+for\s+purchases\s+up\s+to\s+${CHERRY_AMOUNT_PATTERN}\s+at\s+southern\s+smiles`,
+    "i",
+  ),
 ];
 
-const TOTAL_AVAILABLE_PATTERN =
-  /total\s+available\s*(?:\r?\n|:|\s)+(\$[\d,]+(?:\.\d{2})?)/i;
+const TOTAL_AVAILABLE_PATTERN = new RegExp(
+  String.raw`total\s+available\s*(?:\r?\n|:|\s)+(${CHERRY_AMOUNT_PATTERN})`,
+  "i",
+);
 
 const SUBJECT_AMOUNT_PATTERNS = [
-  /approved\s+for\s+purchases\s+up\s+to\s+(\$[\d,]+(?:\.\d{2})?)/i,
-  /has\s+been\s+approved\s+for\s+(\$[\d,]+(?:\.\d{2})?)/i,
-  /is\s+approved\s+for\s+purchases\s+up\s+to\s+(\$[\d,]+(?:\.\d{2})?)/i,
+  new RegExp(
+    String.raw`approved\s+for\s+purchases\s+up\s+to\s+(${CHERRY_AMOUNT_PATTERN})`,
+    "i",
+  ),
+  new RegExp(
+    String.raw`has\s+been\s+approved\s+for\s+(${CHERRY_AMOUNT_PATTERN})`,
+    "i",
+  ),
+  new RegExp(
+    String.raw`is\s+approved\s+for\s+purchases\s+up\s+to\s+(${CHERRY_AMOUNT_PATTERN})`,
+    "i",
+  ),
 ];
 
 export function parseCherryDollarAmountToCents(value: string): number | null {
-  const normalized = value.replace(/[$,\s]/g, "");
+  const normalized = value.replace(/usd/gi, "").replace(/[$,\s]/g, "");
   if (!normalized) return null;
 
   const amount = Number(normalized);
@@ -91,7 +112,6 @@ export function parseCherryApprovalEmail(
     approvedAt,
     weekStart,
     amountCents,
-    subject: subject.slice(0, 300),
   };
 }
 

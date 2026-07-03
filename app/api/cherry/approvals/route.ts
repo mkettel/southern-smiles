@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -5,21 +6,44 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { importCherryApprovalForPractice } from "@/lib/cherry-financing-sync";
 
 const webhookSchema = z.object({
-  practiceId: z.string().trim().min(1).optional(),
-  messageId: z.string().trim().max(300).nullable().optional(),
+  messageId: z.string().trim().min(1).max(300),
   subject: z.string().trim().min(1).max(300),
   body: z.string().trim().min(1).max(20000),
   receivedAt: z.string().datetime().optional(),
 });
 
+const MAX_WEBHOOK_BODY_BYTES = 64 * 1024;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_REQUESTS = 30;
+const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
+
 export async function GET() {
   return NextResponse.json({
     ok: true,
     configured: Boolean(process.env.CHERRY_EMAIL_WEBHOOK_SECRET),
+    practiceConfigured: Boolean(process.env.CHERRY_EMAIL_WEBHOOK_PRACTICE_ID),
   });
 }
 
 export async function POST(request: Request) {
+  if (!checkRateLimit(request)) {
+    return NextResponse.json(
+      { error: "Too many requests" },
+      { status: 429 },
+    );
+  }
+
+  const contentLength = Number(request.headers.get("content-length") ?? "0");
+  if (
+    Number.isFinite(contentLength) &&
+    contentLength > MAX_WEBHOOK_BODY_BYTES
+  ) {
+    return NextResponse.json(
+      { error: "Payload too large" },
+      { status: 413 },
+    );
+  }
+
   const expectedSecret = process.env.CHERRY_EMAIL_WEBHOOK_SECRET;
   if (!expectedSecret) {
     return NextResponse.json(
@@ -32,13 +56,27 @@ export async function POST(request: Request) {
     request.headers.get("x-cherry-webhook-secret") ??
     request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
 
-  if (!suppliedSecret || suppliedSecret !== expectedSecret) {
+  if (!suppliedSecret || !safeSecretEquals(suppliedSecret, expectedSecret)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  let rawText: string;
+  try {
+    rawText = await request.text();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  if (Buffer.byteLength(rawText) > MAX_WEBHOOK_BODY_BYTES) {
+    return NextResponse.json(
+      { error: "Payload too large" },
+      { status: 413 },
+    );
   }
 
   let raw: unknown;
   try {
-    raw = await request.json();
+    raw = JSON.parse(rawText) as unknown;
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
@@ -52,11 +90,10 @@ export async function POST(request: Request) {
   }
 
   const supabase = createAdminClient();
-  const practiceId =
-    parsed.data.practiceId ?? (await getSinglePracticeId(supabase));
+  const practiceId = await getWebhookPracticeId(supabase);
   if (!practiceId) {
     return NextResponse.json(
-      { error: "practiceId is required when more than one practice exists" },
+      { error: "Cherry email webhook practice is not configured" },
       { status: 400 },
     );
   }
@@ -101,6 +138,43 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
+}
+
+function safeSecretEquals(suppliedSecret: string, expectedSecret: string) {
+  const suppliedBuffer = Buffer.from(suppliedSecret);
+  const expectedBuffer = Buffer.from(expectedSecret);
+  if (suppliedBuffer.length !== expectedBuffer.length) return false;
+  return timingSafeEqual(suppliedBuffer, expectedBuffer);
+}
+
+function checkRateLimit(request: Request) {
+  const forwardedFor = request.headers
+    .get("x-forwarded-for")
+    ?.split(",")[0]
+    ?.trim();
+  const key = forwardedFor || "unknown";
+  const now = Date.now();
+  const bucket = rateLimitBuckets.get(key);
+
+  if (!bucket || bucket.resetAt <= now) {
+    rateLimitBuckets.set(key, {
+      count: 1,
+      resetAt: now + RATE_LIMIT_WINDOW_MS,
+    });
+    return true;
+  }
+
+  bucket.count += 1;
+  return bucket.count <= RATE_LIMIT_MAX_REQUESTS;
+}
+
+async function getWebhookPracticeId(
+  supabase: ReturnType<typeof createAdminClient>,
+) {
+  const configuredPracticeId =
+    process.env.CHERRY_EMAIL_WEBHOOK_PRACTICE_ID?.trim();
+  if (configuredPracticeId) return configuredPracticeId;
+  return getSinglePracticeId(supabase);
 }
 
 async function getSinglePracticeId(supabase: ReturnType<typeof createAdminClient>) {

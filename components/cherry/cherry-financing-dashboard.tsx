@@ -57,6 +57,12 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+function formatSourceMessageId(value: string) {
+  if (value.startsWith("manual:")) return "Manual paste";
+  if (value.length <= 18) return value;
+  return `${value.slice(0, 8)}...${value.slice(-6)}`;
+}
+
 export function CherryFinancingDashboard({
   initialData,
 }: {
@@ -224,7 +230,7 @@ export function CherryFinancingDashboard({
               <TableHeader>
                 <TableRow>
                   <TableHead>Received</TableHead>
-                  <TableHead>Subject</TableHead>
+                  <TableHead>Source</TableHead>
                   <TableHead>Week</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead className="w-12"></TableHead>
@@ -237,7 +243,7 @@ export function CherryFinancingDashboard({
                       {formatDate(approval.approved_at)}
                     </TableCell>
                     <TableCell className="max-w-md truncate">
-                      {approval.subject ?? "Cherry approval"}
+                      {formatSourceMessageId(approval.source_message_id)}
                     </TableCell>
                     <TableCell>{approval.week_start}</TableCell>
                     <TableCell className="text-right font-medium">

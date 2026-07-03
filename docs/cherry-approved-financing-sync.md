@@ -34,7 +34,6 @@ This creates `cherry_financing_approvals` with:
 - `approved_at`
 - `week_start`
 - `amount_cents`
-- optional subject snippet
 - optional importing profile
 
 The unique key on `(practice_id, source, source_message_id)` prevents duplicate
@@ -63,7 +62,8 @@ $10,000
 ```
 
 If that field is missing, it falls back to the approval amount in the subject.
-This avoids accidentally using the higher Growth Plan marketing amount.
+This avoids accidentally using the higher Growth Plan marketing amount. The
+subject and body are parsed only during import; they are not stored.
 
 ## Webhook Endpoint
 
@@ -83,13 +83,13 @@ Required Vercel/Supabase app env var:
 
 ```text
 CHERRY_EMAIL_WEBHOOK_SECRET=<long random secret>
+CHERRY_EMAIL_WEBHOOK_PRACTICE_ID=<practice uuid>
 ```
 
 Payload:
 
 ```json
 {
-  "practiceId": "optional-if-there-is-only-one-practice",
   "messageId": "gmail-message-id-or-inbound-provider-id",
   "subject": "Patient has been approved for $10,000 at Southern Smiles",
   "body": "Total Available\n$10,000\n...",
@@ -97,8 +97,11 @@ Payload:
 }
 ```
 
-If `receivedAt` is omitted, the server uses the import time. `messageId` should
-be stable in production so retries do not duplicate approvals.
+If `receivedAt` is omitted, the server uses the import time. `messageId` is
+required so retries do not duplicate approvals. The webhook does not accept a
+caller-provided practice id; production should set
+`CHERRY_EMAIL_WEBHOOK_PRACTICE_ID` so forwarded emails always land in the
+intended practice.
 
 ## Dedicated Gmail Fallback
 
@@ -127,8 +130,10 @@ When an approval imports successfully:
 1. The email is parsed.
 2. The approval row is upserted by message id.
 3. The weekly total for that approval's week is recalculated.
-4. The Division 2 `Approved Financing` stat entry is upserted.
-5. Dashboard, Stats, and stat detail pages are revalidated.
+4. The next existing `Approved Financing` stat week is refreshed so its
+   previous value stays accurate when older approvals are imported later.
+5. The Division 2 `Approved Financing` stat entry is upserted.
+6. Dashboard, Stats, and stat detail pages are revalidated.
 
 Manual stat entry for `Approved Financing` is blocked because the source of
 truth is now the Cherry import log.

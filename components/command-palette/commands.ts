@@ -11,6 +11,8 @@ import {
   MessageSquarePlus,
   Wrench,
   ReceiptText,
+  Calculator,
+  ClipboardList,
   User,
   Plus,
   PenSquare,
@@ -114,6 +116,26 @@ export function buildCommands({ role, canAccessBills = false }: BuildOpts): Comm
   ];
 
   const navAdmin: CommandItem[] = [
+    {
+      id: "nav-admin-overhead",
+      label: "Overhead",
+      keywords: ["admin", "costs", "expenses", "operatory hour"],
+      group: "Navigate",
+      icon: Calculator,
+      hint: "Admin",
+      type: "navigate",
+      href: "/admin/overhead",
+    },
+    {
+      id: "nav-admin-procedures",
+      label: "Procedure Costs",
+      keywords: ["admin", "procedures", "labs", "supplies", "chair time", "true cost"],
+      group: "Navigate",
+      icon: ClipboardList,
+      hint: "Admin",
+      type: "navigate",
+      href: "/admin/procedures",
+    },
     {
       id: "nav-admin-bills",
       label: "Bills",

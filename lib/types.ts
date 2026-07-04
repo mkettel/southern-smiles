@@ -381,6 +381,78 @@ export interface BillsDashboardData {
 }
 
 // ============================================================
+// Overhead
+// ============================================================
+
+export interface OverheadSettings {
+  practice_id: string;
+  operatories_count: number;
+  days_per_week: number;
+  clinical_hours_per_day: number;
+  weeks_per_month: number;
+  utilization_percent: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OverheadCategory {
+  id: string;
+  practice_id: string;
+  name: string;
+  description: string | null;
+  display_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OverheadItem {
+  id: string;
+  practice_id: string;
+  category_id: string;
+  name: string;
+  monthly_cost_cents: number;
+  notes: string | null;
+  display_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  category?: OverheadCategory;
+}
+
+export interface OverheadCategorySummary extends OverheadCategory {
+  item_count: number;
+  total_monthly_cents: number;
+}
+
+export interface OverheadSummary {
+  total_monthly_cents: number;
+  total_annual_cents: number;
+  full_capacity_monthly_operatory_hours: number;
+  configured_monthly_operatory_hours: number;
+  full_capacity_cost_per_operatory_hour_cents: number | null;
+  cost_per_operatory_hour_cents: number | null;
+}
+
+export interface OverheadDashboardData {
+  settings: OverheadSettings;
+  categories: OverheadCategorySummary[];
+  items: OverheadItem[];
+  summary: OverheadSummary;
+  setupRequired?: boolean;
+}
+
+export interface OverheadImportPreview {
+  file_name: string;
+  category_count: number;
+  item_count: number;
+  total_monthly_cents: number;
+  category_names: string[];
+  notes: string[];
+}
+
+// ============================================================
 // Composite / view types for the UI
 // ============================================================
 

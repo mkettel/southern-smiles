@@ -1,15 +1,39 @@
-import { getPracticeSettings } from "@/actions/settings";
+import { headers } from "next/headers";
 import { LoginForm } from "@/components/auth/login-form";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getOrgSlugFromHost } from "@/lib/tenant";
 
-export default async function LoginPage() {
-  let practiceName = "Stats & Conditions";
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ identifier?: string }>;
+}) {
+  const params = await searchParams;
+  const headerStore = await headers();
+  const organizationSlug = getOrgSlugFromHost(headerStore.get("host"));
+  let practiceName = "Survival Board";
 
-  try {
-    const settings = await getPracticeSettings();
-    practiceName = settings.name;
-  } catch {
-    // Settings not available yet
+  if (organizationSlug) {
+    try {
+      const admin = createAdminClient();
+      const { data: practice } = await admin
+        .from("practices")
+        .select("name")
+        .eq("slug", organizationSlug)
+        .eq("is_active", true)
+        .single();
+
+      practiceName = practice?.name ?? practiceName;
+    } catch {
+      // Practice lookup is best-effort for the login heading.
+    }
   }
 
-  return <LoginForm practiceName={practiceName} />;
+  return (
+    <LoginForm
+      defaultIdentifier={params?.identifier ?? ""}
+      organizationSlug={organizationSlug}
+      practiceName={practiceName}
+    />
+  );
 }

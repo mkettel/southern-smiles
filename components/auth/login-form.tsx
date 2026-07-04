@@ -8,6 +8,13 @@ import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  getOrgSlugFromHost,
+  isLocalHost,
+  isPrimaryDomainHost,
+  normalizeOrgSlug,
+  PRIMARY_DOMAIN,
+} from "@/lib/tenant";
+import {
   Card,
   CardContent,
   CardDescription,
@@ -16,16 +23,54 @@ import {
 } from "@/components/ui/card";
 
 interface LoginFormProps {
+  defaultIdentifier?: string;
+  organizationSlug?: string;
   practiceName: string;
 }
 
-export function LoginForm({ practiceName }: LoginFormProps) {
+export function LoginForm({
+  defaultIdentifier = "",
+  organizationSlug = "",
+  practiceName,
+}: LoginFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   function handleSubmit(formData: FormData) {
     setError(null);
+    const rawOrganization = (formData.get("organization") as string) ?? "";
+    const organization = normalizeOrgSlug(rawOrganization);
+
+    if (rawOrganization.trim() && !organization) {
+      setError("Enter a valid organization");
+      return;
+    }
+
+    formData.set("organization", organization);
+
+    if (organization && typeof window !== "undefined") {
+      const currentHost = window.location.hostname;
+      const currentOrg = getOrgSlugFromHost(window.location.host);
+      const shouldMoveToOrgHost =
+        !isLocalHost(currentHost) &&
+        organization !== currentOrg &&
+        (isPrimaryDomainHost(currentHost) || Boolean(currentOrg));
+
+      if (shouldMoveToOrgHost) {
+        const identifier = (formData.get("identifier") as string) ?? "";
+        const url = new URL(window.location.href);
+        url.hostname = `${organization}.${PRIMARY_DOMAIN}`;
+        url.pathname = "/login";
+        url.search = "";
+        if (identifier.trim()) {
+          url.searchParams.set("identifier", identifier.trim());
+        }
+        window.location.assign(url.toString());
+        return;
+      }
+    }
+
     startTransition(async () => {
       const result = await login(formData);
       if (result?.error) {
@@ -45,6 +90,24 @@ export function LoginForm({ practiceName }: LoginFormProps) {
       <CardContent>
         <form action={handleSubmit} className="space-y-4">
           <div className="space-y-2">
+            <Label htmlFor="organization">Organization</Label>
+            <div className="flex">
+              <Input
+                id="organization"
+                name="organization"
+                type="text"
+                placeholder="ssmiles"
+                required
+                defaultValue={organizationSlug}
+                autoComplete="organization"
+                className="rounded-r-none"
+              />
+              <div className="flex items-center rounded-r-md border border-l-0 bg-muted px-3 text-sm text-muted-foreground">
+                .{PRIMARY_DOMAIN}
+              </div>
+            </div>
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="identifier">Username or Email</Label>
             <Input
               id="identifier"
@@ -52,6 +115,7 @@ export function LoginForm({ practiceName }: LoginFormProps) {
               type="text"
               placeholder="jsmith or you@example.com"
               required
+              defaultValue={defaultIdentifier}
               autoComplete="username"
             />
           </div>

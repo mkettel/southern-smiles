@@ -153,6 +153,31 @@ export const billSchema = z
     path: ["paid_date"],
   });
 
+export const overheadCategorySchema = z.object({
+  name: z.string().trim().min(1, "Category name is required").max(160),
+  description: z.string().max(500).nullable().optional(),
+  display_order: z.number().int().min(0).default(0),
+  is_active: z.boolean().default(true),
+});
+
+export const overheadItemSchema = z.object({
+  category_id: uuidLike,
+  name: z.string().trim().min(1, "Line item name is required").max(200),
+  monthly_cost_cents: z.number().int().min(0, "Amount must be 0 or greater"),
+  notes: z.string().max(2000).nullable().optional(),
+  display_order: z.number().int().min(0).default(0),
+  is_active: z.boolean().default(true),
+});
+
+export const overheadSettingsSchema = z.object({
+  operatories_count: z.number().int().min(1).max(100),
+  days_per_week: z.number().min(0.5).max(7),
+  clinical_hours_per_day: z.number().min(0.5).max(24),
+  weeks_per_month: z.number().min(1).max(6),
+  utilization_percent: z.number().min(1).max(100),
+  notes: z.string().max(4000).nullable().optional(),
+});
+
 export const cherryApprovalImportSchema = z.object({
   messageId: z.string().trim().max(300).nullable().optional(),
   subject: z.string().trim().min(1, "Subject is required").max(300),

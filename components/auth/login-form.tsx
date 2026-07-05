@@ -25,12 +25,14 @@ import {
 interface LoginFormProps {
   defaultIdentifier?: string;
   organizationSlug?: string;
+  showOrganization?: boolean;
   practiceName: string;
 }
 
 export function LoginForm({
   defaultIdentifier = "",
   organizationSlug = "",
+  showOrganization = false,
   practiceName,
 }: LoginFormProps) {
   const [error, setError] = useState<string | null>(null);
@@ -89,24 +91,26 @@ export function LoginForm({
       </CardHeader>
       <CardContent>
         <form action={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="organization">Organization</Label>
-            <div className="flex">
-              <Input
-                id="organization"
-                name="organization"
-                type="text"
-                placeholder="ssmiles"
-                required
-                defaultValue={organizationSlug}
-                autoComplete="organization"
-                className="rounded-r-none"
-              />
-              <div className="flex items-center rounded-r-md border border-l-0 bg-muted px-3 text-sm text-muted-foreground">
-                .{PRIMARY_DOMAIN}
+          {showOrganization && (
+            <div className="space-y-2">
+              <Label htmlFor="organization">Organization</Label>
+              <div className="flex">
+                <Input
+                  id="organization"
+                  name="organization"
+                  type="text"
+                  placeholder="ssmiles"
+                  required
+                  defaultValue={organizationSlug}
+                  autoComplete="organization"
+                  className="rounded-r-none"
+                />
+                <div className="flex items-center rounded-r-md border border-l-0 bg-muted px-3 text-sm text-muted-foreground">
+                  .{PRIMARY_DOMAIN}
+                </div>
               </div>
             </div>
-          </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="identifier">Username or Email</Label>
             <Input

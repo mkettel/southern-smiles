@@ -47,25 +47,40 @@ export async function login(formData: FormData) {
   // If the input doesn't look like an email, treat it as a username.
   // Use admin client to bypass RLS (user isn't authenticated yet).
   if (!identifier.includes("@")) {
-    let query = admin
-      .from("profiles")
-      .select("email")
-      .ilike("username", identifier);
-
     if (practiceId) {
-      query = query.eq("practice_id", practiceId);
-    }
+      // Usernames are unique per practice, so a scoped lookup is unambiguous.
+      const { data: profile } = await admin
+        .from("profiles")
+        .select("email")
+        .eq("practice_id", practiceId)
+        .ilike("username", identifier)
+        .single();
 
-    const { data: profile } = await query.single();
+      if (!profile) {
+        return { error: "No account found for that organization" };
+      }
+      email = profile.email;
+    } else {
+      // No organization supplied: usernames are only unique per practice, so
+      // fetch up to two matches and disambiguate rather than letting .single()
+      // fail confusingly once a second practice reuses the same username.
+      const { data: profiles } = await admin
+        .from("profiles")
+        .select("email")
+        .ilike("username", identifier)
+        .limit(2);
 
-    if (!profile) {
-      return {
-        error: practiceId
-          ? "No account found for that organization"
-          : "No account found with that username",
-      };
+      if (!profiles || profiles.length === 0) {
+        return { error: "No account found with that username" };
+      }
+      if (profiles.length > 1) {
+        return {
+          error:
+            "That username exists in more than one practice. Please sign in from your practice's login page or use your email.",
+        };
+      }
+      email = profiles[0].email;
     }
-    email = profile.email;
   } else if (practiceId) {
     const { data: profile } = await admin
       .from("profiles")

@@ -56,6 +56,24 @@ test("uses Total Available instead of the higher Growth Plan amount", () => {
   assert.equal(result?.amountCents, 750_000);
 });
 
+test("ignores a mid-line 'total available' upsell above the real labeled line", () => {
+  const result = parseCherryApprovalEmail({
+    messageId: "message-upsell",
+    subject: "Sam has been approved for $5,000 at Southern Smiles",
+    receivedAt: "2026-05-19T15:46:54Z",
+    body: [
+      "Sam has been approved for $5,000 at Southern Smiles",
+      "",
+      "On the Growth Plan your total available could have been $9,999.",
+      "",
+      "Total Available",
+      "$5,000",
+    ].join("\n"),
+  });
+
+  assert.equal(result?.amountCents, 500_000);
+});
+
 test("falls back to the subject amount when Total Available is missing", () => {
   const result = parseCherryApprovalEmail({
     messageId: "message-3",

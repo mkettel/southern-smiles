@@ -43,9 +43,12 @@ const APPROVAL_SUBJECT_PATTERNS = [
   ),
 ];
 
+// Anchor to the start of a line (multiline) so an upsell block that merely
+// contains the words "total available" mid-sentence can't be matched ahead of
+// the real, labeled "Total Available" line in the Cherry template.
 const TOTAL_AVAILABLE_PATTERN = new RegExp(
-  String.raw`total\s+available\s*(?:\r?\n|:|\s)+(${CHERRY_AMOUNT_PATTERN})`,
-  "i",
+  String.raw`^\s*total\s+available\s*(?:\r?\n|:|\s)+(${CHERRY_AMOUNT_PATTERN})`,
+  "im",
 );
 
 const SUBJECT_AMOUNT_PATTERNS = [

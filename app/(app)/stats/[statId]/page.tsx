@@ -4,6 +4,7 @@ import { getCanAccessBills } from "@/actions/bills";
 import { createClient } from "@/lib/supabase/server";
 import { StatDetailView } from "@/components/stats/stat-detail-view";
 import { isBillsManagedStat } from "@/lib/bills";
+import { isCherryApprovedFinancingStat } from "@/lib/cherry-financing";
 import type { Stat, OicLogEntry, Profile } from "@/lib/types";
 
 export default async function StatDetailPage({
@@ -46,6 +47,9 @@ export default async function StatDetailPage({
   const isBillsStat =
     canAccessBills &&
     isBillsManagedStat(typedStat);
+  const isCherryApprovedFinancing =
+    isAdmin &&
+    isCherryApprovedFinancingStat(typedStat);
 
   if (!isAdmin && (typedStat.is_private || typedStat.post?.division?.is_private)) {
     return (
@@ -67,6 +71,7 @@ export default async function StatDetailPage({
       oicEntries={oicEntries}
       isAdmin={isAdmin}
       isBillsStat={isBillsStat}
+      isCherryApprovedFinancingStat={isCherryApprovedFinancing}
     />
   );
 }

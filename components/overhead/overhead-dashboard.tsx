@@ -304,7 +304,7 @@ export function OverheadDashboard({ initialData }: OverheadDashboardProps) {
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-amber-950/80">
             <p>What you’re seeing is the real layout and workflow, but edits are temporarily disabled.</p>
-            <p>Once migration `042_add_overhead.sql` is applied, this page will become fully live and editable.</p>
+            <p>Once migration `043_add_overhead.sql` is applied, this page will become fully live and editable.</p>
           </CardContent>
         </Card>
       )}

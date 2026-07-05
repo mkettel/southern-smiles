@@ -21,6 +21,57 @@ export interface ParsedOverheadImport {
   preview: OverheadImportPreview;
 }
 
+// Mirror the CHECK constraints in migration 043 so a bad import is rejected
+// before the destructive delete/insert runs (see validateParsedOverheadImport).
+const CATEGORY_NAME_MAX = 160;
+const ITEM_NAME_MAX = 200;
+const ITEM_NOTES_MAX = 2000;
+
+// parseDollarAmountToCents returns NaN for non-numeric cells (e.g. "TBD",
+// "varies", "(500)") and negatives for accounting-style values. Either would
+// violate the monthly_cost_cents (integer >= 0) constraint and abort the
+// import after the delete already ran. Clamp to a safe non-negative integer.
+function parseOverheadCostCents(value: string): number {
+  const cents = parseDollarAmountToCents(value);
+  if (!Number.isFinite(cents) || cents < 0) return 0;
+  return Math.round(cents);
+}
+
+// Validate the fully parsed payload against the DB constraints BEFORE any
+// destructive write. Returns an error message, or null when the import is safe.
+export function validateParsedOverheadImport(
+  parsed: ParsedOverheadImport,
+): string | null {
+  const seen = new Map<string, string>();
+  for (const category of parsed.categories) {
+    const name = category.name.trim();
+    if (name.length < 1 || name.length > CATEGORY_NAME_MAX) {
+      return `Category name "${category.name}" must be between 1 and ${CATEGORY_NAME_MAX} characters`;
+    }
+    const key = name.toLowerCase();
+    const existing = seen.get(key);
+    if (existing) {
+      return `Duplicate category "${name}" (also imported as "${existing}"). Category names must be unique.`;
+    }
+    seen.set(key, name);
+  }
+
+  for (const item of parsed.items) {
+    const name = item.name.trim();
+    if (name.length < 1 || name.length > ITEM_NAME_MAX) {
+      return `Line item "${item.name}" must be between 1 and ${ITEM_NAME_MAX} characters`;
+    }
+    if (item.notes && item.notes.length > ITEM_NOTES_MAX) {
+      return `Notes for line item "${name}" exceed ${ITEM_NOTES_MAX} characters`;
+    }
+    if (!Number.isInteger(item.monthly_cost_cents) || item.monthly_cost_cents < 0) {
+      return `Line item "${name}" has an invalid monthly cost`;
+    }
+  }
+
+  return null;
+}
+
 function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
@@ -148,7 +199,7 @@ export function parseOverheadCsv(text: string, fileName: string): ParsedOverhead
       items.push({
         category_name: currentCategory.name,
         name: normalizeItemName(currentSection, col1),
-        monthly_cost_cents: parseDollarAmountToCents(col2),
+        monthly_cost_cents: parseOverheadCostCents(col2),
         notes: trailingNotes,
         display_order: itemOrder,
       });
@@ -161,7 +212,7 @@ export function parseOverheadCsv(text: string, fileName: string): ParsedOverhead
       items.push({
         category_name: currentCategory.name,
         name: normalizeItemName(currentSection, col0),
-        monthly_cost_cents: parseDollarAmountToCents(col2),
+        monthly_cost_cents: parseOverheadCostCents(col2),
         notes: trailingNotes,
         display_order: itemOrder,
       });

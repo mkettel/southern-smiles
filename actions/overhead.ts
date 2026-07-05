@@ -9,7 +9,7 @@ import {
   DEFAULT_OVERHEAD_CATEGORIES,
   DEFAULT_OVERHEAD_SETTINGS,
 } from "@/lib/overhead";
-import { parseOverheadCsv } from "@/lib/overhead-import";
+import { parseOverheadCsv, validateParsedOverheadImport } from "@/lib/overhead-import";
 import {
   overheadCategorySchema,
   overheadItemSchema,
@@ -412,6 +412,14 @@ export async function importOverheadCsv(formData: FormData): Promise<
     return { error: "I couldn't find overhead categories and line items in that CSV" };
   }
 
+  // Validate the full parsed payload against the DB constraints BEFORE the
+  // destructive delete below, so a bad row (duplicate/over-length category,
+  // invalid cost) can't wipe the existing workspace and then fail on insert.
+  const validationError = validateParsedOverheadImport(parsed);
+  if (validationError) {
+    return { error: validationError };
+  }
+
   try {
     const settings = await ensureOverheadSettings(supabase, practiceId);
     await ensureDefaultOverheadCategories(supabase, practiceId);
@@ -480,7 +488,7 @@ export async function importOverheadCsv(formData: FormData): Promise<
           is_active: true,
         };
       })
-      .filter(Boolean);
+      .filter((payload): payload is NonNullable<typeof payload> => payload !== null);
 
     const { error: insertItemsError } = await supabase
       .from("overhead_items")

@@ -1,8 +1,8 @@
 -- ============================================================
--- Migration 042: Overhead modeling
+-- Migration 043: Overhead modeling
 -- ============================================================
 
-CREATE TABLE overhead_settings (
+CREATE TABLE IF NOT EXISTS overhead_settings (
   practice_id uuid PRIMARY KEY REFERENCES practices(id) ON DELETE CASCADE,
   operatories_count integer NOT NULL DEFAULT 4 CHECK (operatories_count >= 1 AND operatories_count <= 100),
   days_per_week numeric(4,2) NOT NULL DEFAULT 5 CHECK (days_per_week > 0 AND days_per_week <= 7),
@@ -14,7 +14,7 @@ CREATE TABLE overhead_settings (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE overhead_categories (
+CREATE TABLE IF NOT EXISTS overhead_categories (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   practice_id uuid NOT NULL REFERENCES practices(id) ON DELETE CASCADE,
   name text NOT NULL CHECK (char_length(trim(name)) BETWEEN 1 AND 160),
@@ -25,13 +25,13 @@ CREATE TABLE overhead_categories (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE UNIQUE INDEX overhead_categories_practice_name_key
+CREATE UNIQUE INDEX IF NOT EXISTS overhead_categories_practice_name_key
   ON overhead_categories(practice_id, lower(name));
 
-CREATE INDEX idx_overhead_categories_practice_order
+CREATE INDEX IF NOT EXISTS idx_overhead_categories_practice_order
   ON overhead_categories(practice_id, display_order, name);
 
-CREATE TABLE overhead_items (
+CREATE TABLE IF NOT EXISTS overhead_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   practice_id uuid NOT NULL REFERENCES practices(id) ON DELETE CASCADE,
   category_id uuid NOT NULL REFERENCES overhead_categories(id) ON DELETE CASCADE,
@@ -44,57 +44,69 @@ CREATE TABLE overhead_items (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_overhead_items_practice_category
+CREATE INDEX IF NOT EXISTS idx_overhead_items_practice_category
   ON overhead_items(practice_id, category_id, display_order, name);
 
 ALTER TABLE overhead_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE overhead_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE overhead_items ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Admins read overhead settings" ON overhead_settings;
 CREATE POLICY "Admins read overhead settings"
   ON overhead_settings FOR SELECT
   USING (practice_id = get_practice_id() AND is_admin());
 
+DROP POLICY IF EXISTS "Admins create overhead settings" ON overhead_settings;
 CREATE POLICY "Admins create overhead settings"
   ON overhead_settings FOR INSERT
   WITH CHECK (practice_id = get_practice_id() AND is_admin());
 
+DROP POLICY IF EXISTS "Admins update overhead settings" ON overhead_settings;
 CREATE POLICY "Admins update overhead settings"
   ON overhead_settings FOR UPDATE
   USING (practice_id = get_practice_id() AND is_admin());
 
+DROP POLICY IF EXISTS "Admins delete overhead settings" ON overhead_settings;
 CREATE POLICY "Admins delete overhead settings"
   ON overhead_settings FOR DELETE
   USING (practice_id = get_practice_id() AND is_admin());
 
+DROP POLICY IF EXISTS "Admins read overhead categories" ON overhead_categories;
 CREATE POLICY "Admins read overhead categories"
   ON overhead_categories FOR SELECT
   USING (practice_id = get_practice_id() AND is_admin());
 
+DROP POLICY IF EXISTS "Admins create overhead categories" ON overhead_categories;
 CREATE POLICY "Admins create overhead categories"
   ON overhead_categories FOR INSERT
   WITH CHECK (practice_id = get_practice_id() AND is_admin());
 
+DROP POLICY IF EXISTS "Admins update overhead categories" ON overhead_categories;
 CREATE POLICY "Admins update overhead categories"
   ON overhead_categories FOR UPDATE
   USING (practice_id = get_practice_id() AND is_admin());
 
+DROP POLICY IF EXISTS "Admins delete overhead categories" ON overhead_categories;
 CREATE POLICY "Admins delete overhead categories"
   ON overhead_categories FOR DELETE
   USING (practice_id = get_practice_id() AND is_admin());
 
+DROP POLICY IF EXISTS "Admins read overhead items" ON overhead_items;
 CREATE POLICY "Admins read overhead items"
   ON overhead_items FOR SELECT
   USING (practice_id = get_practice_id() AND is_admin());
 
+DROP POLICY IF EXISTS "Admins create overhead items" ON overhead_items;
 CREATE POLICY "Admins create overhead items"
   ON overhead_items FOR INSERT
   WITH CHECK (practice_id = get_practice_id() AND is_admin());
 
+DROP POLICY IF EXISTS "Admins update overhead items" ON overhead_items;
 CREATE POLICY "Admins update overhead items"
   ON overhead_items FOR UPDATE
   USING (practice_id = get_practice_id() AND is_admin());
 
+DROP POLICY IF EXISTS "Admins delete overhead items" ON overhead_items;
 CREATE POLICY "Admins delete overhead items"
   ON overhead_items FOR DELETE
   USING (practice_id = get_practice_id() AND is_admin());

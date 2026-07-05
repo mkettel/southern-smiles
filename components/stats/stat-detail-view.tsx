@@ -26,7 +26,7 @@ import { StatName } from "@/components/stats/stat-name";
 import type { StatEntry, StatType, OicLogEntry } from "@/lib/types";
 import { calculateCondition } from "@/lib/conditions";
 import type { ConditionName } from "@/lib/conditions";
-import { ChevronRight, MessageSquareText, ReceiptText, Users } from "lucide-react";
+import { BadgeDollarSign, ChevronRight, MessageSquareText, ReceiptText, Users } from "lucide-react";
 import { EntryRowActions } from "@/components/stats/entry-row-actions";
 import { ConditionPicker } from "@/components/stats/condition-picker";
 
@@ -41,6 +41,7 @@ interface StatDetailViewProps {
   oicEntries?: OicLogEntry[];
   isAdmin?: boolean;
   isBillsStat?: boolean;
+  isCherryApprovedFinancingStat?: boolean;
 }
 
 /** A single week's data: aggregated total + individual contributor entries */
@@ -70,6 +71,7 @@ export function StatDetailView({
   oicEntries = [],
   isAdmin = false,
   isBillsStat = false,
+  isCherryApprovedFinancingStat = false,
 }: StatDetailViewProps) {
   const employees = useMemo(() => {
     const map = new Map<string, string>();
@@ -195,7 +197,8 @@ export function StatDetailView({
   }
 
   const showingAllEmployees = selectedEmployeeId === "all";
-  const colCount = isAdmin ? 7 : 6; // chevron, week, entered by, value, change, condition, [actions]
+  const canEditEntryValues = isAdmin && !isCherryApprovedFinancingStat;
+  const colCount = canEditEntryValues ? 7 : 6; // chevron, week, entered by, value, change, condition, [actions]
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -213,6 +216,12 @@ export function StatDetailView({
           <Button nativeButton={false} render={<Link href="/admin/bills" />}>
             <ReceiptText className="h-4 w-4" />
             Open Bills tracker
+          </Button>
+        )}
+        {isCherryApprovedFinancingStat && (
+          <Button nativeButton={false} render={<Link href="/admin/cherry-financing" />}>
+            <BadgeDollarSign className="h-4 w-4" />
+            Open Cherry imports
           </Button>
         )}
       </div>
@@ -279,7 +288,7 @@ export function StatDetailView({
                 <TableHead>Value</TableHead>
                 <TableHead>Change</TableHead>
                 <TableHead>Condition</TableHead>
-                {isAdmin && <TableHead className="w-24 text-right">Actions</TableHead>}
+                {canEditEntryValues && <TableHead className="w-24 text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -369,7 +378,7 @@ export function StatDetailView({
                           )}
                         </div>
                       </TableCell>
-                      {isAdmin && (
+                      {canEditEntryValues && (
                         <TableCell className="text-right">
                           {!hasMultipleContributors && wg.entries[0] && (
                             <EntryRowActions
@@ -420,7 +429,7 @@ export function StatDetailView({
                               "—"
                             )}
                           </TableCell>
-                          {isAdmin && (
+                          {canEditEntryValues && (
                             <TableCell className="text-right">
                               <EntryRowActions
                                 entryId={entry.id}

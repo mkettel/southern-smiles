@@ -4,28 +4,95 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { normalizeOrgSlug } from "@/lib/tenant";
 
 export async function login(formData: FormData) {
   const supabase = await createClient();
 
   const identifier = (formData.get("identifier") as string).trim();
   const password = formData.get("password") as string;
+  const organization = normalizeOrgSlug(formData.get("organization") as string);
 
   let email = identifier;
+  let practiceId: string | null = null;
+  const admin = createAdminClient();
+
+  if (!identifier) {
+    return { error: "Username or email is required" };
+  }
+
+  if (!password) {
+    return { error: "Password is required" };
+  }
+
+  if (formData.get("organization") && !organization) {
+    return { error: "Enter a valid organization" };
+  }
+
+  if (organization) {
+    const { data: practice } = await admin
+      .from("practices")
+      .select("id")
+      .eq("slug", organization)
+      .eq("is_active", true)
+      .single();
+
+    if (!practice) {
+      return { error: "No organization found with that name" };
+    }
+
+    practiceId = practice.id;
+  }
 
   // If the input doesn't look like an email, treat it as a username.
   // Use admin client to bypass RLS (user isn't authenticated yet).
   if (!identifier.includes("@")) {
-    const admin = createAdminClient();
+    if (practiceId) {
+      // Usernames are unique per practice, so a scoped lookup is unambiguous.
+      const { data: profile } = await admin
+        .from("profiles")
+        .select("email")
+        .eq("practice_id", practiceId)
+        .ilike("username", identifier)
+        .single();
+
+      if (!profile) {
+        return { error: "No account found for that organization" };
+      }
+      email = profile.email;
+    } else {
+      // No organization supplied: usernames are only unique per practice, so
+      // fetch up to two matches and disambiguate rather than letting .single()
+      // fail confusingly once a second practice reuses the same username.
+      const { data: profiles } = await admin
+        .from("profiles")
+        .select("email")
+        .ilike("username", identifier)
+        .limit(2);
+
+      if (!profiles || profiles.length === 0) {
+        return { error: "No account found with that username" };
+      }
+      if (profiles.length > 1) {
+        return {
+          error:
+            "That username exists in more than one practice. Please sign in from your practice's login page or use your email.",
+        };
+      }
+      email = profiles[0].email;
+    }
+  } else if (practiceId) {
     const { data: profile } = await admin
       .from("profiles")
       .select("email")
-      .ilike("username", identifier)
+      .eq("practice_id", practiceId)
+      .ilike("email", identifier)
       .single();
 
     if (!profile) {
-      return { error: "No account found with that username" };
+      return { error: "No account found for that organization" };
     }
+
     email = profile.email;
   }
 

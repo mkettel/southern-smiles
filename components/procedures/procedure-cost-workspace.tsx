@@ -129,6 +129,10 @@ function createLocalId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function formatDollarInputValue(cents: number) {
+  return (cents / 100).toFixed(2);
+}
+
 function createEmptyMaterial(kind: ProcedureMaterialKind = "supply"): ProcedureMaterialDraft {
   return {
     id: createLocalId("item"),
@@ -1017,14 +1021,13 @@ export function ProcedureCostWorkspace({
 
                                     <div className="space-y-2">
                                       <Label className="md:hidden">Cost</Label>
-                                      <Input
-                                        value={(item.cost_cents / 100).toFixed(2)}
-                                        onChange={(e) =>
+                                      <DollarAmountInput
+                                        cents={item.cost_cents}
+                                        onCentsChange={(costCents) =>
                                           updateMaterial(procedure.id, visit.id, item.id, {
-                                            cost_cents: parseDollarAmountToCents(e.target.value),
+                                            cost_cents: costCents,
                                           })
                                         }
-                                        placeholder="0.00"
                                       />
                                     </div>
 
@@ -1233,6 +1236,49 @@ function NumberField({
         onChange={(e) => onChange(Number(e.target.value) || 0)}
       />
     </div>
+  );
+}
+
+function DollarAmountInput({
+  cents,
+  onCentsChange,
+}: {
+  cents: number;
+  onCentsChange: (value: number) => void;
+}) {
+  const [draft, setDraft] = useState(formatDollarInputValue(cents));
+  const [isFocused, setIsFocused] = useState(false);
+
+  useEffect(() => {
+    if (!isFocused) {
+      setDraft(formatDollarInputValue(cents));
+    }
+  }, [cents, isFocused]);
+
+  function updateDraft(value: string) {
+    setDraft(value);
+    onCentsChange(parseDollarAmountToCents(value));
+  }
+
+  function formatDraft() {
+    const nextCents = parseDollarAmountToCents(draft);
+    onCentsChange(nextCents);
+    setDraft(formatDollarInputValue(nextCents));
+    setIsFocused(false);
+  }
+
+  return (
+    <Input
+      inputMode="decimal"
+      value={draft}
+      onChange={(event) => updateDraft(event.target.value)}
+      onFocus={(event) => {
+        setIsFocused(true);
+        event.currentTarget.select();
+      }}
+      onBlur={formatDraft}
+      placeholder="0.00"
+    />
   );
 }
 

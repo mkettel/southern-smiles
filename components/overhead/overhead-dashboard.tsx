@@ -14,10 +14,12 @@ import {
   Receipt,
   Search,
   SlidersHorizontal,
+  Trash2,
 } from "lucide-react";
 import {
   createOverheadCategory,
   createOverheadItem,
+  deleteOverheadItem,
   getOverheadDashboardData,
   importOverheadCsv,
   updateOverheadCategory,
@@ -1004,6 +1006,27 @@ function ItemDialog({
     setLoading(false);
   }
 
+  async function handleDelete() {
+    if (!editItem) return;
+    if (!window.confirm(`Delete "${editItem.name}"? This can't be undone.`)) {
+      return;
+    }
+
+    setLoading(true);
+    const result = await deleteOverheadItem(editItem.id);
+
+    if (result?.error) {
+      toast.error(readActionError(result.error, "Couldn't delete line item"));
+      setLoading(false);
+      return;
+    }
+
+    await onSaved();
+    toast.success("Line item deleted");
+    setOpen(false);
+    setLoading(false);
+  }
+
   return (
     <Dialog
       open={open}
@@ -1085,11 +1108,26 @@ function ItemDialog({
             Include this line item in monthly overhead
           </label>
         </div>
-        <DialogFooter>
-          <DialogClose className={dialogSecondaryButtonClassName}>Cancel</DialogClose>
-          <Button onClick={handleSubmit} disabled={loading}>
-            {loading ? "Saving..." : editItem ? "Save Changes" : "Create Line Item"}
-          </Button>
+        <DialogFooter className="gap-2 sm:justify-between">
+          {editItem ? (
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={loading}
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete Line Item
+            </Button>
+          ) : (
+            <span />
+          )}
+          <div className="flex justify-end gap-2">
+            <DialogClose className={dialogSecondaryButtonClassName}>Cancel</DialogClose>
+            <Button onClick={handleSubmit} disabled={loading}>
+              {loading ? "Saving..." : editItem ? "Save Changes" : "Create Line Item"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

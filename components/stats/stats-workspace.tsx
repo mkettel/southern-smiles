@@ -382,8 +382,8 @@ export function StatsWorkspace({
                       <Card
                         key={item.stat.id}
                         size="sm"
-                        style={{ borderLeftColor: group.color }}
-                        className="border-l-4"
+                        style={{ borderColor: group.color }}
+                        className="border ring-0"
                       >
                         <CardHeader>
                           <div className="flex items-start justify-between gap-3">
@@ -453,8 +453,8 @@ export function StatsWorkspace({
                   return (
                     <Card
                       key={item.stat.id}
-                      style={{ borderLeftColor: group.color }}
-                      className="border-l-4"
+                      style={{ borderColor: group.color }}
+                      className="border ring-0"
                     >
                       <CardHeader className="pb-3">
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">

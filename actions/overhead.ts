@@ -209,6 +209,7 @@ async function ensureDefaultOverheadCategories(
 
 function revalidateOverheadPaths() {
   revalidatePath("/admin/overhead");
+  revalidatePath("/admin/procedures");
 }
 
 export async function getOverheadDashboardData(): Promise<OverheadDashboardData> {
@@ -380,6 +381,21 @@ export async function updateOverheadItem(
       ...parsed.data,
       updated_at: new Date().toISOString(),
     })
+    .eq("id", id)
+    .eq("practice_id", practiceId);
+
+  if (error) return { error: error.message };
+
+  revalidateOverheadPaths();
+  return { success: true };
+}
+
+export async function deleteOverheadItem(id: string) {
+  const { supabase, practiceId } = await requireOverheadAccess();
+
+  const { error } = await supabase
+    .from("overhead_items")
+    .delete()
     .eq("id", id)
     .eq("practice_id", practiceId);
 

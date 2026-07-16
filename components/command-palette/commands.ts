@@ -11,6 +11,7 @@ import {
   MessageSquarePlus,
   Wrench,
   ReceiptText,
+  ShoppingCart,
   BadgeDollarSign,
   Calculator,
   ClipboardList,
@@ -50,13 +51,14 @@ export type CommandItem = CommandBase &
 interface BuildOpts {
   role: UserRole;
   canAccessBills?: boolean;
+  canAccessSupplies?: boolean;
 }
 
 /**
  * Build the full command list for the current user. Admin-only commands are
  * filtered out for non-admins so they never show up in search results.
  */
-export function buildCommands({ role, canAccessBills = false }: BuildOpts): CommandItem[] {
+export function buildCommands({ role, canAccessBills = false, canAccessSupplies = false }: BuildOpts): CommandItem[] {
   const isAdmin = role === "admin";
 
   const navShared: CommandItem[] = [
@@ -136,6 +138,16 @@ export function buildCommands({ role, canAccessBills = false }: BuildOpts): Comm
       hint: "Admin",
       type: "navigate",
       href: "/admin/procedures",
+    },
+    {
+      id: "nav-admin-supplies",
+      label: "Supply Ordering",
+      keywords: ["admin", "supplies", "ordering", "catalog", "purchases"],
+      group: "Navigate",
+      icon: ShoppingCart,
+      hint: isAdmin ? "Admin" : "Supplies",
+      type: "navigate",
+      href: "/admin/supplies",
     },
     {
       id: "nav-admin-bills",
@@ -275,7 +287,13 @@ export function buildCommands({ role, canAccessBills = false }: BuildOpts): Comm
 
   return [
     ...navShared,
-    ...(isAdmin ? navAdmin : canAccessBills ? navAdmin.filter((item) => item.id === "nav-admin-bills") : []),
+    ...(isAdmin
+      ? navAdmin
+      : navAdmin.filter(
+          (item) =>
+            (canAccessBills && item.id === "nav-admin-bills") ||
+            (canAccessSupplies && item.id === "nav-admin-supplies"),
+        )),
     ...actions,
   ];
 }

@@ -16,7 +16,6 @@ import {
   Pencil,
   Plus,
   ReceiptText,
-  RefreshCcw,
   Scissors,
   Search,
   ShoppingCart,
@@ -31,6 +30,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -153,6 +153,7 @@ export function SupplyOrderingWorkspace({
   );
   const [hasHydrated, setHasHydrated] = useState(false);
   const [catalogDialogOpen, setCatalogDialogOpen] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [catalogItemToEdit, setCatalogItemToEdit] = useState<SupplyCatalogItem | null>(null);
   const [purchaseDialogOpen, setPurchaseDialogOpen] = useState(false);
   const [selectedCatalogItemId, setSelectedCatalogItemId] = useState(
@@ -243,6 +244,19 @@ export function SupplyOrderingWorkspace({
         costCents: unitCostCents * link.units_per_procedure,
       }));
     });
+  }, [catalog]);
+
+  const priceChangeRows = useMemo(() => {
+    return catalog
+      .filter(
+        (item) =>
+          item.current_unit_cost_cents !== null &&
+          item.prior_unit_cost_cents !== null &&
+          item.current_unit_cost_cents !== item.prior_unit_cost_cents,
+      )
+      .sort((first, second) =>
+        second.updated_at.localeCompare(first.updated_at) || first.name.localeCompare(second.name),
+      );
   }, [catalog]);
 
   const recentPurchases = useMemo(
@@ -354,13 +368,10 @@ export function SupplyOrderingWorkspace({
     toast.success(`${vendor} order logged with ${newPurchases.length} item${newPurchases.length === 1 ? "" : "s"}`);
   }
 
-  function resetDraft() {
-    setCatalog(DEFAULT_SUPPLY_CATALOG);
-    setPurchases([]);
+  function clearOrderDraft() {
     setOrderDraft([]);
-    setSettings(DEFAULT_SUPPLY_BUDGET_SETTINGS);
-    setSelectedCatalogItemId(DEFAULT_SUPPLY_CATALOG[0]?.id ?? "");
-    toast.success("Local supply draft reset");
+    setResetDialogOpen(false);
+    toast.success("Order draft cleared");
   }
 
   return (
@@ -378,14 +389,6 @@ export function SupplyOrderingWorkspace({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={resetDraft}>
-            <RefreshCcw className="h-4 w-4" />
-            Reset draft
-          </Button>
-          <Button variant="outline" onClick={() => openCatalogItemDialog()}>
-            <PackagePlus className="h-4 w-4" />
-            Catalog item
-          </Button>
           <Button onClick={() => setActiveTab("order-draft")}>
             <ShoppingCart className="h-4 w-4" />
             Order draft{orderDraft.length ? ` (${orderDraft.length})` : ""}
@@ -401,7 +404,7 @@ export function SupplyOrderingWorkspace({
             Order draft{orderDraft.length ? ` (${orderDraft.length})` : ""}
           </TabsTrigger>
           <TabsTrigger value="purchases">Purchase log</TabsTrigger>
-          <TabsTrigger value="cost-impact">Procedure impact</TabsTrigger>
+          {canManageBudget && <TabsTrigger value="cost-impact">Procedure impact</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="overview" className="pt-6">
@@ -413,7 +416,6 @@ export function SupplyOrderingWorkspace({
             canManageBudget={canManageBudget}
             onLogPurchase={() => openPurchaseDialog()}
             recentPurchases={recentPurchases}
-            catalog={catalog}
           />
         </TabsContent>
 
@@ -439,6 +441,7 @@ export function SupplyOrderingWorkspace({
             onOpenVendorProductPages={openVendorProductPages}
             onMarkVendorOrderPlaced={markVendorOrderPlaced}
             onBrowseCatalog={() => setActiveTab("catalog")}
+            onResetDraft={() => setResetDialogOpen(true)}
             onEditItem={openCatalogItemDialog}
           />
         </TabsContent>
@@ -451,10 +454,38 @@ export function SupplyOrderingWorkspace({
           />
         </TabsContent>
 
-        <TabsContent value="cost-impact" className="pt-6">
-          <CostImpactTab impactRows={impactRows} onLogPurchase={openPurchaseDialog} />
-        </TabsContent>
+        {canManageBudget && (
+          <TabsContent value="cost-impact" className="pt-6">
+            <CostImpactTab
+              impactRows={impactRows}
+              priceChangeRows={priceChangeRows}
+              onLogPurchase={openPurchaseDialog}
+            />
+          </TabsContent>
+        )}
       </Tabs>
+
+      <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Clear this order draft?</DialogTitle>
+            <DialogDescription>
+              This removes all {orderDraft.length} item{orderDraft.length === 1 ? "" : "s"} currently
+              waiting to be ordered. Your catalog, purchase history, and budget settings will not
+              be changed. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResetDialogOpen(false)}>
+              Keep draft
+            </Button>
+            <Button variant="destructive" onClick={clearOrderDraft}>
+              <Trash2 className="h-4 w-4" />
+              Clear order draft
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <CatalogItemDialog
         key={catalogItemToEdit?.id ?? "new-item"}
@@ -514,7 +545,6 @@ function OverviewTab({
   canManageBudget,
   onLogPurchase,
   recentPurchases,
-  catalog,
 }: {
   budget: { routineCents: number; officeCents: number; combinedCents: number };
   purchaseTotals: Record<SupplyCategory, number>;
@@ -523,7 +553,6 @@ function OverviewTab({
   canManageBudget: boolean;
   onLogPurchase: () => void;
   recentPurchases: SupplyPurchase[];
-  catalog: SupplyCatalogItem[];
 }) {
   const loggedOperatingSpend = purchaseTotals.routine + purchaseTotals.office;
   const operatingRemaining = budget.combinedCents - loggedOperatingSpend;
@@ -623,86 +652,60 @@ function OverviewTab({
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex-row items-start justify-between gap-4">
-            <div>
-              <CardTitle className="text-base">Monthly budget</CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Set by an admin in the first week, then visible read-only to the supply officer.
-              </p>
-            </div>
-            <Badge variant="outline" className="gap-1.5">
-              <LockKeyhole className="h-3 w-3" />
-              Admin only
-            </Badge>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {canManageBudget ? (
-              <>
-                <div>
-                  <Label className="mb-1.5">Budget month</Label>
-                  <Input
-                    type="month"
-                    value={settings.budget_month}
-                    onChange={(event) => updateBudget({ budget_month: event.target.value })}
-                  />
-                </div>
-                <DollarField
-                  label="Rolling 3-month collections"
-                  cents={settings.collections_cents}
-                  onChange={(collections_cents) => updateBudget({ collections_cents })}
-                />
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <PercentField
-                    label="Routine target"
-                    value={settings.routine_target_percent}
-                    onChange={(routine_target_percent) => updateBudget({ routine_target_percent })}
-                  />
-                  <PercentField
-                    label="Office target"
-                    value={settings.office_target_percent}
-                    onChange={(office_target_percent) => updateBudget({ office_target_percent })}
-                  />
-                </div>
-                <Button className="w-full" onClick={publishBudget}>
-                  <CalendarDays className="h-4 w-4" />
-                  Publish {budgetMonth} budget
-                </Button>
-              </>
-            ) : (
-              <div className="space-y-3 rounded-lg border bg-muted/30 p-4 text-sm">
-                <div className="flex items-center justify-between gap-3"><span className="text-muted-foreground">Budget month</span><span className="font-medium">{budgetMonth}</span></div>
-                <div className="flex items-center justify-between gap-3"><span className="text-muted-foreground">Rolling collections</span><span className="font-medium tabular-nums">{formatCurrency(settings.collections_cents)}</span></div>
-                <div className="flex items-center justify-between gap-3"><span className="text-muted-foreground">Operating target</span><span className="font-medium">{settings.routine_target_percent}% routine + {settings.office_target_percent}% office</span></div>
+        {canManageBudget && (
+          <Card>
+            <CardHeader className="flex-row items-start justify-between gap-4">
+              <div>
+                <CardTitle className="text-base">Monthly budget</CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Set and publish the supply budget during the first week of the month.
+                </p>
               </div>
-            )}
-            <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
-              {settings.published_at
-                ? `Published ${settings.published_at} by ${settings.published_by ?? "an admin"}.`
-                : "Changes are waiting to be published to the supply officer."} Current baseline: {formatCurrency(settings.routine_baseline_cents)} routine and {formatCurrency(settings.office_baseline_cents)} office. The intended long-term targets are 4% and 1.25% after the transition period.
-            </div>
-          </CardContent>
-        </Card>
+              <Badge variant="outline" className="gap-1.5">
+                <LockKeyhole className="h-3 w-3" />
+                Admin only
+              </Badge>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label className="mb-1.5">Budget month</Label>
+                <Input
+                  type="month"
+                  value={settings.budget_month}
+                  onChange={(event) => updateBudget({ budget_month: event.target.value })}
+                />
+              </div>
+              <DollarField
+                label="Rolling 3-month collections"
+                cents={settings.collections_cents}
+                onChange={(collections_cents) => updateBudget({ collections_cents })}
+              />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <PercentField
+                  label="Routine target"
+                  value={settings.routine_target_percent}
+                  onChange={(routine_target_percent) => updateBudget({ routine_target_percent })}
+                />
+                <PercentField
+                  label="Office target"
+                  value={settings.office_target_percent}
+                  onChange={(office_target_percent) => updateBudget({ office_target_percent })}
+                />
+              </div>
+              <Button className="w-full" onClick={publishBudget}>
+                <CalendarDays className="h-4 w-4" />
+                Publish {budgetMonth} budget
+              </Button>
+              <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
+                {settings.published_at
+                  ? `Published ${settings.published_at} by ${settings.published_by ?? "an admin"}.`
+                  : "Changes are waiting to be published to the supply officer."} Current baseline: {formatCurrency(settings.routine_baseline_cents)} routine and {formatCurrency(settings.office_baseline_cents)} office. The intended long-term targets are 4% and 1.25% after the transition period.
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
-      <Card>
-        <CardHeader className="flex-row items-center justify-between gap-4">
-          <div>
-            <CardTitle className="text-base">Start-of-day checklist</CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">
-              The workflow stays deliberately small: catalog, purchase, price, and purpose.
-            </p>
-          </div>
-          <Badge variant="outline">{catalog.length} catalog items</Badge>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 md:grid-cols-3">
-            <ChecklistStep number="1" title="Pick the catalog item" detail="Use an existing item or add it once." />
-            <ChecklistStep number="2" title="Log the order" detail="Vendor, packages, price, and budget treatment." />
-            <ChecklistStep number="3" title="Tag major materials" detail="Use a non-identifying case reference for implants or grafts." />
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
@@ -857,6 +860,7 @@ function OrderDraftTab({
   onOpenVendorProductPages,
   onMarkVendorOrderPlaced,
   onBrowseCatalog,
+  onResetDraft,
   onEditItem,
 }: {
   orderDraft: SupplyOrderDraftLine[];
@@ -866,6 +870,7 @@ function OrderDraftTab({
   onOpenVendorProductPages: (vendor: string) => void;
   onMarkVendorOrderPlaced: (vendor: string) => void;
   onBrowseCatalog: () => void;
+  onResetDraft: () => void;
   onEditItem: (item: SupplyCatalogItem) => void;
 }) {
   const itemById = new Map(catalog.map((item) => [item.id, item]));
@@ -893,10 +898,18 @@ function OrderDraftTab({
               : "Add supplies from the catalog when they need to be ordered."}
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={onBrowseCatalog}>
-          <Plus className="h-4 w-4" />
-          Add supplies
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={onBrowseCatalog}>
+            <Plus className="h-4 w-4" />
+            Add supplies
+          </Button>
+          {orderDraft.length > 0 && (
+            <Button variant="destructive" size="sm" onClick={onResetDraft}>
+              <Trash2 className="h-4 w-4" />
+              Reset draft
+            </Button>
+          )}
+        </div>
       </div>
 
       {!groupedOrders.length ? (
@@ -1161,32 +1174,93 @@ function PurchaseLogTab({
 
 function CostImpactTab({
   impactRows,
+  priceChangeRows,
   onLogPurchase,
 }: {
   impactRows: Array<{ id: string; item: SupplyCatalogItem; procedureName: string; units: number; unitCostCents: number; costCents: number }>;
+  priceChangeRows: SupplyCatalogItem[];
   onLogPurchase: (itemId: string) => void;
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Procedure cost impact</CardTitle>
-        <p className="mt-1 text-sm text-muted-foreground">
-          This preview shows the direct material cost calculated from the current catalog unit price. Linking will become live with the Procedure Costs workspace in the next build.
-        </p>
-      </CardHeader>
-      <CardContent>
-        <div className="overflow-x-auto rounded-lg border">
-          <table className="w-full min-w-[760px] text-sm">
-            <thead className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
-              <tr><th className="px-4 py-3 font-medium">Procedure</th><th className="px-4 py-3 font-medium">Supply item</th><th className="px-4 py-3 font-medium">Units used</th><th className="px-4 py-3 font-medium">Current cost</th><th className="px-4 py-3 font-medium">Procedure impact</th><th className="px-4 py-3 font-medium"><span className="sr-only">Action</span></th></tr>
-            </thead>
-            <tbody className="divide-y">
-              {impactRows.map((row) => <tr key={row.id}><td className="px-4 py-3 font-medium">{row.procedureName}</td><td className="px-4 py-3">{row.item.name}</td><td className="px-4 py-3 tabular-nums">{row.units} x {formatCurrency(row.unitCostCents)}</td><td className="px-4 py-3 tabular-nums">{formatCurrency(row.unitCostCents)} per {row.item.unit_label}</td><td className="px-4 py-3 font-semibold tabular-nums">{formatCurrency(row.costCents)}</td><td className="px-4 py-3 text-right"><Button variant="outline" size="sm" onClick={() => onLogPurchase(row.item.id)}>Update price</Button></td></tr>)}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Recent price changes</CardTitle>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Review catalog prices that changed when an item was edited or a purchase was logged.
+          </p>
+        </CardHeader>
+        <CardContent>
+          {priceChangeRows.length ? (
+            <div className="overflow-x-auto rounded-lg border">
+              <table className="w-full min-w-[680px] text-sm">
+                <thead className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Supply item</th>
+                    <th className="px-4 py-3 font-medium">Previous price</th>
+                    <th className="px-4 py-3 font-medium">Current price</th>
+                    <th className="px-4 py-3 font-medium">Change</th>
+                    <th className="px-4 py-3 font-medium">Updated</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {priceChangeRows.map((item) => {
+                    const currentPrice = item.current_unit_cost_cents ?? 0;
+                    const previousPrice = item.prior_unit_cost_cents ?? 0;
+                    const difference = currentPrice - previousPrice;
+                    const percentChange = previousPrice > 0 ? (difference / previousPrice) * 100 : null;
+                    const Icon = difference > 0 ? ArrowUpRight : ArrowDownRight;
+                    return (
+                      <tr key={item.id}>
+                        <td className="px-4 py-3">
+                          <div className="font-medium">{item.name}</div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">{item.vendor}</div>
+                        </td>
+                        <td className="px-4 py-3 tabular-nums">{formatCurrency(previousPrice)}</td>
+                        <td className="px-4 py-3 font-medium tabular-nums">{formatCurrency(currentPrice)}</td>
+                        <td className={cn("px-4 py-3 font-medium tabular-nums", difference > 0 ? "text-destructive" : "text-emerald-700")}>
+                          <span className="inline-flex items-center gap-1">
+                            <Icon className="h-4 w-4" />
+                            {formatCurrency(Math.abs(difference))}
+                            {percentChange !== null && ` (${Math.abs(percentChange).toFixed(1)}%)`}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">{item.updated_at}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+              No price changes have been recorded yet.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Procedure cost impact</CardTitle>
+          <p className="mt-1 text-sm text-muted-foreground">
+            This preview shows the direct material cost calculated from the current catalog unit price. Linking will become live with the Procedure Costs workspace in the next build.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
+                <tr><th className="px-4 py-3 font-medium">Procedure</th><th className="px-4 py-3 font-medium">Supply item</th><th className="px-4 py-3 font-medium">Units used</th><th className="px-4 py-3 font-medium">Current cost</th><th className="px-4 py-3 font-medium">Procedure impact</th><th className="px-4 py-3 font-medium"><span className="sr-only">Action</span></th></tr>
+              </thead>
+              <tbody className="divide-y">
+                {impactRows.map((row) => <tr key={row.id}><td className="px-4 py-3 font-medium">{row.procedureName}</td><td className="px-4 py-3">{row.item.name}</td><td className="px-4 py-3 tabular-nums">{row.units} x {formatCurrency(row.unitCostCents)}</td><td className="px-4 py-3 tabular-nums">{formatCurrency(row.unitCostCents)} per {row.item.unit_label}</td><td className="px-4 py-3 font-semibold tabular-nums">{formatCurrency(row.costCents)}</td><td className="px-4 py-3 text-right"><Button variant="outline" size="sm" onClick={() => onLogPurchase(row.item.id)}>Update price</Button></td></tr>)}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -1343,7 +1417,6 @@ function MetricCard({ icon, label, value, detail, tone = "default" }: { icon: Re
   return <Card className={cn(tone === "danger" && "border-destructive/40", tone === "accent" && "border-emerald-200")}><CardContent className="p-5"><div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">{icon}{label}</div><p className={cn("mt-3 text-2xl font-semibold tabular-nums", tone === "danger" && "text-destructive", tone === "accent" && "text-emerald-700")}>{value}</p><p className="mt-1 text-xs text-muted-foreground">{detail}</p></CardContent></Card>;
 }
 
-function ChecklistStep({ number, title, detail }: { number: string; title: string; detail: string }) { return <div className="flex gap-3 rounded-lg border p-4"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">{number}</span><div><p className="font-medium">{title}</p><p className="mt-1 text-xs text-muted-foreground">{detail}</p></div></div>; }
 
 function formatLastPrice(item: SupplyCatalogItem) { return item.current_unit_cost_cents === null ? item.last_price_note ?? "Price needed" : formatCurrency(item.current_unit_cost_cents); }
 

@@ -42,6 +42,7 @@ interface SidebarProps {
   logoUrl?: string | null;
   showNameWithLogo?: boolean;
   canAccessBills?: boolean;
+  canAccessSupplies?: boolean;
 }
 
 interface NavLink {
@@ -77,6 +78,10 @@ const adminOnlyLinks: NavLink[] = [
 
 const billsOfficerLinks: NavLink[] = [
   { href: "/admin/bills", label: "Bills", icon: ReceiptText },
+];
+
+const supplyOfficerLinks: NavLink[] = [
+  { href: "/admin/supplies", label: "Supply Ordering", icon: ShoppingCart },
 ];
 
 const STORAGE_KEY = "sidebar-collapsed";
@@ -171,10 +176,16 @@ export function Sidebar({
   logoUrl,
   showNameWithLogo = true,
   canAccessBills = false,
+  canAccessSupplies = false,
 }: SidebarProps) {
   const pathname = usePathname();
   const isAdmin = role === "admin";
-  const accessLinks = isAdmin ? adminOnlyLinks : canAccessBills ? billsOfficerLinks : [];
+  const accessLinks = isAdmin
+    ? adminOnlyLinks
+    : [
+        ...(canAccessBills ? billsOfficerLinks : []),
+        ...(canAccessSupplies ? supplyOfficerLinks : []),
+      ];
   const [collapsed, setCollapsed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
@@ -334,7 +345,7 @@ export function Sidebar({
                 ) : (
                   <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
                     <Shield className="h-3 w-3" />
-                    Admin
+                    {isAdmin ? "Admin" : "Assigned access"}
                   </div>
                 )}
               </div>

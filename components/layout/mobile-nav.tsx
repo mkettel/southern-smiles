@@ -22,6 +22,7 @@ import {
   Download,
   ReceiptText,
   BadgeDollarSign,
+  ShoppingCart,
 } from "lucide-react";
 
 interface MobileNavProps {
@@ -30,6 +31,7 @@ interface MobileNavProps {
   newRequestCount?: number;
   practiceName?: string;
   canAccessBills?: boolean;
+  canAccessSupplies?: boolean;
 }
 
 interface NavLink {
@@ -50,6 +52,7 @@ const adminOnlyLinks: NavLink[] = [
   { href: "/admin/tasks", label: "Command Center", icon: CheckSquare },
   { href: "/admin/organization", label: "Organization", icon: Building2 },
   { href: "/admin/stats", label: "Manage Stats", icon: BarChart3 },
+  { href: "/admin/supplies", label: "Supply Ordering", icon: ShoppingCart },
   { href: "/admin/bills", label: "Bills", icon: ReceiptText },
   { href: "/admin/cherry-financing", label: "Approved Financing", icon: BadgeDollarSign },
   { href: "/admin/export", label: "Export & Analyze", icon: Download },
@@ -63,11 +66,20 @@ const billsOfficerLinks: NavLink[] = [
   { href: "/admin/bills", label: "Bills", icon: ReceiptText },
 ];
 
-export function MobileNav({ role, openRequestCount = 0, newRequestCount = 0, practiceName = "Stats & Conditions", canAccessBills = false }: MobileNavProps) {
+const supplyOfficerLinks: NavLink[] = [
+  { href: "/admin/supplies", label: "Supply Ordering", icon: ShoppingCart },
+];
+
+export function MobileNav({ role, openRequestCount = 0, newRequestCount = 0, practiceName = "Stats & Conditions", canAccessBills = false, canAccessSupplies = false }: MobileNavProps) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const isAdmin = role === "admin";
-  const accessLinks = isAdmin ? adminOnlyLinks : canAccessBills ? billsOfficerLinks : [];
+  const accessLinks = isAdmin
+    ? adminOnlyLinks
+    : [
+        ...(canAccessBills ? billsOfficerLinks : []),
+        ...(canAccessSupplies ? supplyOfficerLinks : []),
+      ];
 
   function renderLink(link: NavLink, badge?: number) {
     const Icon = link.icon;
@@ -117,7 +129,7 @@ export function MobileNav({ role, openRequestCount = 0, newRequestCount = 0, pra
               <div className="pt-4 pb-1 px-3">
                 <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
                   <Shield className="h-3 w-3" />
-                  Admin
+                  {isAdmin ? "Admin" : "Assigned access"}
                 </div>
               </div>
               {accessLinks.map((link) =>

@@ -8,7 +8,10 @@ import { getCurrentPracticeId } from "@/lib/practice";
 import { getCurrentWeekStart } from "@/lib/constants";
 import { calculateCondition } from "@/lib/conditions";
 import { isBillsManagedStat } from "@/lib/bills";
-import { calculateCollectionsPerStaffWeek } from "@/lib/stat-formulas";
+import {
+  calculateCollectionsPerStaffWeek,
+  calculateRatioOfSumsWeek,
+} from "@/lib/stat-formulas";
 import { isCherryApprovedFinancingStat } from "@/lib/cherry-financing";
 import type { DailyStatEntry, Post, Profile, Stat, StatEntry } from "@/lib/types";
 
@@ -28,6 +31,7 @@ function isSetupMissing(error: { code?: string; message?: string } | null) {
   return Boolean(
     error &&
       (message.includes("weekly_formula") ||
+        message.includes("formula_denominator_stat_id") ||
         message.includes("daily_stat_entries") ||
         error.code === "PGRST204" ||
         error.code === "PGRST205"),
@@ -94,6 +98,23 @@ async function calculateWeeklyValue(
   stat: Stat,
   weekStart: string,
 ) {
+  if (stat.weekly_formula === "ratio_of_sums") {
+    if (!stat.formula_source_stat_id || !stat.formula_denominator_stat_id) return null;
+    const [{ data: numeratorEntries }, { data: denominatorEntries }] = await Promise.all([
+      admin
+        .from("daily_stat_entries")
+        .select("value")
+        .eq("stat_id", stat.formula_source_stat_id)
+        .eq("week_start", weekStart),
+      admin
+        .from("daily_stat_entries")
+        .select("value")
+        .eq("stat_id", stat.formula_denominator_stat_id)
+        .eq("week_start", weekStart),
+    ]);
+    return calculateRatioOfSumsWeek(numeratorEntries ?? [], denominatorEntries ?? []);
+  }
+
   if (stat.weekly_formula !== "collections_per_staff") {
     const { data: daily } = await admin
       .from("daily_stat_entries")
@@ -177,13 +198,23 @@ async function syncWeekly(stat: Stat, weekStart: string, actorId: string, practi
 
 async function refreshDependents(sourceStatId: string, entryDate: string, actorId: string, practiceId: string) {
   const admin = createAdminClient();
-  const [{ data: sourceEntry }, { data: dependents }] = await Promise.all([
+  const [{ data: sourceEntry }, { data: sourceDependents }, { data: denominatorDependents }] = await Promise.all([
     admin.from("daily_stat_entries").select("value").eq("stat_id", sourceStatId).eq("entry_date", entryDate).maybeSingle(),
-    admin.from("stats").select("*").eq("formula_source_stat_id", sourceStatId).eq("weekly_formula", "collections_per_staff"),
+    admin.from("stats").select("*").eq("formula_source_stat_id", sourceStatId),
+    admin.from("stats").select("*").eq("formula_denominator_stat_id", sourceStatId).eq("weekly_formula", "ratio_of_sums"),
   ]);
   const weekStart = weekStartForDate(entryDate);
+  const dependents = new Map<string, Stat>();
+  for (const dependent of [...(sourceDependents ?? []), ...(denominatorDependents ?? [])] as Stat[]) {
+    dependents.set(dependent.id, dependent);
+  }
 
-  for (const dependent of (dependents ?? []) as Stat[]) {
+  for (const dependent of dependents.values()) {
+    if (dependent.weekly_formula === "ratio_of_sums") {
+      await syncWeekly(dependent, weekStart, actorId, practiceId);
+      continue;
+    }
+    if (dependent.weekly_formula !== "collections_per_staff") continue;
     const { data: row } = await admin
       .from("daily_stat_entries")
       .select("*")
@@ -301,6 +332,10 @@ export async function saveDailyStatInput(input: { statId: string; entryDate: str
   const practiceId = await getCurrentPracticeId(supabase);
   const admin = createAdminClient();
   const weekStart = weekStartForDate(input.entryDate);
+
+  if (stat.weekly_formula === "ratio_of_sums") {
+    return { error: "This stat is calculated from its weekly source totals" };
+  }
 
   if (input.value !== null && (!Number.isFinite(input.value) || input.value < 0)) {
     return { error: "Enter a value of 0 or greater" };

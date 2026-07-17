@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateCollectionsPerStaffWeek } from "./stat-formulas";
+import {
+  calculateCollectionsPerStaffWeek,
+  calculateRatioOfSumsWeek,
+} from "./stat-formulas";
 
 test("calculates collections per staff from weekly totals", () => {
   const result = calculateCollectionsPerStaffWeek(
@@ -69,4 +72,29 @@ test("counts missing collections as zero when staff-days are entered", () => {
   );
 
   assert.equal(result, 5000 / 5);
+});
+
+test("calculates conversion rate from weekly totals", () => {
+  const result = calculateRatioOfSumsWeek(
+    [{ value: 4 }, { value: 1 }, { value: 1 }, { value: 1 }],
+    [{ value: 7 }, { value: 4 }, { value: 4 }, { value: 2 }],
+  );
+
+  assert.equal(result, (7 / 17) * 100);
+});
+
+test("does not average daily conversion rates", () => {
+  const weeklyRatio = calculateRatioOfSumsWeek(
+    [{ value: 4 }, { value: 1 }, { value: 1 }, { value: 1 }],
+    [{ value: 7 }, { value: 4 }, { value: 4 }, { value: 2 }],
+  );
+  const averageDailyRatio = ((4 / 7) * 100 + 25 + 25 + 50) / 4;
+
+  assert.equal(weeklyRatio, (7 / 17) * 100);
+  assert.notEqual(weeklyRatio, averageDailyRatio);
+});
+
+test("returns null when the weekly ratio denominator is zero or missing", () => {
+  assert.equal(calculateRatioOfSumsWeek([{ value: 2 }], []), null);
+  assert.equal(calculateRatioOfSumsWeek([{ value: 2 }], [{ value: 0 }]), null);
 });

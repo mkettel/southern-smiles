@@ -8,6 +8,10 @@ interface StaffDayEntry {
   input_value: number | string | null | undefined;
 }
 
+interface RatioEntry {
+  value: number | string | null | undefined;
+}
+
 function toFiniteNumber(value: number | string | null | undefined) {
   if (value === null || value === undefined || value === "") return null;
   const numeric = Number(value);
@@ -61,4 +65,24 @@ export function calculateCollectionsPerStaffWeek(
   if (totalStaffDays <= 0) return null;
 
   return totalCollections / totalStaffDays;
+}
+
+export function calculateRatioOfSumsWeek(
+  numeratorEntries: RatioEntry[],
+  denominatorEntries: RatioEntry[],
+) {
+  const denominatorValues = denominatorEntries
+    .map((entry) => toFiniteNumber(entry.value))
+    .filter((value): value is number => value !== null);
+  if (!denominatorValues.length) return null;
+
+  const denominator = denominatorValues.reduce((sum, value) => sum + value, 0);
+  if (denominator <= 0) return null;
+
+  const numerator = numeratorEntries.reduce((sum, entry) => {
+    const value = toFiniteNumber(entry.value);
+    return value === null ? sum : sum + value;
+  }, 0);
+
+  return (numerator / denominator) * 100;
 }

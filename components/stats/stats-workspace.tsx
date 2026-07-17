@@ -31,6 +31,7 @@ const FORMULA_LABELS = {
   average: "Daily average",
   manual: "Manual weekly",
   collections_per_staff: "Collections / staff-days",
+  ratio_of_sums: "Ratio of weekly totals",
 } as const;
 
 function todayString() {
@@ -164,7 +165,12 @@ export function StatsWorkspace({
   );
 
   const dailyStats = useMemo(
-    () => stats.filter((item) => item.stat.daily_tracking_enabled && item.stat.weekly_formula !== "manual"),
+    () => stats.filter(
+      (item) =>
+        item.stat.daily_tracking_enabled &&
+        item.stat.weekly_formula !== "manual" &&
+        item.stat.weekly_formula !== "ratio_of_sums",
+    ),
     [stats],
   );
   const today = todayString();

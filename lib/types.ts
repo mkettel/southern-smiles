@@ -5,7 +5,12 @@ import type { ConditionName, GoodDirection } from "./conditions";
 // ============================================================
 
 export type StatType = "dollar" | "percentage" | "count";
-export type WeeklyFormula = "sum" | "average" | "manual" | "collections_per_staff";
+export type WeeklyFormula =
+  | "sum"
+  | "average"
+  | "manual"
+  | "collections_per_staff"
+  | "ratio_of_sums";
 export type UserRole = "admin" | "employee";
 
 export interface Division {
@@ -95,6 +100,7 @@ export interface Stat {
   daily_tracking_enabled: boolean;
   weekly_formula: WeeklyFormula;
   formula_source_stat_id: string | null;
+  formula_denominator_stat_id: string | null;
   /** Admin-assigned lifetime condition for this stat. Null = not set. */
   overall_condition: import("./conditions").ConditionName | null;
   created_at: string;

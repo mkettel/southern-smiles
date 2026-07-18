@@ -231,7 +231,11 @@ export async function updateStat(
 
 export async function updateStatFormula(
   id: string,
-  input: { weekly_formula: WeeklyFormula; formula_source_stat_id?: string | null },
+  input: {
+    weekly_formula: WeeklyFormula;
+    formula_source_stat_id?: string | null;
+    formula_denominator_stat_id?: string | null;
+  },
 ) {
   const { supabase } = await requireAdmin();
   if (
@@ -240,6 +244,12 @@ export async function updateStatFormula(
   ) {
     return { error: "Choose the collections source stat" };
   }
+  if (
+    input.weekly_formula === "ratio_of_sums" &&
+    (!input.formula_source_stat_id || !input.formula_denominator_stat_id)
+  ) {
+    return { error: "Choose both the numerator and denominator stats" };
+  }
 
   const { error } = await supabase
     .from("stats")
@@ -247,8 +257,13 @@ export async function updateStatFormula(
       weekly_formula: input.weekly_formula,
       daily_tracking_enabled: input.weekly_formula !== "manual",
       formula_source_stat_id:
-        input.weekly_formula === "collections_per_staff"
+        input.weekly_formula === "collections_per_staff" ||
+        input.weekly_formula === "ratio_of_sums"
           ? input.formula_source_stat_id
+          : null,
+      formula_denominator_stat_id:
+        input.weekly_formula === "ratio_of_sums"
+          ? input.formula_denominator_stat_id
           : null,
       updated_at: new Date().toISOString(),
     })

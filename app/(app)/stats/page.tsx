@@ -35,7 +35,9 @@ export default async function StatsPage({
     mode === "daily" && !data.setupRequired && dates.includes(today);
   const dailyStats = data.stats.filter(
     (item) =>
-      item.stat.daily_tracking_enabled && item.stat.weekly_formula !== "manual",
+      item.stat.daily_tracking_enabled &&
+      item.stat.weekly_formula !== "manual" &&
+      item.stat.weekly_formula !== "ratio_of_sums",
   );
   const enteredToday = dailyStats.filter((item) =>
     item.dailyEntries.some(

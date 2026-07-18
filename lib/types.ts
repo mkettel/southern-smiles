@@ -101,6 +101,7 @@ export interface Stat {
   weekly_formula: WeeklyFormula;
   formula_source_stat_id: string | null;
   formula_denominator_stat_id: string | null;
+  formula_effective_from: string | null;
   /** Admin-assigned lifetime condition for this stat. Null = not set. */
   overall_condition: import("./conditions").ConditionName | null;
   created_at: string;

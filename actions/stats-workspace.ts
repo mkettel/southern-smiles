@@ -11,6 +11,7 @@ import { isBillsManagedStat } from "@/lib/bills";
 import {
   calculateCollectionsPerStaffWeek,
   calculateRatioOfSumsWeek,
+  isWeeklyFormulaActive,
 } from "@/lib/stat-formulas";
 import { isCherryApprovedFinancingStat } from "@/lib/cherry-financing";
 import type { DailyStatEntry, Post, Profile, Stat, StatEntry } from "@/lib/types";
@@ -147,6 +148,7 @@ async function calculateWeeklyValue(
 
 async function syncWeekly(stat: Stat, weekStart: string, actorId: string, practiceId: string) {
   if (stat.weekly_formula === "manual") return;
+  if (!isWeeklyFormulaActive(stat.formula_effective_from, weekStart)) return;
   const admin = createAdminClient();
   const [{ data: existing }, { data: previous }] = await Promise.all([
     admin.from("stat_entries").select("*").eq("stat_id", stat.id).eq("week_start", weekStart).maybeSingle(),

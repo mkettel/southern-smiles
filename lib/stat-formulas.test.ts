@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   calculateCollectionsPerStaffWeek,
   calculateRatioOfSumsWeek,
+  isWeeklyFormulaActive,
 } from "./stat-formulas";
 
 test("calculates collections per staff from weekly totals", () => {
@@ -97,4 +98,10 @@ test("does not average daily conversion rates", () => {
 test("returns null when the weekly ratio denominator is zero or missing", () => {
   assert.equal(calculateRatioOfSumsWeek([{ value: 2 }], []), null);
   assert.equal(calculateRatioOfSumsWeek([{ value: 2 }], [{ value: 0 }]), null);
+});
+
+test("keeps formula-driven recalculation off before its effective week", () => {
+  assert.equal(isWeeklyFormulaActive("2026-07-20", "2026-07-13"), false);
+  assert.equal(isWeeklyFormulaActive("2026-07-20", "2026-07-20"), true);
+  assert.equal(isWeeklyFormulaActive(null, "2026-07-13"), true);
 });

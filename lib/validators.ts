@@ -179,6 +179,68 @@ export const overheadSettingsSchema = z.object({
   notes: z.string().max(4000).nullable().optional(),
 });
 
+const supplyCategorySchema = z.enum(["routine", "office", "implant_graft"]);
+const supplyCatalogGroupSchema = z.enum([
+  "lab",
+  "office_cleaning",
+  "general",
+  "oral_surgery",
+  "ortho",
+]);
+
+const supplyCatalogItemSchema = z.object({
+  id: z.string().trim().min(1).max(200),
+  name: z.string().trim().min(1).max(300),
+  category: supplyCategorySchema,
+  catalog_group: supplyCatalogGroupSchema,
+  vendor: z.string().trim().min(1).max(200),
+  product_url: z.string().max(2048).nullable(),
+  alternative_urls: z.array(z.string().max(2048)).max(20),
+  unit_label: z.string().trim().min(1).max(80),
+  current_unit_cost_cents: z.number().int().nonnegative().nullable(),
+  last_price_note: z.string().max(500).nullable(),
+  prior_unit_cost_cents: z.number().int().nonnegative().nullable(),
+  reorder_level: z.number().nonnegative().max(1_000_000),
+  quantity_on_hand: z.number().nonnegative().max(1_000_000).nullable(),
+  procedure_links: z.array(z.object({
+    procedure_name: z.string().trim().min(1).max(300),
+    units_per_procedure: z.number().positive().max(1_000_000),
+  })).max(100),
+  updated_at: z.string().max(100),
+});
+
+export const supplyWorkspaceSchema = z.object({
+  catalog: z.array(supplyCatalogItemSchema).max(2_000),
+  purchases: z.array(z.object({
+    id: z.string().trim().min(1).max(200),
+    catalog_item_id: z.string().trim().min(1).max(200),
+    vendor: z.string().trim().min(1).max(200),
+    purchased_at: z.string().max(100),
+    quantity: z.number().positive().max(1_000_000),
+    unit_cost_cents: z.number().int().nonnegative(),
+    category: supplyCategorySchema,
+    case_reference: z.string().max(300).nullable(),
+    notes: z.string().max(2_000).nullable(),
+  })).max(20_000),
+  settings: z.object({
+    budget_month: z.string().regex(/^\d{4}-\d{2}$/),
+    published_at: z.string().max(100).nullable(),
+    published_by: z.string().max(200).nullable(),
+    collections_cents: z.number().int().nonnegative(),
+    routine_target_percent: z.number().nonnegative().max(100),
+    office_target_percent: z.number().nonnegative().max(100),
+    routine_baseline_cents: z.number().int().nonnegative(),
+    office_baseline_cents: z.number().int().nonnegative(),
+  }),
+  orderDraft: z.array(z.object({
+    id: z.string().trim().min(1).max(200),
+    catalog_item_id: z.string().trim().min(1).max(200),
+    vendor: z.string().trim().min(1).max(200),
+    quantity: z.number().positive().max(1_000_000),
+    added_at: z.string().max(100),
+  })).max(2_000),
+});
+
 export const cherryApprovalImportSchema = z.object({
   messageId: z.string().trim().max(300).nullable().optional(),
   subject: z.string().trim().min(1, "Subject is required").max(300),

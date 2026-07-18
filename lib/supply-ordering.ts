@@ -60,6 +60,13 @@ export interface SupplyBudgetSettings {
   office_baseline_cents: number;
 }
 
+export interface SavedSupplyWorkspace {
+  catalog: SupplyCatalogItem[];
+  purchases: SupplyPurchase[];
+  settings: SupplyBudgetSettings;
+  orderDraft: SupplyOrderDraftLine[];
+}
+
 export const SUPPLY_CATEGORY_META: Record<
   SupplyCategory,
   { label: string; short_label: string; description: string }

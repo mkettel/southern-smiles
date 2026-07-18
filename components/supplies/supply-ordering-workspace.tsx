@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
+import { saveSupplyWorkspace } from "@/actions/supplies";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -61,6 +62,7 @@ import {
   type SupplyCategory,
   type SupplyOrderDraftLine,
   type SupplyPurchase,
+  type SavedSupplyWorkspace,
 } from "@/lib/supply-ordering";
 import { cn } from "@/lib/utils";
 
@@ -83,15 +85,10 @@ const CATALOG_FILTERS = [
 
 type ActiveTab = "overview" | "catalog" | "order-draft" | "purchases" | "cost-impact";
 
-interface SavedSupplyWorkspace {
-  catalog: SupplyCatalogItem[];
-  purchases: SupplyPurchase[];
-  settings: SupplyBudgetSettings;
-  orderDraft?: SupplyOrderDraftLine[];
-}
-
 interface SupplyOrderingWorkspaceProps {
   canManageBudget?: boolean;
+  initialWorkspace?: SavedSupplyWorkspace | null;
+  sharedPersistenceEnabled?: boolean;
 }
 
 function moneyInputValue(cents: number) {
@@ -143,6 +140,8 @@ function defaultBudgetTreatment(item: SupplyCatalogItem | undefined): SupplyCate
 
 export function SupplyOrderingWorkspace({
   canManageBudget = true,
+  initialWorkspace = null,
+  sharedPersistenceEnabled = false,
 }: SupplyOrderingWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<ActiveTab>("overview");
   const [catalog, setCatalog] = useState<SupplyCatalogItem[]>(DEFAULT_SUPPLY_CATALOG);
@@ -161,21 +160,30 @@ export function SupplyOrderingWorkspace({
   );
   const [catalogQuery, setCatalogQuery] = useState("");
   const [catalogGroupFilter, setCatalogGroupFilter] = useState<SupplyCatalogGroup | "all">("all");
+  const lastSavedWorkspace = useRef<string | null>(null);
+  const saveErrorShown = useRef(false);
 
   useEffect(() => {
     try {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as unknown;
-        if (isSupplyWorkspace(parsed)) {
-          const restoredCatalog = isLegacyDemoCatalog(parsed.catalog)
-            ? DEFAULT_SUPPLY_CATALOG
-            : parsed.catalog.map(normalizeCatalogItem);
-          setCatalog(restoredCatalog);
-          setPurchases(parsed.purchases);
-          setOrderDraft(parsed.orderDraft ?? []);
-          setSettings(normalizeSettings(parsed.settings));
-          setSelectedCatalogItemId(restoredCatalog[0]?.id ?? "");
+      const localSaved = window.localStorage.getItem(STORAGE_KEY);
+      const localParsed = localSaved ? JSON.parse(localSaved) as unknown : null;
+      const restored = initialWorkspace ?? (isSupplyWorkspace(localParsed) ? localParsed : null);
+      if (restored) {
+        const restoredCatalog = isLegacyDemoCatalog(restored.catalog)
+          ? DEFAULT_SUPPLY_CATALOG
+          : restored.catalog.map(normalizeCatalogItem);
+        setCatalog(restoredCatalog);
+        setPurchases(restored.purchases);
+        setOrderDraft(restored.orderDraft ?? []);
+        setSettings(normalizeSettings(restored.settings));
+        setSelectedCatalogItemId(restoredCatalog[0]?.id ?? "");
+        if (initialWorkspace) {
+          lastSavedWorkspace.current = JSON.stringify({
+            catalog: restoredCatalog,
+            purchases: restored.purchases,
+            settings: normalizeSettings(restored.settings),
+            orderDraft: restored.orderDraft ?? [],
+          } satisfies SavedSupplyWorkspace);
         }
       }
     } catch {
@@ -183,15 +191,32 @@ export function SupplyOrderingWorkspace({
     } finally {
       setHasHydrated(true);
     }
-  }, []);
+  }, [initialWorkspace]);
 
   useEffect(() => {
     if (!hasHydrated) return;
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ catalog, purchases, settings, orderDraft } satisfies SavedSupplyWorkspace),
-    );
-  }, [catalog, hasHydrated, orderDraft, purchases, settings]);
+    const workspace = { catalog, purchases, settings, orderDraft } satisfies SavedSupplyWorkspace;
+    const serialized = JSON.stringify(workspace);
+    window.localStorage.setItem(STORAGE_KEY, serialized);
+    if (!sharedPersistenceEnabled) return;
+    if (serialized === lastSavedWorkspace.current) return;
+
+    const timeout = window.setTimeout(async () => {
+      const result = await saveSupplyWorkspace(workspace);
+      if (result.error) {
+        if (!saveErrorShown.current) {
+          toast.error("Supply changes could not be saved", { description: result.error });
+          saveErrorShown.current = true;
+        }
+        return;
+      }
+
+      lastSavedWorkspace.current = serialized;
+      saveErrorShown.current = false;
+    }, 750);
+
+    return () => window.clearTimeout(timeout);
+  }, [catalog, hasHydrated, orderDraft, purchases, settings, sharedPersistenceEnabled]);
 
   const budget = useMemo(() => {
     const routineCents = calculateSupplyBudgetCents(

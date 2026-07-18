@@ -434,6 +434,7 @@ export interface OverheadItem {
   category_id: string;
   name: string;
   monthly_cost_cents: number;
+  cost_type: "fixed" | "variable";
   notes: string | null;
   display_order: number;
   is_active: boolean;
@@ -449,6 +450,9 @@ export interface OverheadCategorySummary extends OverheadCategory {
 
 export interface OverheadSummary {
   total_monthly_cents: number;
+  total_weekly_cents: number;
+  fixed_monthly_cents: number;
+  variable_monthly_cents: number;
   total_annual_cents: number;
   full_capacity_monthly_operatory_hours: number;
   configured_monthly_operatory_hours: number;

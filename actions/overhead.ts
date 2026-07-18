@@ -35,6 +35,14 @@ function normalizeOverheadSettings(row: OverheadSettings): OverheadSettings {
   };
 }
 
+function normalizeOverheadItem(row: OverheadItem): OverheadItem {
+  return {
+    ...row,
+    monthly_cost_cents: Number(row.monthly_cost_cents),
+    cost_type: row.cost_type === "variable" ? "variable" : "fixed",
+  };
+}
+
 function isOverheadSetupMissing(error: { message?: string } | null | undefined) {
   const message = error?.message?.toLowerCase() ?? "";
   return (
@@ -112,6 +120,7 @@ function buildPreviewDashboardDataFromImport(
     category_id: categoryIdByName.get(item.category_name) ?? "preview-unknown",
     name: item.name,
     monthly_cost_cents: item.monthly_cost_cents,
+    cost_type: "fixed",
     notes: item.notes,
     display_order: item.display_order,
     is_active: true,
@@ -240,7 +249,7 @@ export async function getOverheadDashboardData(): Promise<OverheadDashboardData>
     if (itemsError) throw new Error(itemsError.message);
 
     const categories = (categoriesData ?? []) as OverheadCategory[];
-    const items = (itemsData ?? []) as OverheadItem[];
+    const items = ((itemsData ?? []) as OverheadItem[]).map(normalizeOverheadItem);
     const activeCategoryIds = new Set(
       categories.filter((category) => category.is_active).map((category) => category.id),
     );
@@ -341,6 +350,7 @@ export async function createOverheadItem(input: {
   category_id: string;
   name: string;
   monthly_cost_cents: number;
+  cost_type?: "fixed" | "variable";
   notes?: string | null;
   display_order?: number;
   is_active?: boolean;
@@ -366,6 +376,7 @@ export async function updateOverheadItem(
     category_id: string;
     name: string;
     monthly_cost_cents: number;
+    cost_type?: "fixed" | "variable";
     notes?: string | null;
     display_order?: number;
     is_active?: boolean;
@@ -499,6 +510,7 @@ export async function importOverheadCsv(formData: FormData): Promise<
           category_id: categoryId,
           name: item.name,
           monthly_cost_cents: item.monthly_cost_cents,
+          cost_type: "fixed",
           notes: item.notes,
           display_order: item.display_order,
           is_active: true,

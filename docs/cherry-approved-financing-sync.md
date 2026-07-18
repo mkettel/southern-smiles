@@ -1,139 +1,154 @@
 # Cherry Approved Financing Sync
 
-## What This Builds
+## Goal
 
-Cherry approvals now have a source-of-truth import path for the Division 2
-`Approved Financing` stat.
+Automatically update the Division 2 `Approved Financing` stat from Cherry approvals so staff do not re-enter the same weekly total by hand.
 
-The app can:
+## Preferred Path: Cherry API
 
-- parse Cherry approval emails
-- store one de-identified approval row per Cherry/Gmail message
-- dedupe retries by message id
-- sum approvals by dashboard week
-- sync the weekly total into the active Division 2 dollar stat named
-  `Approved Financing`
-- hide `Approved Financing` from manual Stats entry
+Cherry Support confirmed that the Partner API is not self-service yet. A draft email has been prepared for Peyton Pelham asking for read-only, aggregate-only access.
 
-The app intentionally does not store patient names, phone numbers, raw email
-bodies, or Cherry account credentials.
+Requested API shape:
 
-## Database
+- Date range input, such as the current dashboard week.
+- Aggregate approved-financing amount only.
+- No patient names, phone numbers, or patient-level records required.
 
-Apply:
+If approved, the app should fetch the weekly total server-side, then upsert the active Division 2 dollar stat named `Approved Financing` for the selected week.
 
-```sql
-supabase/migrations/042_add_cherry_financing_approvals.sql
-```
+## Implemented Path: Signed Inbound Email Webhook
 
-This creates `cherry_financing_approvals` with:
-
-- `practice_id`
-- `source = 'cherry_email'`
-- `source_message_id`
-- `approved_at`
-- `week_start`
-- `amount_cents`
-- optional importing profile
-
-The unique key on `(practice_id, source, source_message_id)` prevents duplicate
-forwarded emails from double-counting.
-
-## Admin Manual Import
-
-Admins can use:
+The app accepts Resend `email.received` events at:
 
 ```text
-/admin/cherry-financing
+POST /api/webhooks/resend/cherry
 ```
 
-Paste:
+The route verifies the Resend/Svix signature before retrieving the email. It
+then requires the configured recipient and Cherry sender, parses the approval,
+and calls the atomic `record_cherry_approval_event` database function.
 
-- Cherry email subject
-- received date/time
-- optional message id
-- Cherry email body
+The webhook reuses the existing `cherry_financing_approvals` ledger and stores only:
 
-The parser prefers the body field:
+- provider event id
+- source message id
+- received timestamp
+- reporting week
+- approved amount in cents
+
+It does not store the email body, patient name, phone number, or email address.
+Duplicate webhook deliveries are ignored by practice and source message id, so
+manual imports and automated receipts always roll into the same weekly total.
+
+Apply `supabase/migrations/046_add_cherry_approval_webhook.sql` after the
+existing Cherry approvals migration.
+
+Required production environment variables:
 
 ```text
-Total Available
-$10,000
+RESEND_API_KEY=
+RESEND_CHERRY_WEBHOOK_SECRET=
+CHERRY_INBOUND_RECIPIENT=
 ```
 
-If that field is missing, it falls back to the approval amount in the subject.
-This avoids accidentally using the higher Growth Plan marketing amount. The
-subject and body are parsed only during import; they are not stored.
-
-## Webhook Endpoint
-
-For Gmail Apps Script, Zapier, Make, or an inbound email provider, call:
+Optional overrides:
 
 ```text
-POST /api/cherry/approvals
+CHERRY_APPROVAL_SENDER=support@withcherry.com
+CHERRY_PRACTICE_SLUG=ssmiles
+CHERRY_AUTOMATION_START_WEEK=2026-07-20
 ```
 
-Required header:
+Resend setup:
 
-```text
-x-cherry-webhook-secret: <CHERRY_EMAIL_WEBHOOK_SECRET>
-```
+1. Create or choose a receiving address in Resend. A managed Resend receiving
+   address is sufficient initially; a custom receiving subdomain can be added
+   later.
+2. Create a webhook for the `email.received` event pointing to
+   `https://ssmiles.survivalboard.org/api/webhooks/resend/cherry`.
+3. Copy the webhook signing secret and API key into the Vercel production
+   variables above.
+4. In the Gmail account that receives Cherry approvals, add the Resend address
+   as a forwarding address and confirm it.
+5. Forward only messages matching:
+   `from:(support@withcherry.com) subject:(approved for)`.
+6. Send one known test approval and confirm that the current week's Approved
+   Financing total changes once, even if the webhook is replayed.
 
-Required Vercel/Supabase app env var:
+## Reporting Cutoff
 
-```text
-CHERRY_EMAIL_WEBHOOK_SECRET=<long random secret>
-CHERRY_EMAIL_WEBHOOK_PRACTICE_ID=<practice uuid>
-```
+Approved Financing uses a Phoenix-time Friday cutoff:
 
-Payload:
+- Monday through Friday before 4:00 PM counts toward that Friday.
+- Friday at 4:00 PM or later and all weekend approvals count toward the
+  following Friday.
+- Automation begins with the week starting July 20, 2026. Earlier manual
+  history, including the July 10 and July 17 totals, cannot be changed by the
+  webhook.
 
-```json
-{
-  "messageId": "gmail-message-id-or-inbound-provider-id",
-  "subject": "Patient has been approved for $10,000 at Southern Smiles",
-  "body": "Total Available\n$10,000\n...",
-  "receivedAt": "2026-07-02T15:30:00.000Z"
-}
-```
+## Email Format
 
-If `receivedAt` is omitted, the server uses the import time. `messageId` is
-required so retries do not duplicate approvals. The webhook does not accept a
-caller-provided practice id; production should set
-`CHERRY_EMAIL_WEBHOOK_PRACTICE_ID` so forwarded emails always land in the
-intended practice.
+Cherry sends approval emails with stable amount language:
 
-## Dedicated Gmail Fallback
+- Subject examples:
+  - `{Patient} has been approved for $10,000 at Southern Smiles`
+  - `{Patient} is approved for purchases up to $7,500 at Southern Smiles`
+- Body field:
+  - `Total Available`
+  - `$10,000`
 
-Because Cherry Partner API access is not available immediately, use a dedicated
-Gmail inbox for approval notifications.
+The parser in `lib/cherry-financing.ts` intentionally stores only:
 
-Recommended flow:
+- source email id
+- received timestamp
+- approved amount in cents
 
-1. Create a standalone Gmail account for Cherry approval forwarding.
-2. In Monzer's main Gmail, filter Cherry approval emails and forward only those
-   messages to the dedicated mailbox.
-3. Use a small Gmail Apps Script or automation provider on that dedicated mailbox
-   to call `/api/cherry/approvals`.
-4. Never connect Survival Board to Monzer's full main Gmail account.
+It does not need to store patient names, mobile numbers, or email body text.
 
-Suggested Gmail filter:
+To avoid giving Survival Board broad access to Monzer's main Gmail account, use
+a dedicated Gmail inbox that only receives forwarded Cherry approval emails.
 
-```text
-from:(support@withcherry.com) subject:(approved for)
-```
+Recommended mailbox shape:
 
-## Stat Behavior
+- Create a standalone Gmail account such as `southernsmiles.cherry@gmail.com`.
+- In Monzer's main Gmail, keep the existing filter:
+  - `from:(support@withcherry.com) subject:(approved for)`
+  - apply label `Cherry/Approvals`
+- Add forwarding on that filter to the dedicated Cherry Gmail account.
+- Connect Survival Board only to the dedicated Cherry Gmail account.
 
-When an approval imports successfully:
+This means even if the Gmail API authorization is broad, the authorized mailbox
+contains only Cherry approval messages rather than the practice owner's full
+personal/work inbox.
 
-1. The email is parsed.
-2. The approval row is upserted by message id.
-3. The weekly total for that approval's week is recalculated.
-4. The next existing `Approved Financing` stat week is refreshed so its
-   previous value stays accurate when older approvals are imported later.
-5. The Division 2 `Approved Financing` stat entry is upserted.
-6. Dashboard, Stats, and stat detail pages are revalidated.
+## Alternative Integration Options
 
-Manual stat entry for `Approved Financing` is blocked because the source of
-truth is now the Cherry import log.
+The signed inbound webhook above is the current implementation. These remain
+possible alternatives:
+
+1. Dedicated Gmail API polling
+   - Add Google OAuth/API access for the dedicated Cherry Gmail account only.
+   - Search messages from `support@withcherry.com` matching Cherry approval subjects.
+   - Deduplicate by Gmail message id.
+   - Parse each matching email with `parseCherryApprovalEmail`.
+
+2. Manual import fallback
+   - Admin pastes raw Cherry approval email text into a protected admin tool.
+   - The parser extracts the amount and updates the weekly total.
+   - This is least automated, but it can be useful while API/inbound email access is being approved.
+
+## Stat Update Behavior
+
+Once approvals are parsed, the app should:
+
+1. Sum parsed approvals using the Friday 4:00 PM Phoenix cutoff.
+2. Find the active dollar stat named `Approved Financing` under Division 2.
+3. Upsert `stat_entries` for `(stat_id, week_start)`.
+4. Revalidate `/dashboard`, `/stats`, and the affected stat detail page.
+5. Keep manual override available to an admin for corrections. New webhook
+   events update the calculated value without overwriting an active manual
+   override.
+
+## Important Caveat
+
+Some Cherry emails include a marketing line such as “could have been approved for more on the Growth Plan.” The parser must use `Total Available` first so the stat reflects the actual approved amount, not the higher marketing amount.

@@ -68,6 +68,8 @@ interface OverheadDashboardProps {
   initialData: OverheadDashboardData;
 }
 
+type CostTypeFilter = "all" | "fixed" | "variable";
+
 export function OverheadDashboard({ initialData }: OverheadDashboardProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [data, setData] = useState(initialData);
@@ -75,6 +77,7 @@ export function OverheadDashboard({ initialData }: OverheadDashboardProps) {
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategoryId, setActiveCategoryId] = useState<string>("all");
+  const [costTypeFilter, setCostTypeFilter] = useState<CostTypeFilter>("all");
   const [settingsDraft, setSettingsDraft] = useState({
     operatories_count: String(initialData.settings.operatories_count),
     days_per_week: String(initialData.settings.days_per_week),
@@ -129,10 +132,32 @@ export function OverheadDashboard({ initialData }: OverheadDashboardProps) {
   }, [data.items]);
 
   const capacitySummary = `${data.settings.operatories_count} operatories • ${data.settings.days_per_week} days/week • ${data.settings.clinical_hours_per_day} clinical hrs/day • ${data.settings.weeks_per_month} weeks/month • ${data.settings.utilization_percent}% utilization`;
+  const visibleTotalMonthlyCents =
+    costTypeFilter === "fixed"
+      ? data.summary.fixed_monthly_cents
+      : costTypeFilter === "variable"
+        ? data.summary.variable_monthly_cents
+        : data.summary.total_monthly_cents;
+  const getVisibleItems = (categoryId: string) =>
+    (itemsByCategory.get(categoryId) ?? []).filter(
+      (item) => costTypeFilter === "all" || item.cost_type === costTypeFilter,
+    );
+  const getVisibleCategoryTotal = (categoryId: string) =>
+    getVisibleItems(categoryId)
+      .filter((item) => item.is_active)
+      .reduce((sum, item) => sum + item.monthly_cost_cents, 0);
   const filteredCategories = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return data.categories.filter((category) => {
       if (activeCategoryId !== "all" && category.id !== activeCategoryId) {
+        return false;
+      }
+
+      const categoryItems = (itemsByCategory.get(category.id) ?? []).filter(
+        (item) => costTypeFilter === "all" || item.cost_type === costTypeFilter,
+      );
+
+      if (costTypeFilter !== "all" && categoryItems.length === 0) {
         return false;
       }
 
@@ -143,20 +168,18 @@ export function OverheadDashboard({ initialData }: OverheadDashboardProps) {
         .toLowerCase();
       if (categoryText.includes(query)) return true;
 
-      const categoryItems = itemsByCategory.get(category.id) ?? [];
       return categoryItems.some((item) =>
         [item.name, item.notes ?? ""].join(" ").toLowerCase().includes(query),
       );
     });
-  }, [activeCategoryId, data.categories, itemsByCategory, searchQuery]);
-  const topCategoryIds = useMemo(
-    () =>
-      [...filteredCategories]
-        .sort((left, right) => right.total_monthly_cents - left.total_monthly_cents)
-        .slice(0, 3)
-        .map((category) => category.id),
-    [filteredCategories],
-  );
+  }, [activeCategoryId, costTypeFilter, data.categories, itemsByCategory, searchQuery]);
+  const topCategoryIds = [...filteredCategories]
+    .sort(
+      (left, right) =>
+        getVisibleCategoryTotal(right.id) - getVisibleCategoryTotal(left.id),
+    )
+    .slice(0, 3)
+    .map((category) => category.id);
 
   const hasImportedData = importPreview !== null || data.items.length > 0;
 
@@ -311,30 +334,46 @@ export function OverheadDashboard({ initialData }: OverheadDashboardProps) {
         </Card>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard
-          icon={<DollarSign className="h-4 w-4" />}
-          label="Monthly overhead"
-          value={formatCurrencyFromCents(data.summary.total_monthly_cents)}
-        />
-        <SummaryCard
-          icon={<Receipt className="h-4 w-4" />}
-          label="Annualized overhead"
-          value={formatCurrencyFromCents(data.summary.total_annual_cents)}
-        />
-        <SummaryCard
-          icon={<Calculator className="h-4 w-4" />}
-          label="Operatory hours / month"
-          value={formatHours(data.summary.configured_monthly_operatory_hours)}
-          detail={`${formatHours(data.summary.full_capacity_monthly_operatory_hours)} at full capacity`}
-        />
-        <SummaryCard
-          icon={<Calculator className="h-4 w-4" />}
-          label="Cost per operatory hour"
-          value={formatCurrencyFromCents(data.summary.cost_per_operatory_hour_cents)}
-          detail={`Full capacity: ${formatCurrencyFromCents(data.summary.full_capacity_cost_per_operatory_hour_cents)}`}
-        />
-      </div>
+      <Card className="overflow-hidden">
+        <CardContent className="grid p-0 md:grid-cols-2 lg:grid-cols-6">
+          <SummaryMetric
+            icon={<DollarSign className="h-4 w-4" />}
+            label="Monthly overhead"
+            value={formatCurrencyFromCents(data.summary.total_monthly_cents)}
+            detail={`${formatCurrencyFromCents(data.summary.total_annual_cents)} annualized`}
+          />
+          <SummaryMetric
+            icon={<Calculator className="h-4 w-4" />}
+            label="Weekly overhead"
+            value={formatCurrencyFromCents(data.summary.total_weekly_cents)}
+            detail="Annual overhead divided across 52 weeks"
+          />
+          <SummaryMetric
+            icon={<Receipt className="h-4 w-4" />}
+            label="Fixed costs"
+            value={formatCurrencyFromCents(data.summary.fixed_monthly_cents)}
+            detail={`${formatPercentOfTotal(data.summary.fixed_monthly_cents, data.summary.total_monthly_cents)} of overhead`}
+          />
+          <SummaryMetric
+            icon={<Receipt className="h-4 w-4" />}
+            label="Variable costs"
+            value={formatCurrencyFromCents(data.summary.variable_monthly_cents)}
+            detail={`${formatPercentOfTotal(data.summary.variable_monthly_cents, data.summary.total_monthly_cents)} of overhead`}
+          />
+          <SummaryMetric
+            icon={<Calculator className="h-4 w-4" />}
+            label="Operatory hours / month"
+            value={formatHours(data.summary.configured_monthly_operatory_hours)}
+            detail={`${formatHours(data.summary.full_capacity_monthly_operatory_hours)} at full capacity`}
+          />
+          <SummaryMetric
+            icon={<Calculator className="h-4 w-4" />}
+            label="Cost per operatory hour"
+            value={formatCurrencyFromCents(data.summary.cost_per_operatory_hour_cents)}
+            detail={`Full capacity: ${formatCurrencyFromCents(data.summary.full_capacity_cost_per_operatory_hour_cents)}`}
+          />
+        </CardContent>
+      </Card>
 
       <div className="rounded-xl border bg-muted/20 px-4 py-3">
         <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -391,14 +430,38 @@ export function OverheadDashboard({ initialData }: OverheadDashboardProps) {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="space-y-3 rounded-2xl border bg-muted/15 p-3">
-            <div className="flex items-center gap-2 rounded-xl border bg-background px-3">
-              <Search className="h-4 w-4 text-muted-foreground" />
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search categories or line items"
-                className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
-              />
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+              <div className="flex flex-1 items-center gap-2 rounded-xl border bg-background px-3">
+                <Search className="h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search categories or line items"
+                  className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+                />
+              </div>
+              <div
+                className="grid grid-cols-3 overflow-hidden rounded-lg border bg-background"
+                role="group"
+                aria-label="Cost type"
+              >
+                {(["all", "fixed", "variable"] as CostTypeFilter[]).map((costType) => (
+                  <Button
+                    key={costType}
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setCostTypeFilter(costType)}
+                    className={cn(
+                      "rounded-none border-r capitalize last:border-r-0",
+                      costTypeFilter === costType &&
+                        "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground",
+                    )}
+                  >
+                    {costType === "all" ? "All costs" : costType}
+                  </Button>
+                ))}
+              </div>
             </div>
 
             <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -446,11 +509,11 @@ export function OverheadDashboard({ initialData }: OverheadDashboardProps) {
             <CategoryAccordion
               key={category.id}
               category={category}
-              items={itemsByCategory.get(category.id) ?? []}
+              items={getVisibleItems(category.id)}
               expanded={expandedCategoryIds.includes(category.id)}
               disabled={Boolean(data.setupRequired)}
               isTopCategory={topCategoryIds.includes(category.id)}
-              totalMonthlyCents={data.summary.total_monthly_cents}
+              totalMonthlyCents={visibleTotalMonthlyCents}
               onToggle={() => toggleCategory(category.id)}
               onSaved={refreshData}
               categories={data.categories}
@@ -494,7 +557,7 @@ function CategoryChip({
   );
 }
 
-function SummaryCard({
+function SummaryMetric({
   icon,
   label,
   value,
@@ -506,17 +569,20 @@ function SummaryCard({
   detail?: string;
 }) {
   return (
-    <Card size="sm">
-      <CardContent className="space-y-2 pt-3">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          {icon}
-          <span className="text-xs font-medium uppercase tracking-wide">{label}</span>
-        </div>
-        <div className="text-2xl font-semibold">{value}</div>
-        {detail ? <div className="text-xs text-muted-foreground">{detail}</div> : null}
-      </CardContent>
-    </Card>
+    <div className="min-w-0 space-y-2 border-b p-4 md:border-r lg:border-b-0 last:border-b-0 last:border-r-0">
+      <div className="flex min-h-8 items-start gap-2 text-muted-foreground">
+        <span className="mt-0.5 shrink-0">{icon}</span>
+        <span className="text-xs font-medium uppercase tracking-wide">{label}</span>
+      </div>
+      <div className="text-xl font-semibold">{value}</div>
+      {detail ? <div className="text-xs text-muted-foreground">{detail}</div> : null}
+    </div>
   );
+}
+
+function formatPercentOfTotal(value: number, total: number) {
+  if (total <= 0) return "0%";
+  return `${Math.round((value / total) * 100)}%`;
 }
 
 function Field({
@@ -671,10 +737,14 @@ function CategoryAccordion({
   onSaved: () => Promise<void>;
   categories: OverheadCategorySummary[];
 }) {
-  const activeItems = items.filter((item) => item.is_active).length;
+  const activeItems = items.filter((item) => item.is_active);
+  const categoryMonthlyCents = activeItems.reduce(
+    (sum, item) => sum + item.monthly_cost_cents,
+    0,
+  );
   const sharePercent =
     totalMonthlyCents > 0
-      ? Math.round((category.total_monthly_cents / totalMonthlyCents) * 100)
+      ? Math.round((categoryMonthlyCents / totalMonthlyCents) * 100)
       : 0;
 
   return (
@@ -715,7 +785,7 @@ function CategoryAccordion({
                   ) : null}
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  {activeItems} active item{activeItems === 1 ? "" : "s"}
+                  {activeItems.length} active item{activeItems.length === 1 ? "" : "s"}
                 </div>
                 {category.description ? (
                   <div className="mt-2 max-w-3xl text-sm text-muted-foreground">
@@ -737,7 +807,7 @@ function CategoryAccordion({
 
               <div className="text-left sm:text-right">
                 <div className="text-lg font-semibold">
-                  {formatCurrencyFromCents(category.total_monthly_cents)}
+                  {formatCurrencyFromCents(categoryMonthlyCents)}
                 </div>
                 <div className="text-xs text-muted-foreground">Monthly total</div>
               </div>
@@ -802,6 +872,10 @@ function CategoryAccordion({
 
                     <Badge variant={item.is_active ? "outline" : "secondary"}>
                       {item.is_active ? "Active" : "Excluded"}
+                    </Badge>
+
+                    <Badge variant={item.cost_type === "variable" ? "secondary" : "outline"}>
+                      {item.cost_type === "variable" ? "Variable" : "Fixed"}
                     </Badge>
 
                     <ItemDialog
@@ -968,6 +1042,9 @@ function ItemDialog({
   const [notes, setNotes] = useState(editItem?.notes ?? "");
   const [displayOrder, setDisplayOrder] = useState(String(editItem?.display_order ?? 0));
   const [isActive, setIsActive] = useState(editItem?.is_active ?? true);
+  const [costType, setCostType] = useState<"fixed" | "variable">(
+    editItem?.cost_type ?? "fixed",
+  );
 
   function syncFromSource() {
     setCategoryId(editItem?.category_id ?? defaultCategoryId ?? categories[0]?.id ?? "");
@@ -976,6 +1053,7 @@ function ItemDialog({
     setNotes(editItem?.notes ?? "");
     setDisplayOrder(String(editItem?.display_order ?? 0));
     setIsActive(editItem?.is_active ?? true);
+    setCostType(editItem?.cost_type ?? "fixed");
   }
 
   async function handleSubmit() {
@@ -987,6 +1065,7 @@ function ItemDialog({
       notes: notes.trim() || null,
       display_order: Number(displayOrder || 0),
       is_active: isActive,
+      cost_type: costType,
     };
 
     const result = editItem
@@ -1087,6 +1166,30 @@ function ItemDialog({
                 value={displayOrder}
                 onChange={(e) => setDisplayOrder(e.target.value)}
               />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Cost behavior</Label>
+            <div
+              className="grid grid-cols-2 overflow-hidden rounded-lg border"
+              role="group"
+              aria-label="Cost behavior"
+            >
+              {(["fixed", "variable"] as const).map((type) => (
+                <Button
+                  key={type}
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setCostType(type)}
+                  className={cn(
+                    "rounded-none border-r capitalize last:border-r-0",
+                    costType === type &&
+                      "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground",
+                  )}
+                >
+                  {type}
+                </Button>
+              ))}
             </div>
           </div>
           <div className="space-y-2">

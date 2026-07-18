@@ -164,6 +164,7 @@ export const overheadItemSchema = z.object({
   category_id: uuidLike,
   name: z.string().trim().min(1, "Line item name is required").max(200),
   monthly_cost_cents: z.number().int().min(0, "Amount must be 0 or greater"),
+  cost_type: z.enum(["fixed", "variable"]).default("fixed"),
   notes: z.string().max(2000).nullable().optional(),
   display_order: z.number().int().min(0).default(0),
   is_active: z.boolean().default(true),

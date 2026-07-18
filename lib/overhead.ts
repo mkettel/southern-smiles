@@ -120,6 +120,12 @@ export function buildOverheadSummary(
     (sum, item) => sum + item.monthly_cost_cents,
     0,
   );
+  const fixedMonthlyCents = activeItems
+    .filter((item) => item.cost_type !== "variable")
+    .reduce((sum, item) => sum + item.monthly_cost_cents, 0);
+  const variableMonthlyCents = activeItems
+    .filter((item) => item.cost_type === "variable")
+    .reduce((sum, item) => sum + item.monthly_cost_cents, 0);
 
   const fullCapacityMonthlyOperatoryHours =
     settings.operatories_count *
@@ -132,6 +138,9 @@ export function buildOverheadSummary(
 
   return {
     total_monthly_cents: totalMonthlyCents,
+    total_weekly_cents: Math.round((totalMonthlyCents * 12) / 52),
+    fixed_monthly_cents: fixedMonthlyCents,
+    variable_monthly_cents: variableMonthlyCents,
     total_annual_cents: totalMonthlyCents * 12,
     full_capacity_monthly_operatory_hours: fullCapacityMonthlyOperatoryHours,
     configured_monthly_operatory_hours: configuredMonthlyOperatoryHours,

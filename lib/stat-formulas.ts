@@ -86,3 +86,10 @@ export function calculateRatioOfSumsWeek(
 
   return (numerator / denominator) * 100;
 }
+
+export function isWeeklyFormulaActive(
+  formulaEffectiveFrom: string | null | undefined,
+  weekStart: string,
+) {
+  return !formulaEffectiveFrom || weekStart >= formulaEffectiveFrom;
+}

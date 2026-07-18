@@ -3,8 +3,36 @@ import test from "node:test";
 import {
   calculateCollectionsPerStaffWeek,
   calculateRatioOfSumsWeek,
+  getDailyInputStatId,
+  isNewPatientBookingsInput,
   isWeeklyFormulaActive,
 } from "./stat-formulas";
+
+test("treats new patient bookings as an input-only helper", () => {
+  assert.equal(isNewPatientBookingsInput({ name: "New Patient Bookings" }), true);
+  assert.equal(isNewPatientBookingsInput({ name: "New Reaches" }), false);
+});
+
+test("uses booking counts as the daily input behind conversion rate", () => {
+  assert.equal(
+    getDailyInputStatId({
+      id: "conversion",
+      name: "Conversion Rate",
+      weekly_formula: "ratio_of_sums",
+      formula_source_stat_id: "bookings",
+    }),
+    "bookings",
+  );
+  assert.equal(
+    getDailyInputStatId({
+      id: "reaches",
+      name: "New Reaches",
+      weekly_formula: "sum",
+      formula_source_stat_id: null,
+    }),
+    "reaches",
+  );
+});
 
 test("calculates collections per staff from weekly totals", () => {
   const result = calculateCollectionsPerStaffWeek(

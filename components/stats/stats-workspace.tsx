@@ -169,7 +169,7 @@ export function StatsWorkspace({
       (item) =>
         item.stat.daily_tracking_enabled &&
         item.stat.weekly_formula !== "manual" &&
-        item.stat.weekly_formula !== "ratio_of_sums",
+        (item.stat.weekly_formula !== "ratio_of_sums" || item.dailyInputStatId !== item.stat.id),
     ),
     [stats],
   );
@@ -239,7 +239,7 @@ export function StatsWorkspace({
     }
     setPendingKey(key);
     startTransition(async () => {
-      const result = await saveDailyStatInput({ statId: item.stat.id, entryDate: date, value });
+      const result = await saveDailyStatInput({ statId: item.dailyInputStatId, entryDate: date, value });
       if (result.error) toast.error(result.error);
       else {
         toast.success(raw === "" ? "Day cleared" : "Day saved");
@@ -469,7 +469,11 @@ export function StatsWorkspace({
                             <p className="mt-1 text-xs text-muted-foreground">{item.post.title}</p>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
-                            <Badge variant="outline">{FORMULA_LABELS[item.stat.weekly_formula]}</Badge>
+                            <Badge variant="outline">
+                              {item.dailyInputPrompt
+                                ? "Weekly booking rate"
+                                : FORMULA_LABELS[item.stat.weekly_formula]}
+                            </Badge>
                             {item.stat.weekly_formula === "collections_per_staff" && (
                               <Badge variant="secondary">{getStaffDays(item)} staff-days</Badge>
                             )}
@@ -480,6 +484,9 @@ export function StatsWorkspace({
                         </div>
                       </CardHeader>
                       <CardContent className="space-y-3">
+                        {item.dailyInputPrompt && (
+                          <p className="text-sm font-medium">{item.dailyInputPrompt}</p>
+                        )}
                         {missingStaffDates.length > 0 && (
                           <p className="rounded-md bg-amber-500/10 px-2.5 py-2 text-xs text-amber-700 dark:text-amber-300">
                             Staff-days missing for {missingStaffDates.map(dayLabel).join(", ")}. Weekly total will pause until filled.
@@ -500,7 +507,13 @@ export function StatsWorkspace({
                                     min="0"
                                     step={derived ? "0.5" : item.stat.stat_type === "count" ? "1" : "0.01"}
                                     value={dailyValues[key] ?? ""}
-                                    placeholder={derived ? "Staff worked" : undefined}
+                                    placeholder={
+                                      derived
+                                        ? "Staff worked"
+                                        : item.dailyInputPrompt
+                                          ? "Booked"
+                                          : undefined
+                                    }
                                     onChange={(event) => setDailyValues((current) => ({ ...current, [key]: event.target.value }))}
                                     onBlur={() => saveDaily(item, date)}
                                     onWheel={(event) => event.currentTarget.blur()}

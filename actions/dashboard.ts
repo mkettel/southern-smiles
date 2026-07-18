@@ -4,6 +4,7 @@ import { addDays, format } from "date-fns";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentWeekStart, getLastNWeeks } from "@/lib/constants";
 import { calculateCondition, type ConditionName } from "@/lib/conditions";
+import { getDailyInputStatId, isNewPatientBookingsInput } from "@/lib/stat-formulas";
 import type { ContributorEntry, DashboardStat, Profile } from "@/lib/types";
 
 interface OverallCalc {
@@ -76,9 +77,10 @@ export async function getAdminDashboard(
     .eq("is_active", true)
     .order("display_order");
 
+  const dashboardStats = rawStats?.filter((stat) => !isNewPatientBookingsInput(stat));
   const stats = isAdmin
-    ? rawStats
-    : rawStats?.filter(
+    ? dashboardStats
+    : dashboardStats?.filter(
         (s) => !s.is_private && !s.post?.division?.is_private,
       );
 
@@ -261,7 +263,10 @@ export async function getEmployeeDashboard(
   // Employees assigned to a post still need to submit entries for private
   // stats on /enter — but the dashboard hides them to match what admins control.
   const stats = rawStats?.filter(
-    (s) => !s.is_private && !s.post?.division?.is_private,
+    (s) =>
+      !isNewPatientBookingsInput(s) &&
+      !s.is_private &&
+      !s.post?.division?.is_private,
   );
 
   if (!stats?.length) return [];
@@ -385,7 +390,9 @@ export async function getMissingSubmissions(weekStart?: string) {
     if (!assignment.profile) continue;
     const profile = assignment.profile as unknown as Profile;
     const assignedStats = stats.filter(
-      (s) => s.post_id === assignment.post_id
+      (s) =>
+        s.post_id === assignment.post_id &&
+        !isNewPatientBookingsInput(s),
     );
 
     for (const stat of assignedStats) {
@@ -512,6 +519,7 @@ export async function getWeeklyCoverage(
   if (scopedPostIds) statsQuery = statsQuery.in("post_id", scopedPostIds);
   const { data: stats } = await statsQuery;
 
+  const visibleStats = (stats ?? []).filter((stat) => !isNewPatientBookingsInput(stat));
   const statIds = (stats ?? []).map((s) => s.id);
   if (!statIds.length) return empty;
 
@@ -564,7 +572,7 @@ export async function getWeeklyCoverage(
   let filledSlots = 0;
   let anyBehind = false;
 
-  for (const stat of stats ?? []) {
+  for (const stat of visibleStats) {
     const isManual =
       stat.weekly_formula === "manual" || stat.daily_tracking_enabled === false;
     const days: CoverageDay[] = [];
@@ -572,7 +580,7 @@ export async function getWeeklyCoverage(
 
     if (!isManual) {
       dates.forEach((date, i) => {
-        const entered = dailySet.has(`${stat.id}:${date}`);
+        const entered = dailySet.has(`${getDailyInputStatId(stat)}:${date}`);
         let state: CoverageState;
         if (entered) state = "entered";
         else if (date < today) state = "skipped";

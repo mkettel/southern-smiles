@@ -11,6 +11,8 @@ import { isBillsManagedStat } from "@/lib/bills";
 import {
   calculateCollectionsPerStaffWeek,
   calculateRatioOfSumsWeek,
+  getDailyInputStatId,
+  isNewPatientBookingsInput,
   isWeeklyFormulaActive,
 } from "@/lib/stat-formulas";
 import { isCherryApprovedFinancingStat } from "@/lib/cherry-financing";
@@ -21,6 +23,8 @@ export interface WorkspaceStat {
   post: Post;
   dailyEntries: DailyStatEntry[];
   weeklyEntry: StatEntry | null;
+  dailyInputStatId: string;
+  dailyInputPrompt?: string;
 }
 
 function weekStartForDate(date: string) {
@@ -300,6 +304,7 @@ export async function getStatsWorkspace(weekStart = getCurrentWeekStart()) {
 
   const visibleStats = (stats ?? []).filter(
     (stat) =>
+      !isNewPatientBookingsInput(stat) &&
       !isBillsManagedStat(stat as Stat & { post: Post }) &&
       !isCherryApprovedFinancingStat(stat as Stat & { post: Post }),
   );
@@ -318,12 +323,21 @@ export async function getStatsWorkspace(weekStart = getCurrentWeekStart()) {
     billsManagedHidden: visibleStats.length === 0 && hiddenBillsStats.length > 0,
     approvedFinancingManagedHidden:
       visibleStats.length === 0 && hiddenApprovedFinancingStats.length > 0,
-    stats: visibleStats.map((stat) => ({
+    stats: visibleStats.map((stat) => {
+      const typedStat = stat as Stat;
+      const dailyInputStatId = getDailyInputStatId(typedStat);
+      return {
         stat: stat as Stat,
         post: stat.post as Post,
-        dailyEntries: ((daily ?? []) as DailyStatEntry[]).filter((entry) => entry.stat_id === stat.id),
+        dailyInputStatId,
+        dailyInputPrompt:
+          dailyInputStatId !== stat.id ? "How many people booked today?" : undefined,
+        dailyEntries: ((daily ?? []) as DailyStatEntry[]).filter(
+          (entry) => entry.stat_id === dailyInputStatId,
+        ),
         weeklyEntry: ((weekly ?? []) as StatEntry[]).find((entry) => entry.stat_id === stat.id) ?? null,
-      })),
+      };
+    }),
   };
 }
 

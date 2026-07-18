@@ -12,6 +12,29 @@ interface RatioEntry {
   value: number | string | null | undefined;
 }
 
+interface FormulaStat {
+  id: string;
+  name: string;
+  weekly_formula: string;
+  formula_source_stat_id: string | null | undefined;
+}
+
+export function isNewPatientBookingsInput(stat: Pick<FormulaStat, "name">) {
+  return stat.name.trim().toLowerCase() === "new patient bookings";
+}
+
+export function getDailyInputStatId(stat: FormulaStat) {
+  if (
+    stat.weekly_formula === "ratio_of_sums" &&
+    stat.name.trim().toLowerCase() === "conversion rate" &&
+    stat.formula_source_stat_id
+  ) {
+    return stat.formula_source_stat_id;
+  }
+
+  return stat.id;
+}
+
 function toFiniteNumber(value: number | string | null | undefined) {
   if (value === null || value === undefined || value === "") return null;
   const numeric = Number(value);

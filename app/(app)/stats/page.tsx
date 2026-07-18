@@ -37,7 +37,8 @@ export default async function StatsPage({
     (item) =>
       item.stat.daily_tracking_enabled &&
       item.stat.weekly_formula !== "manual" &&
-      item.stat.weekly_formula !== "ratio_of_sums",
+      (item.stat.weekly_formula !== "ratio_of_sums" ||
+        item.dailyInputStatId !== item.stat.id),
   );
   const enteredToday = dailyStats.filter((item) =>
     item.dailyEntries.some(

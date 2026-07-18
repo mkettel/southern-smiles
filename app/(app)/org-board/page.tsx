@@ -4,6 +4,7 @@ import { getDivisions, getPosts, getDepartments } from "@/actions/admin";
 import { createClient } from "@/lib/supabase/server";
 import { OrgViewer } from "@/components/admin/org/org-viewer";
 import type { Division, Post, Department } from "@/lib/types";
+import { isNewPatientBookingsInput } from "@/lib/stat-formulas";
 
 export default async function OrgBoardPage() {
   const profile = await getProfile();
@@ -39,7 +40,7 @@ export default async function OrgBoardPage() {
   ]);
 
   const statsByPost: Record<string, string[]> = {};
-  statData?.forEach((s) => {
+  statData?.filter((stat) => !isNewPatientBookingsInput(stat)).forEach((s) => {
     if (!statsByPost[s.post_id]) statsByPost[s.post_id] = [];
     statsByPost[s.post_id].push(s.name);
   });

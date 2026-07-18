@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { isNewPatientBookingsInput } from "@/lib/stat-formulas";
 import {
   getCurrentWeekStart,
   getPreviousWeekStart,
@@ -179,7 +180,10 @@ export async function getStatsExport(
     ]);
 
   // Map post_id → assigned employee profiles (a stat can have several owners).
-  const postIds = [...new Set((rawStats ?? []).map((s) => s.post_id))];
+  const visibleStats = (rawStats ?? []).filter(
+    (stat) => !isNewPatientBookingsInput(stat),
+  );
+  const postIds = [...new Set(visibleStats.map((s) => s.post_id))];
   const { data: assignments } = await supabase
     .from("employee_posts")
     .select("post_id, profile:profiles(full_name)")
@@ -195,7 +199,7 @@ export async function getStatsExport(
     ownersByPost.set(a.post_id, list);
   }
 
-  const exportStats: ExportStat[] = (rawStats ?? []).map((stat) => {
+  const exportStats: ExportStat[] = visibleStats.map((stat) => {
     const goodDirection = stat.good_direction as GoodDirection;
     const statEntries = (entries ?? []).filter((e) => e.stat_id === stat.id);
 

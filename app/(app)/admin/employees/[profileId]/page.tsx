@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/table";
 import { ChevronLeft } from "lucide-react";
 import type { Profile } from "@/lib/types";
+import { isNewPatientBookingsInput } from "@/lib/stat-formulas";
 
 export default async function EmployeeDetailPage({
   params,
@@ -58,7 +59,8 @@ export default async function EmployeeDetailPage({
     .eq("is_active", true)
     .order("display_order");
 
-  const statIds = stats?.map((s) => s.id) ?? [];
+  const visibleStats = stats?.filter((stat) => !isNewPatientBookingsInput(stat)) ?? [];
+  const statIds = visibleStats.map((s) => s.id);
 
   // Get recent entries for this employee's assigned stats.
   // Under the unified model there is one canonical row per stat/week and

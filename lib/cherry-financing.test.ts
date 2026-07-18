@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  getCherryBusinessWeekStart,
   getCherryApprovalWeekStart,
+  getCherryEmailBody,
   isCherryApprovedFinancingStat,
+  isExpectedCherryRecipient,
+  isExpectedCherrySender,
   parseCherryApprovalEmail,
   parseCherryDollarAmountToCents,
 } from "./cherry-financing";
@@ -117,6 +121,64 @@ test("normalizes Cherry dollar strings to cents", () => {
 test("calculates the Monday week start for approval timestamps", () => {
   assert.equal(getCherryApprovalWeekStart("2026-07-02T12:00:00Z"), "2026-06-29");
   assert.equal(getCherryApprovalWeekStart("not a date"), null);
+});
+
+test("keeps Friday approvals before 4 PM Phoenix time in the current week", () => {
+  assert.equal(
+    getCherryBusinessWeekStart("2026-07-17T22:59:59Z"),
+    "2026-07-13",
+  );
+});
+
+test("moves Friday approvals at 4 PM Phoenix time to the following week", () => {
+  assert.equal(
+    getCherryBusinessWeekStart("2026-07-17T23:00:00Z"),
+    "2026-07-20",
+  );
+});
+
+test("moves weekend approvals to the following week", () => {
+  assert.equal(
+    getCherryBusinessWeekStart("2026-07-18T18:00:00Z"),
+    "2026-07-20",
+  );
+  assert.equal(
+    getCherryBusinessWeekStart("2026-07-19T18:00:00Z"),
+    "2026-07-20",
+  );
+});
+
+test("accepts only the configured Cherry sender", () => {
+  assert.equal(isExpectedCherrySender("Cherry <support@withcherry.com>"), true);
+  assert.equal(
+    isExpectedCherrySender("support@withcherry.com.attacker.example"),
+    false,
+  );
+});
+
+test("requires the configured inbound recipient", () => {
+  assert.equal(
+    isExpectedCherryRecipient(
+      ["Approvals <approvals@example.com>"],
+      "approvals@example.com",
+    ),
+    true,
+  );
+  assert.equal(
+    isExpectedCherryRecipient(["other@example.com"], "approvals@example.com"),
+    false,
+  );
+});
+
+test("uses the text email body and safely falls back to HTML", () => {
+  assert.equal(
+    getCherryEmailBody("Total Available\n$7,500", "<b>ignored</b>"),
+    "Total Available\n$7,500",
+  );
+  assert.equal(
+    getCherryEmailBody(null, "<p>Total Available</p><p>&#36;7,500</p>"),
+    "Total Available\n $7,500",
+  );
 });
 
 test("matches only the Division 2 dollar Approved Financing stat", () => {

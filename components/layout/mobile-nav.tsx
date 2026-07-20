@@ -14,10 +14,8 @@ import {
   BarChart3,
   MessageSquarePlus,
   Shield,
-  Building2,
   Network,
   Wrench,
-  Bell,
   CheckSquare,
   Download,
   ReceiptText,
@@ -50,14 +48,12 @@ const sharedLinks: NavLink[] = [
 
 const adminOnlyLinks: NavLink[] = [
   { href: "/admin/tasks", label: "Command Center", icon: CheckSquare },
-  { href: "/admin/organization", label: "Organization", icon: Building2 },
-  { href: "/admin/stats", label: "Manage Stats", icon: BarChart3 },
   { href: "/admin/supplies", label: "Supply Ordering", icon: ShoppingCart },
   { href: "/admin/bills", label: "Bills", icon: ReceiptText },
   { href: "/admin/cherry-financing", label: "Approved Financing", icon: BadgeDollarSign },
   { href: "/admin/export", label: "Export & Analyze", icon: Download },
-  { href: "/admin/employees", label: "Manage Team", icon: Settings },
-  { href: "/admin/updates", label: "Updates", icon: Bell },
+  { href: "/admin/stats", label: "Stats Setup", icon: BarChart3 },
+  { href: "/admin/employees", label: "Team & Access", icon: Settings },
   { href: "/requests", label: "Requests", icon: MessageSquarePlus },
   { href: "/admin/settings", label: "Settings", icon: Wrench },
 ];

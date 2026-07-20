@@ -1,28 +1,10 @@
 import { getProfile } from "@/actions/auth";
 import { getStats, getPosts } from "@/actions/admin";
 import { redirect } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { StatFormDialog } from "@/components/admin/stat-form-dialog";
-import { StatToggleButton } from "@/components/admin/stat-toggle-button";
-import { PrivacyToggleButton } from "@/components/admin/privacy-toggle-button";
-import { StatName } from "@/components/stats/stat-name";
-import { StatFormulaControl } from "@/components/admin/stat-formula-control";
-import { Plus, Pencil } from "lucide-react";
-import type { Profile, Post } from "@/lib/types";
+import { StatsSetupWorkspace } from "@/components/admin/stats-setup-workspace";
+import { Plus } from "lucide-react";
+import type { Profile, Post, Stat } from "@/lib/types";
 
 export default async function ManageStatsPage() {
   const profile = (await getProfile()) as Profile;
@@ -30,12 +12,13 @@ export default async function ManageStatsPage() {
 
   const [stats, posts] = await Promise.all([getStats(), getPosts()]);
   const postsTyped = posts as Post[];
+  const statsTyped = stats as Stat[];
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Manage Stats</h1>
+          <h1 className="text-2xl font-bold">Stats Setup</h1>
           <p className="text-muted-foreground">
             Add new stats to a post, edit stat names and types, set descriptions for employees, or deactivate stats you no longer need
           </p>
@@ -51,118 +34,13 @@ export default async function ManageStatsPage() {
         />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">All Stats ({stats.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Direction</TableHead>
-                <TableHead>Weekly Formula</TableHead>
-                <TableHead>Post</TableHead>
-                <TableHead>Division</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Visibility</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {stats.map((stat) => (
-                <TableRow
-                  key={stat.id}
-                  className={!stat.is_active ? "opacity-50" : ""}
-                >
-                  <TableCell className="font-medium">
-                    <StatName name={stat.name} description={stat.description} />
-                    {stat.abbreviation && (
-                      <span className="text-muted-foreground text-xs ml-1">
-                        ({stat.abbreviation})
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{stat.stat_type}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        stat.good_direction === "up" ? "default" : "secondary"
-                      }
-                    >
-                      {stat.good_direction === "up"
-                        ? "Higher is better"
-                        : "Lower is better"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <StatFormulaControl stat={stat} stats={stats} />
-                  </TableCell>
-                  <TableCell>{stat.post?.title}</TableCell>
-                  <TableCell>
-                    {stat.post?.division
-                      ? `Div ${stat.post.division.number} - ${stat.post.division.name}`
-                      : "—"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={stat.is_active ? "default" : "secondary"}>
-                      {stat.is_active ? "Active" : "Inactive"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={stat.is_private ? "secondary" : "outline"}>
-                      {stat.is_private ? "Admin only" : "Everyone"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <StatFormDialog
-                        posts={postsTyped}
-                        editStat={{
-                          id: stat.id,
-                          name: stat.name,
-                          abbreviation: stat.abbreviation,
-                          description: stat.description,
-                          stat_type: stat.stat_type,
-                          good_direction: stat.good_direction,
-                          post_id: stat.post_id,
-                          display_order: stat.display_order,
-                        }}
-                        trigger={
-                          <Pencil className="h-3 w-3" />
-                        }
-                      />
-                      <PrivacyToggleButton
-                        id={stat.id}
-                        isPrivate={stat.is_private}
-                        target="stat"
-                        label={stat.name}
-                      />
-                      <StatToggleButton
-                        statId={stat.id}
-                        isActive={stat.is_active}
-                      />
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {stats.length === 0 && (
-                <TableRow>
-                  <TableCell
-                    colSpan={9}
-                    className="text-center text-muted-foreground py-8"
-                  >
-                    No stats defined yet. Click Add Stat to create one.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {statsTyped.length === 0 ? (
+        <div className="rounded-md border py-10 text-center text-sm text-muted-foreground">
+          No stats defined yet. Click Add Stat to create one.
+        </div>
+      ) : (
+        <StatsSetupWorkspace stats={statsTyped} posts={postsTyped} />
+      )}
     </div>
   );
 }

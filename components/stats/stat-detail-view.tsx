@@ -2,7 +2,7 @@
 
 import { Fragment, useState, useMemo } from "react";
 import Link from "next/link";
-import { StatHistoryChart } from "@/components/stats/stat-history-chart";
+import { StatTrendPanel } from "@/components/stats/stat-trend-panel";
 import { ConditionDisplay } from "@/components/stats/condition-display";
 import { formatStatValue, formatPercentChange } from "@/lib/utils";
 import { format } from "date-fns";
@@ -23,7 +23,12 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatName } from "@/components/stats/stat-name";
-import type { StatEntry, StatType, OicLogEntry } from "@/lib/types";
+import type {
+  StatComparisonOption,
+  StatEntry,
+  StatType,
+  OicLogEntry,
+} from "@/lib/types";
 import { calculateCondition } from "@/lib/conditions";
 import type { ConditionName } from "@/lib/conditions";
 import { BadgeDollarSign, ChevronRight, MessageSquareText, ReceiptText, Users } from "lucide-react";
@@ -31,6 +36,7 @@ import { EntryRowActions } from "@/components/stats/entry-row-actions";
 import { ConditionPicker } from "@/components/stats/condition-picker";
 
 interface StatDetailViewProps {
+  statId: string;
   statName: string;
   statType: StatType;
   statDescription?: string | null;
@@ -42,6 +48,7 @@ interface StatDetailViewProps {
   isAdmin?: boolean;
   isBillsStat?: boolean;
   isCherryApprovedFinancingStat?: boolean;
+  comparisonOptions?: StatComparisonOption[];
 }
 
 /** A single week's data: aggregated total + individual contributor entries */
@@ -61,6 +68,7 @@ interface WeekGroup {
 }
 
 export function StatDetailView({
+  statId,
   statName,
   statType,
   statDescription,
@@ -72,6 +80,7 @@ export function StatDetailView({
   isAdmin = false,
   isBillsStat = false,
   isCherryApprovedFinancingStat = false,
+  comparisonOptions = [],
 }: StatDetailViewProps) {
   const employees = useMemo(() => {
     const map = new Map<string, string>();
@@ -255,16 +264,16 @@ export function StatDetailView({
       )}
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Trend</CardTitle>
-        </CardHeader>
         <CardContent>
           {aggregatedChartEntries.length > 0 ? (
-            <StatHistoryChart
+            <StatTrendPanel
+              statId={statId}
+              statName={statName}
               entries={aggregatedChartEntries}
               statType={statType}
               goodDirection={goodDirection}
               oicEntries={oicEntries}
+              comparisonOptions={comparisonOptions}
             />
           ) : (
             <p className="text-muted-foreground text-sm">No data yet.</p>

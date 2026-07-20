@@ -11,7 +11,12 @@ import {
   CartesianGrid,
   ReferenceLine,
 } from "recharts";
-import type { StatEntry, StatType, OicLogEntry } from "@/lib/types";
+import type {
+  StatComparisonSeries,
+  StatEntry,
+  StatType,
+  OicLogEntry,
+} from "@/lib/types";
 import { formatStatValue } from "@/lib/utils";
 import { formatWeekLabel } from "@/lib/constants";
 import { addDays, format, startOfWeek } from "date-fns";
@@ -19,9 +24,26 @@ import { Activity } from "lucide-react";
 
 interface StatHistoryChartProps {
   entries: StatEntry[];
+  statId?: string;
+  statName?: string;
   statType: StatType;
   goodDirection?: "up" | "down";
   oicEntries?: OicLogEntry[];
+  comparisonSeries?: StatComparisonSeries[];
+  isComparisonLoading?: boolean;
+}
+
+const SERIES_COLORS = ["#2563eb", "#059669", "#d97706", "#dc2626"];
+
+function aggregateByWeek(entries: StatEntry[]): Map<string, number> {
+  const totals = new Map<string, number>();
+  for (const entry of entries) {
+    totals.set(
+      entry.week_start,
+      (totals.get(entry.week_start) ?? 0) + Number(entry.value),
+    );
+  }
+  return totals;
 }
 
 function calcRollingAverage(
@@ -50,9 +72,13 @@ interface WeekAnnotation {
 
 export function StatHistoryChart({
   entries,
+  statId = "current",
+  statName = "Weekly",
   statType,
   goodDirection = "up",
   oicEntries = [],
+  comparisonSeries = [],
+  isComparisonLoading = false,
 }: StatHistoryChartProps) {
   const [showOic, setShowOic] = useState(false);
   const [activeAnnotation, setActiveAnnotation] = useState<string | null>(null);
@@ -75,8 +101,56 @@ export function StatHistoryChart({
     avg: rolling[i],
   }));
 
+  const allSeries = useMemo(
+    () => [
+      { id: statId, name: statName, statType, entries },
+      ...comparisonSeries,
+    ],
+    [comparisonSeries, entries, statId, statName, statType],
+  );
+  const isComparing = comparisonSeries.length > 0;
+
+  const comparisonData = useMemo(() => {
+    if (!isComparing) return [];
+
+    const totalsBySeries = allSeries.map((series) => ({
+      series,
+      totals: aggregateByWeek(series.entries),
+    }));
+    const weeks = Array.from(
+      new Set(totalsBySeries.flatMap(({ totals }) => Array.from(totals.keys()))),
+    ).sort();
+
+    const bases = new Map(
+      totalsBySeries.map(({ series, totals }) => {
+        const firstNonZero = weeks
+          .map((week) => totals.get(week))
+          .find((value) => value != null && value !== 0);
+        return [series.id, firstNonZero ?? 1];
+      }),
+    );
+
+    return weeks.map((weekIso) => {
+      const point: Record<string, string | number | null> = {
+        weekIso,
+        week: format(addDays(new Date(`${weekIso}T00:00:00`), 4), "MMM d"),
+      };
+
+      for (const { series, totals } of totalsBySeries) {
+        const actual = totals.get(weekIso);
+        point[`${series.id}Actual`] = actual ?? null;
+        point[series.id] =
+          actual == null ? null : (actual / (bases.get(series.id) ?? 1)) * 100;
+      }
+      return point;
+    });
+  }, [allSeries, isComparing]);
+
   // Group OIC entries by their corresponding chart week
-  const chartWeekLabels = new Set(data.map((d) => d.week));
+  const chartWeekLabels = useMemo(
+    () => new Set(data.map((d) => d.week)),
+    [data],
+  );
 
   const annotations = useMemo((): WeekAnnotation[] => {
     const byWeek = new Map<string, WeekAnnotation>();
@@ -104,14 +178,26 @@ export function StatHistoryChart({
     <div className="space-y-3">
       {/* Legend + OIC toggle */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block w-3 h-0.5 rounded-full bg-[#3b82f6]" />
-            Weekly
-          </span>
-          {entries.length >= 4 && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+          {isComparing ? (
+            allSeries.map((series, index) => (
+              <span key={series.id} className="inline-flex items-center gap-1.5">
+                <span
+                  className="inline-block h-0.5 w-3 rounded-full"
+                  style={{ backgroundColor: SERIES_COLORS[index] }}
+                />
+                {series.name}
+              </span>
+            ))
+          ) : (
             <span className="inline-flex items-center gap-1.5">
-              <span className="inline-block w-3 h-0.5 rounded-full bg-[#94a3b8] opacity-60" />
+              <span className="inline-block h-0.5 w-3 rounded-full bg-[#3b82f6]" />
+              Weekly
+            </span>
+          )}
+          {!isComparing && entries.length >= 4 && (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block h-0.5 w-3 rounded-full bg-[#94a3b8] opacity-60" />
               4-wk avg
             </span>
           )}
@@ -140,7 +226,7 @@ export function StatHistoryChart({
         style={{ minWidth: 200, minHeight: 300, height: 300 }}
       >
         <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={data}>
+          <LineChart data={isComparing ? comparisonData : data}>
             <CartesianGrid
               vertical={false}
               stroke="var(--color-border, #e5e7eb)"
@@ -156,8 +242,10 @@ export function StatHistoryChart({
               tick={{ fontSize: 12, fill: "var(--color-muted-foreground, #9ca3af)" }}
               axisLine={false}
               tickLine={false}
-              reversed={goodDirection === "down"}
-              tickFormatter={(v) => formatStatValue(v, statType)}
+              reversed={!isComparing && goodDirection === "down"}
+              tickFormatter={(v) =>
+                isComparing ? `${Math.round(v)}` : formatStatValue(v, statType)
+              }
             />
             <Tooltip
               contentStyle={{
@@ -180,10 +268,25 @@ export function StatHistoryChart({
                   | undefined;
                 return iso ? formatWeekLabel(iso) : label;
               }}
-              formatter={(value, name) => [
-                value != null ? formatStatValue(Number(value), statType) : "—",
-                name === "avg" ? "4-wk avg" : "Value",
-              ]}
+              formatter={(value, name, item) => {
+                if (!isComparing) {
+                  return [
+                    value != null ? formatStatValue(Number(value), statType) : "—",
+                    name === "avg" ? "4-wk avg" : "Value",
+                  ];
+                }
+
+                const series = allSeries.find((candidate) => candidate.id === item.dataKey);
+                const actual = series
+                  ? item.payload?.[`${series.id}Actual`]
+                  : null;
+                return [
+                  series && actual != null
+                    ? `${formatStatValue(Number(actual), series.statType)} · ${Math.round(Number(value))} index`
+                    : "—",
+                  name,
+                ];
+              }}
             />
 
             {/* OIC annotation lines (only when toggled on) */}
@@ -208,29 +311,54 @@ export function StatHistoryChart({
                 );
               })}
 
-            {/* Weekly line — hero */}
-            <Line
-              type="monotone"
-              dataKey="value"
-              name="value"
-              stroke="#3b82f6"
-              strokeWidth={2.5}
-              dot={{
-                r: 3,
-                fill: "#3b82f6",
-                stroke: "var(--color-background, #fff)",
-                strokeWidth: 1.5,
-              }}
-              activeDot={{
-                r: 5,
-                fill: "#3b82f6",
-                stroke: "var(--color-background, #fff)",
-                strokeWidth: 2,
-              }}
-            />
+            {isComparing ? (
+              allSeries.map((series, index) => (
+                <Line
+                  key={series.id}
+                  type="monotone"
+                  dataKey={series.id}
+                  name={series.name}
+                  stroke={SERIES_COLORS[index]}
+                  strokeWidth={index === 0 ? 2.75 : 2.25}
+                  connectNulls
+                  dot={{
+                    r: 2.5,
+                    fill: SERIES_COLORS[index],
+                    stroke: "var(--color-background, #fff)",
+                    strokeWidth: 1.5,
+                  }}
+                  activeDot={{
+                    r: 4.5,
+                    fill: SERIES_COLORS[index],
+                    stroke: "var(--color-background, #fff)",
+                    strokeWidth: 2,
+                  }}
+                />
+              ))
+            ) : (
+              <Line
+                type="monotone"
+                dataKey="value"
+                name="value"
+                stroke="#3b82f6"
+                strokeWidth={2.5}
+                dot={{
+                  r: 3,
+                  fill: "#3b82f6",
+                  stroke: "var(--color-background, #fff)",
+                  strokeWidth: 1.5,
+                }}
+                activeDot={{
+                  r: 5,
+                  fill: "#3b82f6",
+                  stroke: "var(--color-background, #fff)",
+                  strokeWidth: 2,
+                }}
+              />
+            )}
 
             {/* 4-week rolling average — secondary */}
-            {entries.length >= 4 && (
+            {!isComparing && entries.length >= 4 && (
               <Line
                 type="monotone"
                 dataKey="avg"
@@ -246,6 +374,10 @@ export function StatHistoryChart({
           </LineChart>
         </ResponsiveContainer>
       </div>
+
+      {isComparisonLoading && (
+        <div className="text-xs text-muted-foreground">Loading comparison…</div>
+      )}
 
       {/* OIC annotation pills (only when toggled on) */}
       {showOic && hasAnnotations && (

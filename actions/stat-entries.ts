@@ -3,7 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { calculateCondition, type ConditionName } from "@/lib/conditions";
-import type { StatEntry } from "@/lib/types";
+import type {
+  Stat,
+  StatComparisonOption,
+  StatComparisonSeries,
+  StatEntry,
+} from "@/lib/types";
 
 /**
  * Admin-only: delete a single stat entry.
@@ -155,4 +160,88 @@ export async function getStatHistory(
     .limit(limit);
 
   return (data as StatEntry[]) ?? [];
+}
+
+export async function getStatComparisonOptions(): Promise<StatComparisonOption[]> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const [{ data: profile }, { data }] = await Promise.all([
+    supabase.from("profiles").select("role").eq("id", user.id).single(),
+    supabase
+      .from("stats")
+      .select("*, post:posts(*, division:divisions(*))")
+      .eq("is_active", true)
+      .order("name"),
+  ]);
+
+  const stats = (data as Stat[] | null) ?? [];
+  return stats
+    .filter(
+      (stat) =>
+        profile?.role === "admin" ||
+        (!stat.is_private && !stat.post?.division?.is_private),
+    )
+    .map((stat) => ({
+      id: stat.id,
+      name: stat.name,
+      statType: stat.stat_type,
+      divisionLabel: stat.post?.division
+        ? `Div ${stat.post.division.number} - ${stat.post.division.name}`
+        : "",
+      postTitle: stat.post?.title ?? "",
+    }));
+}
+
+export async function getComparisonStatHistory(
+  statIds: string[],
+): Promise<StatComparisonSeries[]> {
+  const ids = Array.from(new Set(statIds)).slice(0, 3);
+  if (ids.length === 0) return [];
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const [{ data: profile }, { data: stats }] = await Promise.all([
+    supabase.from("profiles").select("role").eq("id", user.id).single(),
+    supabase
+      .from("stats")
+      .select("*, post:posts(*, division:divisions(*))")
+      .in("id", ids)
+      .eq("is_active", true),
+  ]);
+
+  const allowedStats = ((stats as Stat[] | null) ?? []).filter(
+    (stat) =>
+      profile?.role === "admin" ||
+      (!stat.is_private && !stat.post?.division?.is_private),
+  );
+  const allowedIds = allowedStats.map((stat) => stat.id);
+  if (allowedIds.length === 0) return [];
+
+  const { data: entries } = await supabase
+    .from("stat_entries")
+    .select("*, profile:profiles!stat_entries_profile_id_fkey(*)")
+    .in("stat_id", allowedIds)
+    .order("week_start", { ascending: false })
+    .limit(1000);
+
+  const typedEntries = (entries as StatEntry[] | null) ?? [];
+  const statsById = new Map(allowedStats.map((stat) => [stat.id, stat]));
+  return ids.flatMap((id) => {
+    const stat = statsById.get(id);
+    if (!stat) return [];
+    return [{
+      id: stat.id,
+      name: stat.name,
+      statType: stat.stat_type,
+      entries: typedEntries.filter((entry) => entry.stat_id === stat.id),
+    }];
+  });
 }

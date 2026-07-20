@@ -1,4 +1,5 @@
 export type SupplyCategory = "routine" | "office" | "implant_graft";
+export type SupplyOrderMethod = "online" | "phone" | "in_person";
 export type SupplyCatalogGroup =
   | "lab"
   | "office_cleaning"
@@ -17,6 +18,9 @@ export interface SupplyCatalogItem {
   category: SupplyCategory;
   catalog_group: SupplyCatalogGroup;
   vendor: string;
+  vendor_id?: string | null;
+  order_method?: SupplyOrderMethod;
+  ordering_instructions?: string | null;
   product_url: string | null;
   alternative_urls: string[];
   unit_label: string;
@@ -33,6 +37,9 @@ export interface SupplyPurchase {
   id: string;
   catalog_item_id: string;
   vendor: string;
+  vendor_id?: string | null;
+  item_name?: string;
+  order_method?: SupplyOrderMethod;
   purchased_at: string;
   quantity: number;
   unit_cost_cents: number;
@@ -45,8 +52,20 @@ export interface SupplyOrderDraftLine {
   id: string;
   catalog_item_id: string;
   vendor: string;
+  vendor_id?: string | null;
+  order_method?: SupplyOrderMethod;
   quantity: number;
   added_at: string;
+}
+
+export interface SupplyVendor {
+  id: string;
+  name: string;
+  default_order_method: SupplyOrderMethod;
+  website_url: string | null;
+  phone: string | null;
+  address: string | null;
+  ordering_instructions: string | null;
 }
 
 export interface SupplyBudgetSettings {
@@ -65,7 +84,29 @@ export interface SavedSupplyWorkspace {
   purchases: SupplyPurchase[];
   settings: SupplyBudgetSettings;
   orderDraft: SupplyOrderDraftLine[];
+  vendors?: SupplyVendor[];
 }
+
+export const SUPPLY_ORDER_METHOD_META: Record<
+  SupplyOrderMethod,
+  { label: string; past_tense: string; description: string }
+> = {
+  online: {
+    label: "Online",
+    past_tense: "Ordered online",
+    description: "Open the saved product page and place the order online.",
+  },
+  phone: {
+    label: "Phone",
+    past_tense: "Ordered by phone",
+    description: "Call the vendor, confirm the price, then mark the order complete.",
+  },
+  in_person: {
+    label: "In person",
+    past_tense: "Purchased in person",
+    description: "Buy locally, record the actual price, then mark the purchase complete.",
+  },
+};
 
 export const SUPPLY_CATEGORY_META: Record<
   SupplyCategory,
@@ -204,8 +245,79 @@ export const DEFAULT_SUPPLY_CATALOG: SupplyCatalogItem[] = [
   ...PROCEDURE_COST_SEED,
 ];
 
+export const DEFAULT_SUPPLY_VENDORS = buildSupplyVendorDirectory(DEFAULT_SUPPLY_CATALOG);
+
 export function createSupplyId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function supplyVendorKey(name: string) {
+  const key = name.trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, "");
+  const legacyAliases: Record<string, string> = {
+    amaazon: "amazon",
+    n3t32: "net32",
+    net: "net32",
+  };
+  return legacyAliases[key] ?? key;
+}
+
+function canonicalSupplyVendorName(name: string) {
+  const key = supplyVendorKey(name);
+  if (key === "amazon") return "Amazon";
+  if (key === "net32") return "Net32";
+  return name.trim();
+}
+
+export function createSupplyVendor(
+  name: string,
+  defaultOrderMethod: SupplyOrderMethod = "online",
+): SupplyVendor {
+  const key = supplyVendorKey(name);
+  return {
+    id: `vendor-${key || createSupplyId("vendor")}`,
+    name: canonicalSupplyVendorName(name),
+    default_order_method: defaultOrderMethod,
+    website_url: null,
+    phone: null,
+    address: null,
+    ordering_instructions: null,
+  };
+}
+
+export function normalizeSupplyVendors(vendors: SupplyVendor[]) {
+  const normalized = new Map<string, SupplyVendor>();
+  for (const vendor of vendors) {
+    const key = supplyVendorKey(vendor.name);
+    if (!key) continue;
+    const existing = normalized.get(key);
+    const canonical = { ...vendor, id: `vendor-${key}`, name: canonicalSupplyVendorName(vendor.name) };
+    normalized.set(key, existing ? {
+      ...canonical,
+      website_url: existing.website_url ?? canonical.website_url,
+      phone: existing.phone ?? canonical.phone,
+      address: existing.address ?? canonical.address,
+      ordering_instructions: existing.ordering_instructions ?? canonical.ordering_instructions,
+    } : canonical);
+  }
+  return [...normalized.values()].sort((first, second) => first.name.localeCompare(second.name));
+}
+
+export function buildSupplyVendorDirectory(
+  catalog: SupplyCatalogItem[],
+  purchases: SupplyPurchase[] = [],
+): SupplyVendor[] {
+  const vendors = new Map<string, SupplyVendor>();
+  for (const source of [...catalog, ...purchases]) {
+    const name = source.vendor?.trim();
+    if (!name || name.toLocaleLowerCase() === "vendor not set") continue;
+    const key = supplyVendorKey(name);
+    if (!key || vendors.has(key)) continue;
+    const method = "order_method" in source && source.order_method
+      ? source.order_method
+      : "online";
+    vendors.set(key, createSupplyVendor(name, method));
+  }
+  return normalizeSupplyVendors([...vendors.values()]);
 }
 
 export function calculateSupplyBudgetCents(

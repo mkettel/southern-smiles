@@ -180,6 +180,7 @@ export const overheadSettingsSchema = z.object({
 });
 
 const supplyCategorySchema = z.enum(["routine", "office", "implant_graft"]);
+const supplyOrderMethodSchema = z.enum(["online", "phone", "in_person"]);
 const supplyCatalogGroupSchema = z.enum([
   "lab",
   "office_cleaning",
@@ -194,6 +195,9 @@ const supplyCatalogItemSchema = z.object({
   category: supplyCategorySchema,
   catalog_group: supplyCatalogGroupSchema,
   vendor: z.string().trim().min(1).max(200),
+  vendor_id: z.string().trim().min(1).max(200).nullable().optional(),
+  order_method: supplyOrderMethodSchema.optional(),
+  ordering_instructions: z.string().max(1_000).nullable().optional(),
   product_url: z.string().max(2048).nullable(),
   alternative_urls: z.array(z.string().max(2048)).max(20),
   unit_label: z.string().trim().min(1).max(80),
@@ -215,6 +219,9 @@ export const supplyWorkspaceSchema = z.object({
     id: z.string().trim().min(1).max(200),
     catalog_item_id: z.string().trim().min(1).max(200),
     vendor: z.string().trim().min(1).max(200),
+    vendor_id: z.string().trim().min(1).max(200).nullable().optional(),
+    item_name: z.string().trim().min(1).max(300).optional(),
+    order_method: supplyOrderMethodSchema.optional(),
     purchased_at: z.string().max(100),
     quantity: z.number().positive().max(1_000_000),
     unit_cost_cents: z.number().int().nonnegative(),
@@ -236,9 +243,20 @@ export const supplyWorkspaceSchema = z.object({
     id: z.string().trim().min(1).max(200),
     catalog_item_id: z.string().trim().min(1).max(200),
     vendor: z.string().trim().min(1).max(200),
+    vendor_id: z.string().trim().min(1).max(200).nullable().optional(),
+    order_method: supplyOrderMethodSchema.optional(),
     quantity: z.number().positive().max(1_000_000),
     added_at: z.string().max(100),
   })).max(2_000),
+  vendors: z.array(z.object({
+    id: z.string().trim().min(1).max(200),
+    name: z.string().trim().min(1).max(200),
+    default_order_method: supplyOrderMethodSchema,
+    website_url: z.string().max(2_048).nullable(),
+    phone: z.string().max(100).nullable(),
+    address: z.string().max(500).nullable(),
+    ordering_instructions: z.string().max(1_000).nullable(),
+  })).max(500).optional(),
 });
 
 export const cherryApprovalImportSchema = z.object({

@@ -14,7 +14,9 @@ import {
   LockKeyhole,
   Minus,
   PackagePlus,
+  MapPin,
   Pencil,
+  Phone,
   Plus,
   ReceiptText,
   Scissors,
@@ -22,6 +24,7 @@ import {
   ShoppingCart,
   Smile,
   SprayCan,
+  Store,
   Target,
   Trash2,
 } from "lucide-react";
@@ -51,17 +54,25 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { formatCurrency, parseDollarAmountToCents, todayString } from "@/lib/bills";
 import {
   calculateSupplyBudgetCents,
+  buildSupplyVendorDirectory,
   createSupplyId,
+  createSupplyVendor,
   DEFAULT_SUPPLY_BUDGET_SETTINGS,
   DEFAULT_SUPPLY_CATALOG,
+  DEFAULT_SUPPLY_VENDORS,
+  normalizeSupplyVendors,
   SUPPLY_CATALOG_GROUP_META,
   SUPPLY_CATEGORY_META,
+  SUPPLY_ORDER_METHOD_META,
+  supplyVendorKey,
   type SupplyBudgetSettings,
   type SupplyCatalogItem,
   type SupplyCatalogGroup,
   type SupplyCategory,
   type SupplyOrderDraftLine,
+  type SupplyOrderMethod,
   type SupplyPurchase,
+  type SupplyVendor,
   type SavedSupplyWorkspace,
 } from "@/lib/supply-ordering";
 import { cn } from "@/lib/utils";
@@ -119,6 +130,9 @@ function normalizeCatalogItem(item: SupplyCatalogItem): SupplyCatalogItem {
     catalog_group: item.catalog_group ?? (item.category === "office" ? "office_cleaning" : "general"),
     alternative_urls: item.alternative_urls ?? [],
     last_price_note: item.last_price_note ?? null,
+    vendor_id: item.vendor_id ?? null,
+    order_method: item.order_method ?? "online",
+    ordering_instructions: item.ordering_instructions ?? null,
   };
 }
 
@@ -147,6 +161,7 @@ export function SupplyOrderingWorkspace({
   const [catalog, setCatalog] = useState<SupplyCatalogItem[]>(DEFAULT_SUPPLY_CATALOG);
   const [purchases, setPurchases] = useState<SupplyPurchase[]>([]);
   const [orderDraft, setOrderDraft] = useState<SupplyOrderDraftLine[]>([]);
+  const [vendors, setVendors] = useState<SupplyVendor[]>(DEFAULT_SUPPLY_VENDORS);
   const [settings, setSettings] = useState<SupplyBudgetSettings>(
     DEFAULT_SUPPLY_BUDGET_SETTINGS,
   );
@@ -174,7 +189,17 @@ export function SupplyOrderingWorkspace({
           : restored.catalog.map(normalizeCatalogItem);
         setCatalog(restoredCatalog);
         setPurchases(restored.purchases);
-        setOrderDraft(restored.orderDraft ?? []);
+        const restoredVendors = restored.vendors?.length
+          ? normalizeSupplyVendors(restored.vendors)
+          : buildSupplyVendorDirectory(restoredCatalog, restored.purchases);
+        setVendors(restoredVendors);
+        setOrderDraft((restored.orderDraft ?? []).map((line) => ({
+          ...line,
+          vendor_id: line.vendor_id ?? restoredVendors.find(
+            (vendor) => vendor.name.toLocaleLowerCase() === line.vendor.toLocaleLowerCase(),
+          )?.id ?? null,
+          order_method: line.order_method ?? "online",
+        })));
         setSettings(normalizeSettings(restored.settings));
         setSelectedCatalogItemId(restoredCatalog[0]?.id ?? "");
         if (initialWorkspace) {
@@ -183,6 +208,7 @@ export function SupplyOrderingWorkspace({
             purchases: restored.purchases,
             settings: normalizeSettings(restored.settings),
             orderDraft: restored.orderDraft ?? [],
+            vendors: restoredVendors,
           } satisfies SavedSupplyWorkspace);
         }
       }
@@ -195,7 +221,7 @@ export function SupplyOrderingWorkspace({
 
   useEffect(() => {
     if (!hasHydrated) return;
-    const workspace = { catalog, purchases, settings, orderDraft } satisfies SavedSupplyWorkspace;
+    const workspace = { catalog, purchases, settings, orderDraft, vendors } satisfies SavedSupplyWorkspace;
     const serialized = JSON.stringify(workspace);
     window.localStorage.setItem(STORAGE_KEY, serialized);
     if (!sharedPersistenceEnabled) return;
@@ -216,7 +242,7 @@ export function SupplyOrderingWorkspace({
     }, 750);
 
     return () => window.clearTimeout(timeout);
-  }, [catalog, hasHydrated, orderDraft, purchases, settings, sharedPersistenceEnabled]);
+  }, [catalog, hasHydrated, orderDraft, purchases, settings, sharedPersistenceEnabled, vendors]);
 
   const budget = useMemo(() => {
     const routineCents = calculateSupplyBudgetCents(
@@ -299,13 +325,38 @@ export function SupplyOrderingWorkspace({
     setCatalogDialogOpen(true);
   }
 
+  function createVendor(
+    name: string,
+    method: SupplyOrderMethod,
+    details?: { phone?: string; address?: string },
+  ) {
+    const key = supplyVendorKey(name);
+    const existing = vendors.find((vendor) => supplyVendorKey(vendor.name) === key);
+    if (existing) return existing;
+    const vendor = {
+      ...createSupplyVendor(name, method),
+      phone: details?.phone?.trim() || null,
+      address: details?.address?.trim() || null,
+    };
+    setVendors((current) => [...current, vendor].sort((first, second) => first.name.localeCompare(second.name)));
+    return vendor;
+  }
+
   function addToOrderDraft(itemId: string) {
     const item = catalog.find((catalogItem) => catalogItem.id === itemId);
     if (!item) return;
+    const selectedVendor = vendors.find((vendor) => vendor.id === item.vendor_id)
+      ?? vendors.find((vendor) => supplyVendorKey(vendor.name) === supplyVendorKey(item.vendor));
+    if (!selectedVendor) {
+      toast.error("Choose a vendor before adding this item to an order");
+      openCatalogItemDialog(item);
+      return;
+    }
+    const orderMethod = item.order_method ?? selectedVendor.default_order_method;
 
     setOrderDraft((current) => {
       const existing = current.find(
-        (line) => line.catalog_item_id === item.id && line.vendor === item.vendor,
+        (line) => line.catalog_item_id === item.id && line.vendor_id === selectedVendor.id,
       );
       if (existing) {
         return current.map((line) =>
@@ -317,7 +368,9 @@ export function SupplyOrderingWorkspace({
         {
           id: createSupplyId("order"),
           catalog_item_id: item.id,
-          vendor: item.vendor,
+          vendor: selectedVendor.name,
+          vendor_id: selectedVendor.id,
+          order_method: orderMethod,
           quantity: 1,
           added_at: todayString(),
         },
@@ -337,9 +390,9 @@ export function SupplyOrderingWorkspace({
     setOrderDraft((current) => current.filter((line) => line.id !== lineId));
   }
 
-  function openVendorProductPages(vendor: string) {
+  function openVendorProductPages(vendor: string, orderMethod: SupplyOrderMethod) {
     const links = orderDraft
-      .filter((line) => line.vendor === vendor)
+      .filter((line) => line.vendor === vendor && (line.order_method ?? "online") === orderMethod)
       .map((line) => catalog.find((item) => item.id === line.catalog_item_id)?.product_url)
       .filter((url): url is string => Boolean(url));
 
@@ -352,8 +405,10 @@ export function SupplyOrderingWorkspace({
     toast.success(`${links.length} product page${links.length === 1 ? "" : "s"} opened for ${vendor}`);
   }
 
-  function markVendorOrderPlaced(vendor: string) {
-    const lines = orderDraft.filter((line) => line.vendor === vendor);
+  function markVendorOrderPlaced(vendor: string, orderMethod: SupplyOrderMethod) {
+    const lines = orderDraft.filter(
+      (line) => line.vendor === vendor && (line.order_method ?? "online") === orderMethod,
+    );
     const missingPriceItems = lines
       .map((line) => catalog.find((item) => item.id === line.catalog_item_id))
       .filter((item): item is SupplyCatalogItem => Boolean(item && item.current_unit_cost_cents === null));
@@ -372,6 +427,9 @@ export function SupplyOrderingWorkspace({
         id: createSupplyId("purchase"),
         catalog_item_id: item.id,
         vendor,
+        vendor_id: line.vendor_id ?? null,
+        item_name: item.name,
+        order_method: orderMethod,
         purchased_at: todayString(),
         quantity: line.quantity,
         unit_cost_cents: item.current_unit_cost_cents,
@@ -389,8 +447,10 @@ export function SupplyOrderingWorkspace({
           : item,
       ),
     );
-    setOrderDraft((current) => current.filter((line) => line.vendor !== vendor));
-    toast.success(`${vendor} order logged with ${newPurchases.length} item${newPurchases.length === 1 ? "" : "s"}`);
+    setOrderDraft((current) => current.filter(
+      (line) => line.vendor !== vendor || (line.order_method ?? "online") !== orderMethod,
+    ));
+    toast.success(`${SUPPLY_ORDER_METHOD_META[orderMethod].past_tense} with ${vendor}`);
   }
 
   function clearOrderDraft() {
@@ -461,6 +521,7 @@ export function SupplyOrderingWorkspace({
           <OrderDraftTab
             orderDraft={orderDraft}
             catalog={catalog}
+            vendors={vendors}
             onQuantityChange={updateOrderDraftQuantity}
             onRemove={removeFromOrderDraft}
             onOpenVendorProductPages={openVendorProductPages}
@@ -516,6 +577,7 @@ export function SupplyOrderingWorkspace({
         key={catalogItemToEdit?.id ?? "new-item"}
         open={catalogDialogOpen}
         item={catalogItemToEdit}
+        vendors={vendors}
         onOpenChange={(open) => {
           setCatalogDialogOpen(open);
           if (!open) setCatalogItemToEdit(null);
@@ -531,6 +593,7 @@ export function SupplyOrderingWorkspace({
           setCatalogItemToEdit(null);
           toast.success(catalogItemToEdit ? "Catalog item updated" : "Catalog item added");
         }}
+        onCreateVendor={createVendor}
       />
 
       <PurchaseDialog
@@ -538,6 +601,7 @@ export function SupplyOrderingWorkspace({
         open={purchaseDialogOpen}
         onOpenChange={setPurchaseDialogOpen}
         catalog={catalog}
+        vendors={vendors}
         selectedCatalogItemId={selectedCatalogItemId}
         onSave={(purchase) => {
           setPurchases((current) => [purchase, ...current]);
@@ -548,6 +612,8 @@ export function SupplyOrderingWorkspace({
               return {
                 ...item,
                 vendor: purchase.vendor.trim() || item.vendor,
+                vendor_id: purchase.vendor_id ?? item.vendor_id ?? null,
+                order_method: purchase.order_method ?? item.order_method ?? "online",
                 prior_unit_cost_cents: priceChanged ? item.current_unit_cost_cents : item.prior_unit_cost_cents,
                 current_unit_cost_cents: purchase.unit_cost_cents,
                 updated_at: purchase.purchased_at,
@@ -557,6 +623,7 @@ export function SupplyOrderingWorkspace({
           setPurchaseDialogOpen(false);
           toast.success("Purchase logged and catalog price updated");
         }}
+        onCreateVendor={createVendor}
       />
     </div>
   );
@@ -828,7 +895,11 @@ function CatalogTab({
                 <tr key={item.id} className="hover:bg-muted/30">
                   <td className="px-4 py-3">
                     <div className="font-medium">{item.name}</div>
-                    <div className="mt-0.5 text-xs text-muted-foreground">Last purchased from {item.vendor}</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                      <span>{item.vendor === "Vendor not set" ? "Vendor not assigned" : item.vendor}</span>
+                      <span>·</span>
+                      <span>{SUPPLY_ORDER_METHOD_META[item.order_method ?? "online"].label}</span>
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{SUPPLY_CATALOG_GROUP_META[item.catalog_group].label}</td>
                   <td className="px-4 py-3">
@@ -880,6 +951,7 @@ function CatalogTab({
 function OrderDraftTab({
   orderDraft,
   catalog,
+  vendors,
   onQuantityChange,
   onRemove,
   onOpenVendorProductPages,
@@ -890,10 +962,11 @@ function OrderDraftTab({
 }: {
   orderDraft: SupplyOrderDraftLine[];
   catalog: SupplyCatalogItem[];
+  vendors: SupplyVendor[];
   onQuantityChange: (lineId: string, quantity: number) => void;
   onRemove: (lineId: string) => void;
-  onOpenVendorProductPages: (vendor: string) => void;
-  onMarkVendorOrderPlaced: (vendor: string) => void;
+  onOpenVendorProductPages: (vendor: string, orderMethod: SupplyOrderMethod) => void;
+  onMarkVendorOrderPlaced: (vendor: string, orderMethod: SupplyOrderMethod) => void;
   onBrowseCatalog: () => void;
   onResetDraft: () => void;
   onEditItem: (item: SupplyCatalogItem) => void;
@@ -904,11 +977,12 @@ function OrderDraftTab({
   for (const line of orderDraft) {
     const item = itemById.get(line.catalog_item_id);
     if (!item) continue;
-    vendorOrders.set(line.vendor, [...(vendorOrders.get(line.vendor) ?? []), { line, item }]);
+    const groupKey = `${line.vendor_id ?? line.vendor}::${line.order_method ?? "online"}`;
+    vendorOrders.set(groupKey, [...(vendorOrders.get(groupKey) ?? []), { line, item }]);
   }
 
-  const groupedOrders = [...vendorOrders.entries()].sort(([firstVendor], [secondVendor]) =>
-    firstVendor.localeCompare(secondVendor),
+  const groupedOrders = [...vendorOrders.entries()].sort(([firstKey], [secondKey]) =>
+    firstKey.localeCompare(secondKey),
   );
   const totalPackages = orderDraft.reduce((total, line) => total + line.quantity, 0);
 
@@ -951,7 +1025,13 @@ function OrderDraftTab({
           </CardContent>
         </Card>
       ) : (
-        groupedOrders.map(([vendor, lines]) => {
+        groupedOrders.map(([groupKey, lines]) => {
+          const firstLine = lines[0].line;
+          const vendor = firstLine.vendor;
+          const orderMethod = firstLine.order_method ?? "online";
+          const vendorRecord = vendors.find((entry) => entry.id === firstLine.vendor_id)
+            ?? vendors.find((entry) => supplyVendorKey(entry.name) === supplyVendorKey(vendor));
+          const methodMeta = SUPPLY_ORDER_METHOD_META[orderMethod];
           const productLinkCount = lines.filter(({ item }) => Boolean(item.product_url)).length;
           const missingPriceCount = lines.filter(
             ({ item }) => item.current_unit_cost_cents === null,
@@ -962,32 +1042,66 @@ function OrderDraftTab({
           );
 
           return (
-            <Card key={vendor}>
+            <Card key={groupKey}>
               <CardHeader className="gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <CardTitle className="text-base">{vendor}</CardTitle>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <CardTitle className="text-base">{vendor}</CardTitle>
+                    <Badge variant="outline" className="gap-1.5">
+                      {orderMethod === "online" && <ExternalLink className="h-3 w-3" />}
+                      {orderMethod === "phone" && <Phone className="h-3 w-3" />}
+                      {orderMethod === "in_person" && <Store className="h-3 w-3" />}
+                      {methodMeta.label}
+                    </Badge>
+                  </div>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {lines.length} item{lines.length === 1 ? "" : "s"} · expected total {formatCurrency(estimatedTotal)}
                     {missingPriceCount ? ` · ${missingPriceCount} price${missingPriceCount === 1 ? "" : "s"} needed` : ""}
                   </p>
+                  {(lines[0].item.ordering_instructions || vendorRecord?.ordering_instructions) && (
+                    <p className="mt-2 max-w-2xl text-xs text-muted-foreground">
+                      {lines[0].item.ordering_instructions || vendorRecord?.ordering_instructions}
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!productLinkCount}
-                    onClick={() => onOpenVendorProductPages(vendor)}
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                    Open {productLinkCount} item page{productLinkCount === 1 ? "" : "s"}
-                  </Button>
+                  {orderMethod === "online" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!productLinkCount}
+                      onClick={() => onOpenVendorProductPages(vendor, orderMethod)}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      Open {productLinkCount} item page{productLinkCount === 1 ? "" : "s"}
+                    </Button>
+                  )}
+                  {orderMethod === "phone" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!vendorRecord?.phone}
+                      onClick={() => {
+                        if (vendorRecord?.phone) window.location.href = `tel:${vendorRecord.phone}`;
+                      }}
+                    >
+                      <Phone className="h-4 w-4" />
+                      {vendorRecord?.phone ? "Call vendor" : "Phone not added"}
+                    </Button>
+                  )}
+                  {orderMethod === "in_person" && vendorRecord?.address && (
+                    <div className="flex items-center gap-1.5 px-2 text-xs text-muted-foreground">
+                      <MapPin className="h-3.5 w-3.5" />
+                      {vendorRecord.address}
+                    </div>
+                  )}
                   <Button
                     size="sm"
                     disabled={Boolean(missingPriceCount)}
-                    onClick={() => onMarkVendorOrderPlaced(vendor)}
+                    onClick={() => onMarkVendorOrderPlaced(vendor, orderMethod)}
                   >
                     <ReceiptText className="h-4 w-4" />
-                    Mark ordered
+                    {orderMethod === "in_person" ? "Mark purchased" : "Mark ordered"}
                   </Button>
                 </div>
               </CardHeader>
@@ -1131,7 +1245,7 @@ function PurchaseLogTab({
         <div>
           <CardTitle className="text-base">Purchase log</CardTitle>
           <p className="mt-1 text-sm text-muted-foreground">
-            Each logged order becomes a price-history point for the item.
+            Completed purchases are frozen snapshots. Catalog edits only affect future orders.
           </p>
         </div>
         <Button size="sm" onClick={onLogPurchase}><Plus className="h-4 w-4" />Purchase</Button>
@@ -1176,13 +1290,14 @@ function PurchaseLogTab({
                   <div className="mt-4 overflow-x-auto rounded-lg border">
                     <table className="w-full min-w-[740px] text-sm">
                       <thead className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
-                        <tr><th className="px-4 py-3 font-medium">Date</th><th className="px-4 py-3 font-medium">Item</th><th className="px-4 py-3 font-medium">Vendor</th><th className="px-4 py-3 font-medium">Quantity</th><th className="px-4 py-3 font-medium">Total</th><th className="px-4 py-3 font-medium">Budget treatment</th></tr>
+                        <tr><th className="px-4 py-3 font-medium">Date</th><th className="px-4 py-3 font-medium">Item</th><th className="px-4 py-3 font-medium">Vendor</th><th className="px-4 py-3 font-medium">Method</th><th className="px-4 py-3 font-medium">Quantity</th><th className="px-4 py-3 font-medium">Total</th><th className="px-4 py-3 font-medium">Budget treatment</th></tr>
                       </thead>
                       <tbody className="divide-y">
                         {monthPurchases.map((purchase) => {
                           const item = itemById.get(purchase.catalog_item_id);
                           const treatment = SUPPLY_CATEGORY_META[purchase.category].short_label;
-                          return <tr key={purchase.id}><td className="px-4 py-3 tabular-nums">{purchase.purchased_at}</td><td className="px-4 py-3 font-medium">{item?.name ?? "Removed catalog item"}</td><td className="px-4 py-3">{purchase.vendor}</td><td className="px-4 py-3 tabular-nums">{purchase.quantity}</td><td className="px-4 py-3 font-medium tabular-nums">{formatCurrency(purchase.quantity * purchase.unit_cost_cents)}</td><td className="px-4 py-3 text-xs text-muted-foreground">{purchase.case_reference ? `${treatment} · ${purchase.case_reference}` : treatment}</td></tr>;
+                          const method = purchase.order_method ?? "online";
+                          return <tr key={purchase.id}><td className="px-4 py-3 tabular-nums">{purchase.purchased_at}</td><td className="px-4 py-3 font-medium">{purchase.item_name ?? item?.name ?? "Removed catalog item"}</td><td className="px-4 py-3">{purchase.vendor}</td><td className="px-4 py-3 text-xs text-muted-foreground">{SUPPLY_ORDER_METHOD_META[method].label}</td><td className="px-4 py-3 tabular-nums">{purchase.quantity}</td><td className="px-4 py-3 font-medium tabular-nums">{formatCurrency(purchase.quantity * purchase.unit_cost_cents)}</td><td className="px-4 py-3 text-xs text-muted-foreground">{purchase.case_reference ? `${treatment} · ${purchase.case_reference}` : treatment}</td></tr>;
                         })}
                       </tbody>
                     </table>
@@ -1293,16 +1408,30 @@ function CatalogItemDialog({
   open,
   onOpenChange,
   item,
+  vendors,
   onSave,
+  onCreateVendor,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   item: SupplyCatalogItem | null;
+  vendors: SupplyVendor[];
   onSave: (item: SupplyCatalogItem) => void;
+  onCreateVendor: (name: string, method: SupplyOrderMethod, details?: { phone?: string; address?: string }) => SupplyVendor;
 }) {
   const isEditing = Boolean(item);
   const [name, setName] = useState(item?.name ?? "");
-  const [vendor, setVendor] = useState(item?.vendor ?? "");
+  const initialVendor = vendors.find((vendor) => vendor.id === item?.vendor_id)
+    ?? vendors.find((vendor) => item && supplyVendorKey(vendor.name) === supplyVendorKey(item.vendor));
+  const [vendorId, setVendorId] = useState(initialVendor?.id ?? "");
+  const [orderMethod, setOrderMethod] = useState<SupplyOrderMethod>(
+    item?.order_method ?? initialVendor?.default_order_method ?? "online",
+  );
+  const [orderingInstructions, setOrderingInstructions] = useState(item?.ordering_instructions ?? "");
+  const [addingVendor, setAddingVendor] = useState(false);
+  const [newVendorName, setNewVendorName] = useState("");
+  const [newVendorMethod, setNewVendorMethod] = useState<SupplyOrderMethod>("online");
+  const [newVendorContact, setNewVendorContact] = useState("");
   const [catalogGroup, setCatalogGroup] = useState<SupplyCatalogGroup>(item?.catalog_group ?? "general");
   const [productUrl, setProductUrl] = useState(item?.product_url ?? "");
   const [alternativeUrls, setAlternativeUrls] = useState(item?.alternative_urls.join("\n") ?? "");
@@ -1312,11 +1441,45 @@ function CatalogItemDialog({
   const [unitLabel, setUnitLabel] = useState(item?.unit_label ?? "each");
   const [reorderLevel, setReorderLevel] = useState(String(item?.reorder_level ?? 1));
 
+  function selectVendor(nextVendorId: string | null) {
+    if (nextVendorId === "__add_vendor__") {
+      setAddingVendor(true);
+      return;
+    }
+    const vendor = vendors.find((entry) => entry.id === nextVendorId);
+    if (!vendor) return;
+    setVendorId(vendor.id);
+    setOrderMethod(vendor.default_order_method);
+    setAddingVendor(false);
+  }
+
+  function addVendor() {
+    if (!newVendorName.trim()) {
+      toast.error("Give the vendor a name");
+      return;
+    }
+    const vendor = onCreateVendor(newVendorName.trim(), newVendorMethod, {
+      phone: newVendorMethod === "phone" ? newVendorContact : undefined,
+      address: newVendorMethod === "in_person" ? newVendorContact : undefined,
+    });
+    setVendorId(vendor.id);
+    setOrderMethod(vendor.default_order_method);
+    setNewVendorName("");
+    setNewVendorContact("");
+    setAddingVendor(false);
+    toast.success(`${vendor.name} added to the vendor list`);
+  }
+
   function submit() {
     const hasPackagePrice = Boolean(price.trim());
     const currentUnitCost = hasPackagePrice ? parseDollarAmountToCents(price) : null;
     if (!name.trim()) {
       toast.error("Give the item a name");
+      return;
+    }
+    const selectedVendor = vendors.find((vendor) => vendor.id === vendorId);
+    if (!selectedVendor) {
+      toast.error("Choose a vendor from the list");
       return;
     }
     if (currentUnitCost !== null && (!Number.isFinite(currentUnitCost) || currentUnitCost < 0)) {
@@ -1328,7 +1491,10 @@ function CatalogItemDialog({
     onSave({
       id: item?.id ?? createSupplyId("supply"),
       name: name.trim(),
-      vendor: vendor.trim() || "Vendor not set",
+      vendor: selectedVendor.name,
+      vendor_id: selectedVendor.id,
+      order_method: orderMethod,
+      ordering_instructions: orderingInstructions.trim() || null,
       category: item?.category === "implant_graft" ? "implant_graft" : catalogGroup === "office_cleaning" ? "office" : "routine",
       catalog_group: catalogGroup,
       product_url: productUrl.trim() || null,
@@ -1358,21 +1524,60 @@ function CatalogItemDialog({
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <Label className="mb-1.5">Preferred vendor</Label>
-              <Input value={vendor} onChange={(event) => setVendor(event.target.value)} placeholder="Net32" />
+              <Select value={vendorId} onValueChange={selectVendor}>
+                <SelectTrigger className="w-full"><SelectValue placeholder="Select vendor">{vendors.find((vendor) => vendor.id === vendorId)?.name}</SelectValue></SelectTrigger>
+                <SelectContent>
+                  {vendors.map((vendor) => <SelectItem key={vendor.id} value={vendor.id}>{vendor.name}</SelectItem>)}
+                  <SelectItem value="__add_vendor__">+ Add new vendor</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label className="mb-1.5">Category</Label>
               <CatalogGroupSelect value={catalogGroup} onChange={setCatalogGroup} />
             </div>
           </div>
-          <div>
-            <Label className="mb-1.5">Product link</Label>
-            <Input value={productUrl} onChange={(event) => setProductUrl(event.target.value)} inputMode="url" placeholder="https://..." />
+          {addingVendor && (
+            <div className="grid gap-3 rounded-md border bg-muted/30 p-3 sm:grid-cols-2 sm:items-end">
+              <div>
+                <Label className="mb-1.5">New vendor name</Label>
+                <Input value={newVendorName} onChange={(event) => setNewVendorName(event.target.value)} placeholder="e.g. Safeway" />
+              </div>
+              <div>
+                <Label className="mb-1.5">Usual method</Label>
+                <OrderMethodSelect value={newVendorMethod} onChange={setNewVendorMethod} />
+              </div>
+              {newVendorMethod !== "online" && (
+                <div>
+                  <Label className="mb-1.5">{newVendorMethod === "phone" ? "Phone number" : "Store / location"}</Label>
+                  <Input value={newVendorContact} onChange={(event) => setNewVendorContact(event.target.value)} placeholder={newVendorMethod === "phone" ? "(602) 555-0100" : "Safeway next door"} />
+                </div>
+              )}
+              <Button type="button" variant="outline" onClick={addVendor}>Add vendor</Button>
+            </div>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label className="mb-1.5">How this item is usually purchased</Label>
+              <OrderMethodSelect value={orderMethod} onChange={setOrderMethod} />
+            </div>
+            <div>
+              <Label className="mb-1.5">Ordering note <span className="text-muted-foreground">(optional)</span></Label>
+              <Input value={orderingInstructions} onChange={(event) => setOrderingInstructions(event.target.value)} placeholder={orderMethod === "in_person" ? "Buy next door when low" : orderMethod === "phone" ? "Ask for the office account" : "Confirm free shipping"} />
+            </div>
           </div>
-          <div>
-            <Label className="mb-1.5">Alternative links <span className="text-muted-foreground">(one per line)</span></Label>
-            <Textarea value={alternativeUrls} onChange={(event) => setAlternativeUrls(event.target.value)} placeholder="https://..." className="min-h-20" />
-          </div>
+          {orderMethod === "online" && (
+            <>
+              <div>
+                <Label className="mb-1.5">Product link</Label>
+                <Input value={productUrl} onChange={(event) => setProductUrl(event.target.value)} inputMode="url" placeholder="https://..." />
+              </div>
+              <div>
+                <Label className="mb-1.5">Alternative links <span className="text-muted-foreground">(one per line)</span></Label>
+                <Textarea value={alternativeUrls} onChange={(event) => setAlternativeUrls(event.target.value)} placeholder="https://..." className="min-h-20" />
+              </div>
+            </>
+          )}
           <div className="grid gap-3 sm:grid-cols-3">
             <div>
               <Label className="mb-1.5">Current package price</Label>
@@ -1396,11 +1601,33 @@ function CatalogItemDialog({
   );
 }
 
-function PurchaseDialog({ open, onOpenChange, catalog, selectedCatalogItemId, onSave }: { open: boolean; onOpenChange: (open: boolean) => void; catalog: SupplyCatalogItem[]; selectedCatalogItemId: string; onSave: (purchase: SupplyPurchase) => void }) {
+function PurchaseDialog({
+  open,
+  onOpenChange,
+  catalog,
+  vendors,
+  selectedCatalogItemId,
+  onSave,
+  onCreateVendor,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  catalog: SupplyCatalogItem[];
+  vendors: SupplyVendor[];
+  selectedCatalogItemId: string;
+  onSave: (purchase: SupplyPurchase) => void;
+  onCreateVendor: (name: string, method: SupplyOrderMethod, details?: { phone?: string; address?: string }) => SupplyVendor;
+}) {
   const initialItem = catalog.find((item) => item.id === selectedCatalogItemId) ?? catalog[0];
+  const initialVendor = vendors.find((vendor) => vendor.id === initialItem?.vendor_id)
+    ?? vendors.find((vendor) => initialItem && supplyVendorKey(vendor.name) === supplyVendorKey(initialItem.vendor));
   const [catalogItemId, setCatalogItemId] = useState(initialItem?.id ?? "");
   const [budgetTreatment, setBudgetTreatment] = useState<SupplyCategory>(defaultBudgetTreatment(initialItem));
-  const [vendor, setVendor] = useState(initialItem?.vendor ?? "");
+  const [vendorId, setVendorId] = useState(initialVendor?.id ?? "");
+  const [orderMethod, setOrderMethod] = useState<SupplyOrderMethod>(initialItem?.order_method ?? initialVendor?.default_order_method ?? "online");
+  const [addingVendor, setAddingVendor] = useState(false);
+  const [newVendorName, setNewVendorName] = useState("");
+  const [newVendorContact, setNewVendorContact] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [unitPrice, setUnitPrice] = useState(
     initialItem?.current_unit_cost_cents !== null && initialItem ? moneyInputValue(initialItem.current_unit_cost_cents) : "",
@@ -1415,22 +1642,125 @@ function PurchaseDialog({ open, onOpenChange, catalog, selectedCatalogItemId, on
     if (!nextItem) return;
     setCatalogItemId(nextItem.id);
     setBudgetTreatment(defaultBudgetTreatment(nextItem));
-    setVendor(nextItem.vendor);
+    const vendor = vendors.find((entry) => entry.id === nextItem.vendor_id)
+      ?? vendors.find((entry) => supplyVendorKey(entry.name) === supplyVendorKey(nextItem.vendor));
+    setVendorId(vendor?.id ?? "");
+    setOrderMethod(nextItem.order_method ?? vendor?.default_order_method ?? "online");
     setUnitPrice(nextItem.current_unit_cost_cents === null ? "" : moneyInputValue(nextItem.current_unit_cost_cents));
+  }
+
+  function selectVendor(nextVendorId: string | null) {
+    if (nextVendorId === "__add_vendor__") {
+      setAddingVendor(true);
+      return;
+    }
+    const vendor = vendors.find((entry) => entry.id === nextVendorId);
+    if (!vendor) return;
+    setVendorId(vendor.id);
+    setOrderMethod(vendor.default_order_method);
+    setAddingVendor(false);
+  }
+
+  function addVendor() {
+    if (!newVendorName.trim()) {
+      toast.error("Give the vendor a name");
+      return;
+    }
+    const vendor = onCreateVendor(newVendorName.trim(), orderMethod, {
+      phone: orderMethod === "phone" ? newVendorContact : undefined,
+      address: orderMethod === "in_person" ? newVendorContact : undefined,
+    });
+    setVendorId(vendor.id);
+    setNewVendorName("");
+    setNewVendorContact("");
+    setAddingVendor(false);
   }
 
   function submit() {
     if (!selectedItem) { toast.error("Add a catalog item first"); return; }
+    const selectedVendor = vendors.find((vendor) => vendor.id === vendorId);
+    if (!selectedVendor) { toast.error("Choose a vendor from the list"); return; }
     const unitCostCents = parseDollarAmountToCents(unitPrice);
     const parsedQuantity = Number(quantity);
     if (!Number.isFinite(unitCostCents) || unitCostCents < 0) { toast.error("Enter a valid package price"); return; }
     if (!Number.isFinite(parsedQuantity) || parsedQuantity <= 0) { toast.error("Enter a valid quantity"); return; }
     if (budgetTreatment === "implant_graft" && !caseReference.trim()) { toast.error("Add a non-identifying case reference for implant or graft material"); return; }
-    onSave({ id: createSupplyId("purchase"), catalog_item_id: selectedItem.id, vendor: vendor.trim() || selectedItem.vendor, purchased_at: purchasedAt, quantity: parsedQuantity, unit_cost_cents: unitCostCents, category: budgetTreatment, case_reference: caseReference.trim() || null, notes: notes.trim() || null });
+    onSave({
+      id: createSupplyId("purchase"),
+      catalog_item_id: selectedItem.id,
+      item_name: selectedItem.name,
+      vendor: selectedVendor.name,
+      vendor_id: selectedVendor.id,
+      order_method: orderMethod,
+      purchased_at: purchasedAt,
+      quantity: parsedQuantity,
+      unit_cost_cents: unitCostCents,
+      category: budgetTreatment,
+      case_reference: caseReference.trim() || null,
+      notes: notes.trim() || null,
+    });
     setQuantity("1"); setCaseReference(""); setNotes("");
   }
 
-  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="sm:max-w-lg"><DialogHeader><DialogTitle>Log purchase</DialogTitle></DialogHeader><div className="grid gap-4"><div><Label className="mb-1.5">Catalog item</Label><Select value={catalogItemId} onValueChange={selectCatalogItem}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{catalog.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></div><div><Label className="mb-1.5">Budget treatment</Label><BudgetTreatmentSelect value={budgetTreatment} onChange={setBudgetTreatment} /></div><div className="rounded-lg border bg-muted/35 p-3 text-xs text-muted-foreground">{SUPPLY_CATEGORY_META[budgetTreatment].description}</div><div className="grid gap-3 sm:grid-cols-2"><div><Label className="mb-1.5">Vendor</Label><Input value={vendor} onChange={(event) => setVendor(event.target.value)} /></div><div><Label className="mb-1.5">Purchase date</Label><Input type="date" value={purchasedAt} onChange={(event) => setPurchasedAt(event.target.value)} /></div></div><div className="grid gap-3 sm:grid-cols-2"><div><Label className="mb-1.5">Packages</Label><Input value={quantity} onChange={(event) => setQuantity(event.target.value)} inputMode="decimal" /></div><div><Label className="mb-1.5">Price per package</Label><Input value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} inputMode="decimal" /></div></div>{budgetTreatment === "implant_graft" && <div><Label className="mb-1.5">Non-identifying case reference</Label><Input value={caseReference} onChange={(event) => setCaseReference(event.target.value)} placeholder="e.g. Implant plan 07-14-A" /></div>}<div><Label className="mb-1.5">Notes <span className="text-muted-foreground">(optional)</span></Label><Input value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Price check, approved substitution, shipping, etc." /></div></div><DialogFooter showCloseButton><Button onClick={submit}>Log purchase</Button></DialogFooter></DialogContent></Dialog>;
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Log purchase</DialogTitle>
+          <DialogDescription>
+            This creates a historical snapshot. Later catalog edits will not change it.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4">
+          <div>
+            <Label className="mb-1.5">Catalog item</Label>
+            <Select value={catalogItemId} onValueChange={selectCatalogItem}>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>{catalog.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label className="mb-1.5">Vendor</Label>
+              <Select value={vendorId} onValueChange={selectVendor}>
+                <SelectTrigger className="w-full"><SelectValue placeholder="Select vendor">{vendors.find((vendor) => vendor.id === vendorId)?.name}</SelectValue></SelectTrigger>
+                <SelectContent>
+                  {vendors.map((vendor) => <SelectItem key={vendor.id} value={vendor.id}>{vendor.name}</SelectItem>)}
+                  <SelectItem value="__add_vendor__">+ Add new vendor</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="mb-1.5">Purchase method</Label>
+              <OrderMethodSelect value={orderMethod} onChange={setOrderMethod} />
+            </div>
+          </div>
+          {addingVendor && (
+            <div className="grid gap-2 rounded-md border bg-muted/30 p-3 sm:grid-cols-[1fr_1fr_auto]">
+              <Input value={newVendorName} onChange={(event) => setNewVendorName(event.target.value)} placeholder="New vendor name" />
+              {orderMethod === "online" ? <div /> : (
+                <Input value={newVendorContact} onChange={(event) => setNewVendorContact(event.target.value)} placeholder={orderMethod === "phone" ? "Phone number" : "Store / location"} />
+              )}
+              <Button type="button" variant="outline" onClick={addVendor}>Add vendor</Button>
+            </div>
+          )}
+          <div>
+            <Label className="mb-1.5">Budget treatment</Label>
+            <BudgetTreatmentSelect value={budgetTreatment} onChange={setBudgetTreatment} />
+          </div>
+          <div className="rounded-lg border bg-muted/35 p-3 text-xs text-muted-foreground">{SUPPLY_CATEGORY_META[budgetTreatment].description}</div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div><Label className="mb-1.5">Purchase date</Label><Input type="date" value={purchasedAt} onChange={(event) => setPurchasedAt(event.target.value)} /></div>
+            <div><Label className="mb-1.5">Packages</Label><Input value={quantity} onChange={(event) => setQuantity(event.target.value)} inputMode="decimal" /></div>
+            <div><Label className="mb-1.5">Price per package</Label><Input value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} inputMode="decimal" /></div>
+          </div>
+          {budgetTreatment === "implant_graft" && <div><Label className="mb-1.5">Non-identifying case reference</Label><Input value={caseReference} onChange={(event) => setCaseReference(event.target.value)} placeholder="e.g. Implant plan 07-14-A" /></div>}
+          <div><Label className="mb-1.5">Notes <span className="text-muted-foreground">(optional)</span></Label><Input value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Price check, approved substitution, shipping, etc." /></div>
+        </div>
+        <DialogFooter showCloseButton><Button onClick={submit}>Log purchase</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function BudgetLane({ label, targetPercent, budgetCents, baselineCents, loggedCents, color }: { label: string; targetPercent: number; budgetCents: number; baselineCents: number; loggedCents: number; color: "sky" | "amber" }) {
@@ -1454,3 +1784,16 @@ function PercentField({ label, value, onChange }: { label: string; value: number
 function BudgetTreatmentSelect({ value, onChange }: { value: SupplyCategory; onChange: (value: SupplyCategory) => void }) { return <Select value={value} onValueChange={(next) => onChange((next ?? "routine") as SupplyCategory)}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{(Object.keys(SUPPLY_CATEGORY_META) as SupplyCategory[]).map((category) => <SelectItem key={category} value={category}>{SUPPLY_CATEGORY_META[category].label}</SelectItem>)}</SelectContent></Select>; }
 
 function CatalogGroupSelect({ value, onChange }: { value: SupplyCatalogGroup; onChange: (value: SupplyCatalogGroup) => void }) { return <Select value={value} onValueChange={(next) => onChange((next ?? "general") as SupplyCatalogGroup)}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{(Object.keys(SUPPLY_CATALOG_GROUP_META) as SupplyCatalogGroup[]).map((group) => <SelectItem key={group} value={group}>{SUPPLY_CATALOG_GROUP_META[group].label}</SelectItem>)}</SelectContent></Select>; }
+
+function OrderMethodSelect({ value, onChange }: { value: SupplyOrderMethod; onChange: (value: SupplyOrderMethod) => void }) {
+  return (
+    <Select value={value} onValueChange={(next) => onChange((next ?? "online") as SupplyOrderMethod)}>
+      <SelectTrigger className="w-full"><SelectValue>{SUPPLY_ORDER_METHOD_META[value].label}</SelectValue></SelectTrigger>
+      <SelectContent>
+        {(Object.keys(SUPPLY_ORDER_METHOD_META) as SupplyOrderMethod[]).map((method) => (
+          <SelectItem key={method} value={method}>{SUPPLY_ORDER_METHOD_META[method].label}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}

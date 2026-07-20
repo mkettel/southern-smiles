@@ -1,4 +1,7 @@
-import { getStatHistory } from "@/actions/stat-entries";
+import {
+  getStatComparisonOptions,
+  getStatHistory,
+} from "@/actions/stat-entries";
 import { getProfile } from "@/actions/auth";
 import { getCanAccessBills } from "@/actions/bills";
 import { createClient } from "@/lib/supabase/server";
@@ -36,11 +39,12 @@ export default async function StatDetailPage({
       : "";
 
   // Fetch stat history, OIC entries, and current user profile in parallel
-  const [entries, oicEntries, profile, canAccessBills] = await Promise.all([
+  const [entries, oicEntries, profile, canAccessBills, comparisonOptions] = await Promise.all([
     getStatHistory(statId),
     getRelevantOicEntries(supabase, typedStat),
     getProfile() as Promise<Profile | null>,
     getCanAccessBills(),
+    getStatComparisonOptions(),
   ]);
 
   const isAdmin = profile?.role === "admin";
@@ -61,6 +65,7 @@ export default async function StatDetailPage({
 
   return (
     <StatDetailView
+      statId={stat.id}
       statName={stat.name}
       statType={stat.stat_type}
       statDescription={stat.description}
@@ -72,6 +77,7 @@ export default async function StatDetailPage({
       isAdmin={isAdmin}
       isBillsStat={isBillsStat}
       isCherryApprovedFinancingStat={isCherryApprovedFinancing}
+      comparisonOptions={comparisonOptions.filter((option) => option.id !== stat.id)}
     />
   );
 }

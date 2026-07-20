@@ -132,6 +132,21 @@ export interface StatEntry {
   profile?: Profile;
 }
 
+export interface StatComparisonOption {
+  id: string;
+  name: string;
+  statType: StatType;
+  divisionLabel: string;
+  postTitle: string;
+}
+
+export interface StatComparisonSeries {
+  id: string;
+  name: string;
+  statType: StatType;
+  entries: StatEntry[];
+}
+
 export interface DailyStatEntry {
   id: string;
   practice_id: string;

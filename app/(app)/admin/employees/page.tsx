@@ -53,7 +53,7 @@ export default async function ManageEmployeesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Manage Team</h1>
+          <h1 className="text-2xl font-bold">Team &amp; Access</h1>
           <p className="text-muted-foreground">
             Add a new post with the wizard, assign employees to posts, edit names and roles, or activate/deactivate team members
           </p>

@@ -191,6 +191,18 @@ export async function saveSupplyWorkspace(workspace: unknown) {
 
     if (existingError) return { error: existingError.message };
     const saved = supplyWorkspaceSchema.safeParse(existing?.workspace);
+    if (saved.success) {
+      const incomingPurchases = new Map(
+        safeWorkspace.purchases.map((purchase) => [purchase.id, purchase]),
+      );
+      const changedExistingPurchase = saved.data.purchases.some((purchase) => {
+        const incoming = incomingPurchases.get(purchase.id);
+        return !incoming || JSON.stringify(incoming) !== JSON.stringify(purchase);
+      });
+      if (changedExistingPurchase) {
+        return { error: "Completed purchases can only be removed by an administrator." };
+      }
+    }
     safeWorkspace = {
       ...safeWorkspace,
       settings: saved.success ? saved.data.settings : DEFAULT_SUPPLY_BUDGET_SETTINGS,
@@ -208,4 +220,48 @@ export async function saveSupplyWorkspace(workspace: unknown) {
 
   await syncSupplyBudgetStats(context.practiceId, context.userId, safeWorkspace);
   return { success: true };
+}
+
+export async function deleteSupplyPurchase(purchaseId: string) {
+  const safePurchaseId = purchaseId.trim();
+  if (!safePurchaseId || safePurchaseId.length > 200) {
+    return { error: "That purchase could not be identified." };
+  }
+
+  const context = await getSupplyAccessContext();
+  if (!context?.isAdmin) {
+    return { error: "Only an administrator can remove a completed purchase." };
+  }
+
+  const { data, error: loadError } = await context.supabase
+    .from("supply_workspaces")
+    .select("workspace")
+    .eq("practice_id", context.practiceId)
+    .maybeSingle();
+
+  if (loadError) return { error: loadError.message };
+
+  const saved = supplyWorkspaceSchema.safeParse(data?.workspace);
+  if (!saved.success) return { error: "The saved supply workspace is not valid." };
+
+  const purchase = saved.data.purchases.find((entry) => entry.id === safePurchaseId);
+  if (!purchase) return { error: "That purchase is no longer in the purchase log." };
+
+  const updatedWorkspace: SavedSupplyWorkspace = {
+    ...saved.data,
+    purchases: saved.data.purchases.filter((entry) => entry.id !== safePurchaseId),
+  };
+
+  const { error: saveError } = await context.supabase.from("supply_workspaces").upsert({
+    practice_id: context.practiceId,
+    workspace: updatedWorkspace,
+    updated_by: context.userId,
+    updated_at: new Date().toISOString(),
+  });
+
+  if (saveError) return { error: saveError.message };
+
+  await syncSupplyBudgetStats(context.practiceId, context.userId, updatedWorkspace);
+  revalidatePath("/admin/supplies");
+  return { success: true, purchase };
 }

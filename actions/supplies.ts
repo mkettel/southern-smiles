@@ -1,7 +1,15 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
+import { format } from "date-fns";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentWeekStart } from "@/lib/constants";
 import { isSupplyAccessPost } from "@/lib/supply-access";
+import {
+  buildSupplyBudgetSnapshots,
+  getSupplyBudgetStatKind,
+} from "@/lib/supply-budget-stats";
 import { DEFAULT_SUPPLY_BUDGET_SETTINGS, type SavedSupplyWorkspace } from "@/lib/supply-ordering";
 import { supplyWorkspaceSchema } from "@/lib/validators";
 
@@ -65,6 +73,107 @@ export async function getSupplyWorkspace(): Promise<SavedSupplyWorkspace | null>
   return parsed.data;
 }
 
+async function syncSupplyBudgetStats(
+  practiceId: string,
+  actorProfileId: string,
+  workspace: SavedSupplyWorkspace,
+) {
+  const today = format(new Date(), "yyyy-MM-dd");
+  const currentMonth = today.slice(0, 7);
+  if (workspace.settings.budget_month !== currentMonth) return;
+
+  const supabase = createAdminClient();
+  const snapshots = buildSupplyBudgetSnapshots(workspace, today);
+  const { data: stats } = await supabase
+    .from("stats")
+    .select("id, name, abbreviation, post:posts(id, title, division:divisions(number))")
+    .eq("practice_id", practiceId)
+    .eq("is_active", true)
+    .eq("stat_type", "percentage");
+
+  const managedStats = (stats ?? []).flatMap((stat) => {
+    const typedStat = stat as unknown as Parameters<typeof getSupplyBudgetStatKind>[0] & {
+      id: string;
+      post?: { id?: string | null } | null;
+    };
+    const kind = getSupplyBudgetStatKind(typedStat);
+    return kind ? [{ id: typedStat.id, postId: typedStat.post?.id ?? null, kind }] : [];
+  });
+  if (!managedStats.length) return;
+
+  const weekStart = getCurrentWeekStart();
+  for (const stat of managedStats) {
+    const snapshot = snapshots[stat.kind];
+    const [{ data: previous }, { data: current }, { data: assignment }] = await Promise.all([
+      supabase
+        .from("stat_entries")
+        .select("value")
+        .eq("stat_id", stat.id)
+        .lt("week_start", weekStart)
+        .order("week_start", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("stat_entries")
+        .select("value, previous_value, profile_id, final_condition")
+        .eq("stat_id", stat.id)
+        .eq("week_start", weekStart)
+        .limit(1)
+        .maybeSingle(),
+      stat.postId
+        ? supabase
+          .from("employee_posts")
+          .select("profile_id")
+          .eq("practice_id", practiceId)
+          .eq("post_id", stat.postId)
+          .limit(1)
+          .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+
+    const previousValue = previous?.value === null || previous?.value === undefined
+      ? null
+      : Number(previous.value);
+    const percentChange = previousValue && previousValue !== 0
+      ? Math.round((((snapshot.utilizationPercent - previousValue) / Math.abs(previousValue)) * 100) * 100) / 100
+      : 0;
+    const profileId =
+      (assignment as { profile_id?: string } | null)?.profile_id
+      ?? current?.profile_id
+      ?? actorProfileId;
+
+    if (
+      current
+      && Number(current.value) === snapshot.utilizationPercent
+      && (current.previous_value === null || current.previous_value === undefined
+        ? null
+        : Number(current.previous_value)) === previousValue
+      && current.final_condition === snapshot.condition
+    ) {
+      continue;
+    }
+
+    await supabase.from("stat_entries").upsert(
+      {
+        stat_id: stat.id,
+        profile_id: profileId,
+        practice_id: practiceId,
+        week_start: weekStart,
+        value: snapshot.utilizationPercent,
+        previous_value: previousValue,
+        percent_change: percentChange,
+        auto_condition: snapshot.condition,
+        final_condition: snapshot.condition,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "stat_id,week_start" },
+    );
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/stats/[statId]", "page");
+}
+
 export async function saveSupplyWorkspace(workspace: unknown) {
   const parsed = supplyWorkspaceSchema.safeParse(workspace);
   if (!parsed.success) return { error: "The supply workspace contains invalid data." };
@@ -95,5 +204,8 @@ export async function saveSupplyWorkspace(workspace: unknown) {
     updated_at: new Date().toISOString(),
   });
 
-  return error ? { error: error.message } : { success: true };
+  if (error) return { error: error.message };
+
+  await syncSupplyBudgetStats(context.practiceId, context.userId, safeWorkspace);
+  return { success: true };
 }

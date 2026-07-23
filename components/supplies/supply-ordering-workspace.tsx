@@ -148,8 +148,7 @@ function isLegacyDemoCatalog(catalog: SupplyCatalogItem[]) {
 }
 
 function defaultBudgetTreatment(item: SupplyCatalogItem | undefined): SupplyCategory {
-  if (item?.category === "implant_graft") return "implant_graft";
-  return item?.catalog_group === "office_cleaning" ? "office" : "routine";
+  return item?.category ?? "routine";
 }
 
 export function SupplyOrderingWorkspace({
@@ -1433,6 +1432,9 @@ function CatalogItemDialog({
   const [newVendorMethod, setNewVendorMethod] = useState<SupplyOrderMethod>("online");
   const [newVendorContact, setNewVendorContact] = useState("");
   const [catalogGroup, setCatalogGroup] = useState<SupplyCatalogGroup>(item?.catalog_group ?? "general");
+  const [budgetTreatment, setBudgetTreatment] = useState<SupplyCategory>(
+    item?.category ?? "routine",
+  );
   const [productUrl, setProductUrl] = useState(item?.product_url ?? "");
   const [alternativeUrls, setAlternativeUrls] = useState(item?.alternative_urls.join("\n") ?? "");
   const [price, setPrice] = useState(
@@ -1495,7 +1497,7 @@ function CatalogItemDialog({
       vendor_id: selectedVendor.id,
       order_method: orderMethod,
       ordering_instructions: orderingInstructions.trim() || null,
-      category: item?.category === "implant_graft" ? "implant_graft" : catalogGroup === "office_cleaning" ? "office" : "routine",
+      category: budgetTreatment,
       catalog_group: catalogGroup,
       product_url: productUrl.trim() || null,
       alternative_urls: alternativeUrls.split("\n").map((url) => url.trim()).filter(Boolean),
@@ -1533,9 +1535,24 @@ function CatalogItemDialog({
               </Select>
             </div>
             <div>
-              <Label className="mb-1.5">Category</Label>
-              <CatalogGroupSelect value={catalogGroup} onChange={setCatalogGroup} />
+              <Label className="mb-1.5">Catalog category</Label>
+              <CatalogGroupSelect
+                value={catalogGroup}
+                onChange={(group) => {
+                  setCatalogGroup(group);
+                  if (budgetTreatment !== "implant_graft") {
+                    setBudgetTreatment(group === "office_cleaning" ? "office" : "routine");
+                  }
+                }}
+              />
             </div>
+          </div>
+          <div>
+            <Label className="mb-1.5">Budget treatment</Label>
+            <BudgetTreatmentSelect value={budgetTreatment} onChange={setBudgetTreatment} />
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              {SUPPLY_CATEGORY_META[budgetTreatment].description}
+            </p>
           </div>
           {addingVendor && (
             <div className="grid gap-3 rounded-md border bg-muted/30 p-3 sm:grid-cols-2 sm:items-end">
@@ -1633,7 +1650,6 @@ function PurchaseDialog({
     initialItem?.current_unit_cost_cents !== null && initialItem ? moneyInputValue(initialItem.current_unit_cost_cents) : "",
   );
   const [purchasedAt, setPurchasedAt] = useState(todayString());
-  const [caseReference, setCaseReference] = useState("");
   const [notes, setNotes] = useState("");
   const selectedItem = catalog.find((item) => item.id === catalogItemId) ?? catalog[0];
 
@@ -1684,7 +1700,6 @@ function PurchaseDialog({
     const parsedQuantity = Number(quantity);
     if (!Number.isFinite(unitCostCents) || unitCostCents < 0) { toast.error("Enter a valid package price"); return; }
     if (!Number.isFinite(parsedQuantity) || parsedQuantity <= 0) { toast.error("Enter a valid quantity"); return; }
-    if (budgetTreatment === "implant_graft" && !caseReference.trim()) { toast.error("Add a non-identifying case reference for implant or graft material"); return; }
     onSave({
       id: createSupplyId("purchase"),
       catalog_item_id: selectedItem.id,
@@ -1696,10 +1711,10 @@ function PurchaseDialog({
       quantity: parsedQuantity,
       unit_cost_cents: unitCostCents,
       category: budgetTreatment,
-      case_reference: caseReference.trim() || null,
+      case_reference: null,
       notes: notes.trim() || null,
     });
-    setQuantity("1"); setCaseReference(""); setNotes("");
+    setQuantity("1"); setNotes("");
   }
 
   return (
@@ -1754,7 +1769,6 @@ function PurchaseDialog({
             <div><Label className="mb-1.5">Packages</Label><Input value={quantity} onChange={(event) => setQuantity(event.target.value)} inputMode="decimal" /></div>
             <div><Label className="mb-1.5">Price per package</Label><Input value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} inputMode="decimal" /></div>
           </div>
-          {budgetTreatment === "implant_graft" && <div><Label className="mb-1.5">Non-identifying case reference</Label><Input value={caseReference} onChange={(event) => setCaseReference(event.target.value)} placeholder="e.g. Implant plan 07-14-A" /></div>}
           <div><Label className="mb-1.5">Notes <span className="text-muted-foreground">(optional)</span></Label><Input value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Price check, approved substitution, shipping, etc." /></div>
         </div>
         <DialogFooter showCloseButton><Button onClick={submit}>Log purchase</Button></DialogFooter>

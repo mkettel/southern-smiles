@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { saveSupplyWorkspace } from "@/actions/supplies";
+import { deleteSupplyPurchase, saveSupplyWorkspace } from "@/actions/supplies";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -169,6 +169,8 @@ export function SupplyOrderingWorkspace({
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [catalogItemToEdit, setCatalogItemToEdit] = useState<SupplyCatalogItem | null>(null);
   const [purchaseDialogOpen, setPurchaseDialogOpen] = useState(false);
+  const [purchaseToDelete, setPurchaseToDelete] = useState<SupplyPurchase | null>(null);
+  const [purchaseDeletePending, setPurchaseDeletePending] = useState(false);
   const [selectedCatalogItemId, setSelectedCatalogItemId] = useState(
     DEFAULT_SUPPLY_CATALOG[0]?.id ?? "",
   );
@@ -458,6 +460,24 @@ export function SupplyOrderingWorkspace({
     toast.success("Order draft cleared");
   }
 
+  async function removeCompletedPurchase() {
+    if (!purchaseToDelete || purchaseDeletePending) return;
+    setPurchaseDeletePending(true);
+    const result = await deleteSupplyPurchase(purchaseToDelete.id);
+    setPurchaseDeletePending(false);
+
+    if (result.error) {
+      toast.error("Purchase could not be removed", { description: result.error });
+      return;
+    }
+
+    setPurchases((current) =>
+      current.filter((purchase) => purchase.id !== purchaseToDelete.id),
+    );
+    toast.success(`${purchaseToDelete.item_name ?? "Purchase"} removed from the log`);
+    setPurchaseToDelete(null);
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -536,6 +556,8 @@ export function SupplyOrderingWorkspace({
             purchases={recentPurchases}
             catalog={catalog}
             onLogPurchase={() => openPurchaseDialog()}
+            canDeletePurchases={canManageBudget}
+            onDeletePurchase={setPurchaseToDelete}
           />
         </TabsContent>
 
@@ -567,6 +589,41 @@ export function SupplyOrderingWorkspace({
             <Button variant="destructive" onClick={clearOrderDraft}>
               <Trash2 className="h-4 w-4" />
               Clear order draft
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(purchaseToDelete)}
+        onOpenChange={(open) => {
+          if (!open && !purchaseDeletePending) setPurchaseToDelete(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove this completed purchase?</DialogTitle>
+            <DialogDescription>
+              This permanently removes {purchaseToDelete?.item_name ?? "this purchase"} from the
+              purchase log. Monthly totals and automated supply-budget stats will be recalculated.
+              This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={purchaseDeletePending}
+              onClick={() => setPurchaseToDelete(null)}
+            >
+              Keep purchase
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={purchaseDeletePending}
+              onClick={removeCompletedPurchase}
+            >
+              <Trash2 className="h-4 w-4" />
+              {purchaseDeletePending ? "Removing..." : "Remove purchase"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1221,10 +1278,14 @@ function PurchaseLogTab({
   purchases,
   catalog,
   onLogPurchase,
+  canDeletePurchases,
+  onDeletePurchase,
 }: {
   purchases: SupplyPurchase[];
   catalog: SupplyCatalogItem[];
   onLogPurchase: () => void;
+  canDeletePurchases: boolean;
+  onDeletePurchase: (purchase: SupplyPurchase) => void;
 }) {
   const itemById = new Map(catalog.map((item) => [item.id, item]));
   const purchasesByMonth = new Map<string, SupplyPurchase[]>();
@@ -1244,7 +1305,7 @@ function PurchaseLogTab({
         <div>
           <CardTitle className="text-base">Purchase log</CardTitle>
           <p className="mt-1 text-sm text-muted-foreground">
-            Completed purchases are frozen snapshots. Catalog edits only affect future orders.
+            Completed purchases are frozen snapshots. Admins can remove mistaken entries.
           </p>
         </div>
         <Button size="sm" onClick={onLogPurchase}><Plus className="h-4 w-4" />Purchase</Button>
@@ -1287,16 +1348,59 @@ function PurchaseLogTab({
                     </div>
                   </summary>
                   <div className="mt-4 overflow-x-auto rounded-lg border">
-                    <table className="w-full min-w-[740px] text-sm">
+                    <table className="w-full min-w-[800px] text-sm">
                       <thead className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
-                        <tr><th className="px-4 py-3 font-medium">Date</th><th className="px-4 py-3 font-medium">Item</th><th className="px-4 py-3 font-medium">Vendor</th><th className="px-4 py-3 font-medium">Method</th><th className="px-4 py-3 font-medium">Quantity</th><th className="px-4 py-3 font-medium">Total</th><th className="px-4 py-3 font-medium">Budget treatment</th></tr>
+                        <tr>
+                          <th className="px-4 py-3 font-medium">Date</th>
+                          <th className="px-4 py-3 font-medium">Item</th>
+                          <th className="px-4 py-3 font-medium">Vendor</th>
+                          <th className="px-4 py-3 font-medium">Method</th>
+                          <th className="px-4 py-3 font-medium">Quantity</th>
+                          <th className="px-4 py-3 font-medium">Total</th>
+                          <th className="px-4 py-3 font-medium">Budget treatment</th>
+                          {canDeletePurchases && (
+                            <th className="px-4 py-3 text-right font-medium">Actions</th>
+                          )}
+                        </tr>
                       </thead>
                       <tbody className="divide-y">
                         {monthPurchases.map((purchase) => {
                           const item = itemById.get(purchase.catalog_item_id);
                           const treatment = SUPPLY_CATEGORY_META[purchase.category].short_label;
                           const method = purchase.order_method ?? "online";
-                          return <tr key={purchase.id}><td className="px-4 py-3 tabular-nums">{purchase.purchased_at}</td><td className="px-4 py-3 font-medium">{purchase.item_name ?? item?.name ?? "Removed catalog item"}</td><td className="px-4 py-3">{purchase.vendor}</td><td className="px-4 py-3 text-xs text-muted-foreground">{SUPPLY_ORDER_METHOD_META[method].label}</td><td className="px-4 py-3 tabular-nums">{purchase.quantity}</td><td className="px-4 py-3 font-medium tabular-nums">{formatCurrency(purchase.quantity * purchase.unit_cost_cents)}</td><td className="px-4 py-3 text-xs text-muted-foreground">{purchase.case_reference ? `${treatment} · ${purchase.case_reference}` : treatment}</td></tr>;
+                          const itemName = purchase.item_name ?? item?.name ?? "Removed catalog item";
+                          return (
+                            <tr key={purchase.id}>
+                              <td className="px-4 py-3 tabular-nums">{purchase.purchased_at}</td>
+                              <td className="px-4 py-3 font-medium">{itemName}</td>
+                              <td className="px-4 py-3">{purchase.vendor}</td>
+                              <td className="px-4 py-3 text-xs text-muted-foreground">
+                                {SUPPLY_ORDER_METHOD_META[method].label}
+                              </td>
+                              <td className="px-4 py-3 tabular-nums">{purchase.quantity}</td>
+                              <td className="px-4 py-3 font-medium tabular-nums">
+                                {formatCurrency(purchase.quantity * purchase.unit_cost_cents)}
+                              </td>
+                              <td className="px-4 py-3 text-xs text-muted-foreground">
+                                {purchase.case_reference ? `${treatment} · ${purchase.case_reference}` : treatment}
+                              </td>
+                              {canDeletePurchases && (
+                                <td className="px-4 py-3 text-right">
+                                  <Tooltip>
+                                    <TooltipTrigger
+                                      type="button"
+                                      aria-label={`Remove ${itemName} from purchase log`}
+                                      onClick={() => onDeletePurchase(purchase)}
+                                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top">Remove mistaken purchase</TooltipContent>
+                                  </Tooltip>
+                                </td>
+                              )}
+                            </tr>
+                          );
                         })}
                       </tbody>
                     </table>

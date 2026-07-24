@@ -229,8 +229,8 @@ export async function deleteSupplyPurchase(purchaseId: string) {
   }
 
   const context = await getSupplyAccessContext();
-  if (!context?.isAdmin) {
-    return { error: "Only an administrator can remove a completed purchase." };
+  if (!context) {
+    return { error: "You do not have access to remove completed purchases." };
   }
 
   const { data, error: loadError } = await context.supabase

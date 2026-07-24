@@ -98,6 +98,7 @@ type ActiveTab = "overview" | "catalog" | "order-draft" | "purchases" | "cost-im
 
 interface SupplyOrderingWorkspaceProps {
   canManageBudget?: boolean;
+  canDeletePurchases?: boolean;
   initialWorkspace?: SavedSupplyWorkspace | null;
   sharedPersistenceEnabled?: boolean;
 }
@@ -153,6 +154,7 @@ function defaultBudgetTreatment(item: SupplyCatalogItem | undefined): SupplyCate
 
 export function SupplyOrderingWorkspace({
   canManageBudget = true,
+  canDeletePurchases = canManageBudget,
   initialWorkspace = null,
   sharedPersistenceEnabled = false,
 }: SupplyOrderingWorkspaceProps) {
@@ -556,7 +558,7 @@ export function SupplyOrderingWorkspace({
             purchases={recentPurchases}
             catalog={catalog}
             onLogPurchase={() => openPurchaseDialog()}
-            canDeletePurchases={canManageBudget}
+            canDeletePurchases={canDeletePurchases}
             onDeletePurchase={setPurchaseToDelete}
           />
         </TabsContent>
@@ -1305,7 +1307,8 @@ function PurchaseLogTab({
         <div>
           <CardTitle className="text-base">Purchase log</CardTitle>
           <p className="mt-1 text-sm text-muted-foreground">
-            Completed purchases are frozen snapshots. Admins can remove mistaken entries.
+            Completed purchases are frozen snapshots. Purchasing officers and admins can remove
+            mistaken entries.
           </p>
         </div>
         <Button size="sm" onClick={onLogPurchase}><Plus className="h-4 w-4" />Purchase</Button>

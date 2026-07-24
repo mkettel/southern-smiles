@@ -17,6 +17,7 @@ export default async function SupplyOrderingPage() {
     <div className="mx-auto max-w-7xl">
       <SupplyOrderingWorkspace
         canManageBudget={profile.role === "admin"}
+        canDeletePurchases
         initialWorkspace={initialWorkspace}
         sharedPersistenceEnabled
       />

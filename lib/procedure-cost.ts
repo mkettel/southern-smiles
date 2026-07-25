@@ -11,6 +11,8 @@ export interface ProcedureMaterialDraft {
   name: string;
   kind: ProcedureMaterialKind;
   cost_cents: number;
+  catalog_item_id?: string | null;
+  quantity_used?: number;
 }
 
 export interface ProcedureVisitDraft {

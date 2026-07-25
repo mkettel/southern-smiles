@@ -1,3 +1,5 @@
+# Prior Design QA: Org Board
+
 **Comparison Target**
 
 - Source visual truth: user-approved Org Board appshot, `Google Chrome Appshot 2026-06-21T01-51-17.366Z.png`
@@ -50,3 +52,74 @@
 - None required for this approved state.
 
 final result: passed
+
+---
+
+# Procedure Navigator Design QA
+
+## Visual Truth
+
+- Source: `/Users/monzershakally/.codex/generated_images/019ed3da-cf40-7190-8586-876e15c858a9/call_Vg5ovYA5kpJeQSodpDP7w2lU.png`
+- Implementation: `/private/tmp/procedure-navigator-local-final-1440.png`
+- Combined comparison: `/private/tmp/procedure-navigator-comparison-final.png`
+- Source pixels: 1487 x 1058, normalized to 1440 x 1024 for comparison
+- Implementation viewport: 1440 x 1024
+- State: Crown selected, first visit selected, light theme, local development preview
+
+## Comparison History
+
+### Iteration 1
+
+- The route retained a separate page title above the navigator, creating redundant hierarchy.
+- The recipe table expanded without a useful bound and pushed the visit subtotal too far down.
+- Fixes: removed the duplicate route heading, promoted the selected procedure to the page `h1`, constrained the recipe table, and made its header sticky.
+
+### Final
+
+- The navigator, procedure summary, visit selector, and recipe table match the selected master-detail direction.
+- Existing production data and calculations remain intact.
+- Controls retain the current add, edit, duplicate, and delete behavior.
+- No P0, P1, or P2 visual issues remain.
+
+### Color Polish
+
+- Evidence: `/private/tmp/procedure-navigator-color-polish.png`
+- Added compact family icons and restrained cyan, rose, amber, violet, and slate labels to make the navigator easier to scan.
+- Added distinct icons and subtle semantic color to total cost, supplies, lab, chair overhead, and cost per hour.
+- Strengthened the selected procedure and selected visit states with a quiet cyan treatment.
+- Added supply and lab source badges in recipe rows while preserving the existing table density.
+- The semantic accents improve recognition without changing hierarchy, calculations, or interaction behavior.
+
+### Procedure Reordering
+
+- Added dedicated drag handles to procedure rows with pointer and keyboard support.
+- Custom order persists automatically and remains authoritative when search or family filters are active.
+- Seeded the initial preferred order as Filling, Crown, then Bridge while retaining every existing procedure and edit.
+- Verified a keyboard reorder, restored the preferred order, reloaded the page, and confirmed persistence.
+- A fresh browser load produced no console or hydration errors.
+
+## Expected Data Differences
+
+- The live Crown example has two modeled visits; the concept image used three illustrative visits.
+- Existing manual recipe rows remain manual, while new supplies can be selected from the live catalog with vendor, unit price, and quantity used.
+
+## Interaction QA
+
+- Selected Crown from the procedure navigator.
+- Switched between Crown Prep and Delivery visits.
+- Opened and closed procedure details.
+- Opened an existing recipe row for editing.
+- Added a supply row and reset the local examples.
+- Selected a live catalog supply, changed its quantity, and confirmed the procedure cost recalculated from the current catalog price.
+- Verified the layout at 1440 x 1024 and 900 x 900.
+- Fresh preview console contained no application errors.
+
+## Engineering Validation
+
+- `npm test`: 47 passing
+- Targeted ESLint: passed
+- `npm run build`: passed
+
+## Final Result
+
+passed

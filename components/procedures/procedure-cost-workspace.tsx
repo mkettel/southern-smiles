@@ -1,29 +1,57 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
-  Calculator,
-  ChevronDown,
-  ChevronRight,
-  ClipboardList,
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  type DragEndEvent,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
+  Activity,
+  Boxes,
+  Check,
+  CircleDollarSign,
+  Clock3,
   Copy,
-  DollarSign,
   FlaskConical,
+  Gauge,
+  GripVertical,
+  Layers3,
+  ListTree,
+  MoreHorizontal,
+  PackageOpen,
+  PackageSearch,
+  Pencil,
   Plus,
   RotateCcw,
   Search,
+  Scissors,
+  Shapes,
+  Sparkles,
   Trash2,
+  X,
+  type LucideIcon,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -34,6 +62,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { parseDollarAmountToCents } from "@/lib/bills";
 import { formatCurrencyFromCents, formatHours } from "@/lib/overhead";
 import {
   calculateProcedureCost,
@@ -45,20 +74,22 @@ import {
   type ProcedureTreatmentFamily,
   type ProcedureVisitDraft,
 } from "@/lib/procedure-cost";
-import { parseDollarAmountToCents } from "@/lib/bills";
+import type { SupplyCatalogItem } from "@/lib/supply-ordering";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "procedure-cost-workspace-v4";
+const ORDER_MIGRATION_KEY = "procedure-cost-preferred-order-v1";
+const INITIAL_PREFERRED_ORDER = ["filling", "crown", "bridge"];
 
 interface ProcedureCostWorkspaceProps {
   overheadPerOperatoryHourCents: number | null;
   fullCapacityOverheadRateCents: number | null;
   overheadSetupRequired: boolean;
+  supplyCatalog: SupplyCatalogItem[];
 }
 
 type ProcedureDraftLike = Omit<ProcedureDraft, "family"> &
   Partial<Pick<ProcedureDraft, "family">>;
-
 type ProcedureFamilyFilter = ProcedureTreatmentFamily | "all";
 
 const PROCEDURE_FAMILY_OPTIONS: Array<{
@@ -72,56 +103,37 @@ const PROCEDURE_FAMILY_OPTIONS: Array<{
   { value: "other", label: "Other" },
 ];
 
+const PROCEDURE_FAMILY_LABELS: Record<ProcedureTreatmentFamily, string> = {
+  restorative: "Restorative",
+  surgery: "Surgery",
+  endo: "Endo",
+  removable: "Removable",
+  other: "Other",
+};
+
 const PROCEDURE_FAMILY_META: Record<
   ProcedureTreatmentFamily,
-  {
-    label: string;
-    stripeClass: string;
-    surfaceClass: string;
-    badgeClass: string;
-    chipActiveClass: string;
-    chipIdleClass: string;
-  }
+  { icon: LucideIcon; className: string }
 > = {
   restorative: {
-    label: "Restorative",
-    stripeClass: "bg-sky-500",
-    surfaceClass: "border-sky-200/80 bg-sky-50/60",
-    badgeClass: "border-sky-200 bg-sky-50 text-sky-800",
-    chipActiveClass: "border-sky-600 bg-sky-600 text-white hover:bg-sky-600",
-    chipIdleClass: "border-sky-200 text-sky-800 hover:bg-sky-50",
+    icon: Sparkles,
+    className: "border-cyan-200 bg-cyan-50 text-cyan-800 dark:border-cyan-900 dark:bg-cyan-950/40 dark:text-cyan-300",
   },
   surgery: {
-    label: "Surgery",
-    stripeClass: "bg-zinc-900",
-    surfaceClass: "border-zinc-300/80 bg-zinc-50/80",
-    badgeClass: "border-zinc-300 bg-zinc-100 text-zinc-900",
-    chipActiveClass: "border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-900",
-    chipIdleClass: "border-zinc-300 text-zinc-800 hover:bg-zinc-50",
+    icon: Scissors,
+    className: "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300",
   },
   endo: {
-    label: "Endo",
-    stripeClass: "bg-amber-400",
-    surfaceClass: "border-amber-200/80 bg-amber-50/70",
-    badgeClass: "border-amber-200 bg-amber-50 text-amber-900",
-    chipActiveClass: "border-amber-400 bg-amber-400 text-amber-950 hover:bg-amber-400",
-    chipIdleClass: "border-amber-200 text-amber-900 hover:bg-amber-50",
+    icon: Activity,
+    className: "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300",
   },
   removable: {
-    label: "Removable",
-    stripeClass: "bg-violet-500",
-    surfaceClass: "border-violet-200/80 bg-violet-50/70",
-    badgeClass: "border-violet-200 bg-violet-50 text-violet-800",
-    chipActiveClass: "border-violet-600 bg-violet-600 text-white hover:bg-violet-600",
-    chipIdleClass: "border-violet-200 text-violet-800 hover:bg-violet-50",
+    icon: Layers3,
+    className: "border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300",
   },
   other: {
-    label: "Other",
-    stripeClass: "bg-slate-400",
-    surfaceClass: "border-slate-200/80 bg-slate-50/70",
-    badgeClass: "border-slate-200 bg-slate-50 text-slate-700",
-    chipActiveClass: "border-slate-600 bg-slate-600 text-white hover:bg-slate-600",
-    chipIdleClass: "border-slate-200 text-slate-700 hover:bg-slate-50",
+    icon: Shapes,
+    className: "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300",
   },
 };
 
@@ -139,6 +151,8 @@ function createEmptyMaterial(kind: ProcedureMaterialKind = "supply"): ProcedureM
     name: "",
     kind,
     cost_cents: 0,
+    catalog_item_id: null,
+    quantity_used: 1,
   };
 }
 
@@ -224,9 +238,25 @@ function normalizeProcedureDraft(procedure: ProcedureDraftLike): ProcedureDraft 
     family: procedure.family ?? inferProcedureFamily(procedure.name),
     visits: procedure.visits.map((visit) => ({
       ...visit,
-      items: visit.items.map((item) => ({ ...item })),
+      items: visit.items.map((item) => ({
+        ...item,
+        catalog_item_id: item.catalog_item_id ?? null,
+        quantity_used: item.quantity_used ?? 1,
+      })),
     })),
   };
+}
+
+function applyInitialPreferredOrder(procedures: ProcedureDraft[]) {
+  const preferred = INITIAL_PREFERRED_ORDER.map((id) =>
+    procedures.find((procedure) => procedure.id === id),
+  ).filter((procedure): procedure is ProcedureDraft => Boolean(procedure));
+  const preferredIds = new Set(preferred.map((procedure) => procedure.id));
+
+  return [
+    ...preferred,
+    ...procedures.filter((procedure) => !preferredIds.has(procedure.id)),
+  ];
 }
 
 function isProcedureDraftArray(value: unknown): value is ProcedureDraftLike[] {
@@ -248,36 +278,55 @@ export function ProcedureCostWorkspace({
   overheadPerOperatoryHourCents,
   fullCapacityOverheadRateCents,
   overheadSetupRequired,
+  supplyCatalog,
 }: ProcedureCostWorkspaceProps) {
   const [procedures, setProcedures] = useState<ProcedureDraft[]>(
-    DEFAULT_PROCEDURE_DRAFTS.map(normalizeProcedureDraft),
+    applyInitialPreferredOrder(DEFAULT_PROCEDURE_DRAFTS.map(normalizeProcedureDraft)),
   );
-  const [expandedIds, setExpandedIds] = useState<string[]>(
-    DEFAULT_PROCEDURE_DRAFTS.map((procedure) => procedure.id),
+  const [selectedProcedureId, setSelectedProcedureId] = useState(
+    DEFAULT_PROCEDURE_DRAFTS[0]?.id ?? "",
+  );
+  const [selectedVisitId, setSelectedVisitId] = useState(
+    DEFAULT_PROCEDURE_DRAFTS[0]?.visits[0]?.id ?? "",
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [familyFilter, setFamilyFilter] = useState<ProcedureFamilyFilter>("all");
-  const [sortBy, setSortBy] = useState<"cost_desc" | "name_asc" | "hours_desc">(
-    "cost_desc",
-  );
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [editingMaterialId, setEditingMaterialId] = useState<string | null>(null);
+  const [catalogPickerOpen, setCatalogPickerOpen] = useState(false);
+  const [catalogQuery, setCatalogQuery] = useState("");
   const [hasHydrated, setHasHydrated] = useState(false);
+  const procedureSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
 
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (!saved) {
-        setHasHydrated(true);
-        return;
-      }
+      if (!saved) return;
 
       const parsed = JSON.parse(saved);
       if (isProcedureDraftArray(parsed) && parsed.length > 0) {
         const normalized = parsed.map(normalizeProcedureDraft);
-        setProcedures(normalized);
-        setExpandedIds(normalized.map((procedure) => procedure.id));
+        const shouldApplyPreferredOrder =
+          !window.localStorage.getItem(ORDER_MIGRATION_KEY);
+        const ordered = shouldApplyPreferredOrder
+          ? applyInitialPreferredOrder(normalized)
+          : normalized;
+
+        if (shouldApplyPreferredOrder) {
+          window.localStorage.setItem(ORDER_MIGRATION_KEY, "complete");
+        }
+
+        setProcedures(ordered);
+        setSelectedProcedureId(ordered[0].id);
+        setSelectedVisitId(ordered[0].visits[0]?.id ?? "");
       }
     } catch {
-      // ignore malformed local preview state
+      // Ignore malformed local preview state.
     } finally {
       setHasHydrated(true);
     }
@@ -288,93 +337,136 @@ export function ProcedureCostWorkspace({
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(procedures));
   }, [hasHydrated, procedures]);
 
-  const procedureCards = useMemo(
+  const catalogById = useMemo(
+    () => new Map(supplyCatalog.map((item) => [item.id, item])),
+    [supplyCatalog],
+  );
+  const resolvedProcedures = useMemo(
     () =>
       procedures.map((procedure) => ({
+        ...procedure,
+        visits: procedure.visits.map((visit) => ({
+          ...visit,
+          items: visit.items.map((item) => {
+            const catalogItem = item.catalog_item_id
+              ? catalogById.get(item.catalog_item_id)
+              : null;
+            if (!catalogItem) return item;
+            return {
+              ...item,
+              name: catalogItem.name,
+              cost_cents: Math.round(
+                (catalogItem.current_unit_cost_cents ?? 0) * (item.quantity_used ?? 1),
+              ),
+            };
+          }),
+        })),
+      })),
+    [catalogById, procedures],
+  );
+  const procedureCards = useMemo(
+    () =>
+      resolvedProcedures.map((procedure) => ({
         procedure,
         breakdown: calculateProcedureCost(procedure, overheadPerOperatoryHourCents),
       })),
-    [procedures, overheadPerOperatoryHourCents],
+    [overheadPerOperatoryHourCents, resolvedProcedures],
   );
+  const filteredSupplyCatalog = useMemo(() => {
+    const query = catalogQuery.trim().toLowerCase();
+    return supplyCatalog
+      .filter((item) => item.current_unit_cost_cents !== null)
+      .filter((item) =>
+        !query
+          ? true
+          : `${item.name} ${item.vendor} ${item.unit_label}`
+              .toLowerCase()
+              .includes(query),
+      )
+      .sort((left, right) => left.name.localeCompare(right.name));
+  }, [catalogQuery, supplyCatalog]);
 
   const filteredProcedureCards = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
-    const filtered = procedureCards.filter(({ procedure }) => {
-      if (familyFilter !== "all" && procedure.family !== familyFilter) {
-        return false;
-      }
+    return procedureCards.filter(({ procedure }) => {
+        if (familyFilter !== "all" && procedure.family !== familyFilter) return false;
+        if (!query) return true;
 
-      if (!query) return true;
+        return [
+          procedure.name,
+          procedure.code ?? "",
+          PROCEDURE_FAMILY_LABELS[procedure.family],
+          ...procedure.visits.map((visit) => visit.label),
+          ...procedure.visits.flatMap((visit) => visit.items.map((item) => item.name)),
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+      });
+  }, [familyFilter, procedureCards, searchQuery]);
 
-      const haystack = [
-        procedure.name,
-        procedure.code ?? "",
-        procedure.notes ?? "",
-        PROCEDURE_FAMILY_META[procedure.family].label,
-        ...procedure.visits.map((visit) => visit.label),
-        ...procedure.visits.flatMap((visit) => visit.items.map((item) => item.name)),
-      ]
-        .join(" ")
-        .toLowerCase();
-
-      return haystack.includes(query);
-    });
-
-    return filtered.sort((left, right) => {
-      if (sortBy === "name_asc") {
-        return left.procedure.name.localeCompare(right.procedure.name);
-      }
-
-      if (sortBy === "hours_desc") {
-        return right.breakdown.total_clinical_hours - left.breakdown.total_clinical_hours;
-      }
-
-      return right.breakdown.total_cost_cents - left.breakdown.total_cost_cents;
-    });
-  }, [familyFilter, procedureCards, searchQuery, sortBy]);
-
-  const totals = useMemo(() => {
-    const direct = procedureCards.reduce(
-      (sum, entry) => sum + entry.breakdown.direct_cost_cents,
-      0,
-    );
-    const overhead = procedureCards.reduce(
-      (sum, entry) => sum + entry.breakdown.overhead_cost_cents,
-      0,
-    );
-    const total = procedureCards.reduce(
-      (sum, entry) => sum + entry.breakdown.total_cost_cents,
-      0,
-    );
-    const highest = procedureCards.reduce(
-      (current, entry) =>
-        !current || entry.breakdown.total_cost_cents > current.breakdown.total_cost_cents
-          ? entry
-          : current,
-      null as (typeof procedureCards)[number] | null,
-    );
-
-    return {
-      direct,
-      overhead,
-      total,
-      average: procedureCards.length > 0 ? Math.round(total / procedureCards.length) : 0,
-      highest,
-    };
-  }, [procedureCards]);
+  const selectedCard =
+    procedureCards.find(({ procedure }) => procedure.id === selectedProcedureId) ??
+    procedureCards[0] ??
+    null;
+  const selectedProcedure = selectedCard?.procedure ?? null;
+  const selectedBreakdown = selectedCard?.breakdown ?? null;
+  const selectedVisit =
+    selectedProcedure?.visits.find((visit) => visit.id === selectedVisitId) ??
+    selectedProcedure?.visits[0] ??
+    null;
+  const selectedVisitTotals = selectedVisit ? calculateVisitTotals(selectedVisit) : null;
+  const selectedVisitOverheadCents = Math.round(
+    (selectedVisit?.clinical_hours ?? 0) * (overheadPerOperatoryHourCents ?? 0),
+  );
 
   useEffect(() => {
-    if (!searchQuery.trim() && familyFilter === "all") return;
-    setExpandedIds((current) => [
-      ...new Set([...current, ...filteredProcedureCards.map(({ procedure }) => procedure.id)]),
-    ]);
-  }, [familyFilter, filteredProcedureCards, searchQuery]);
+    if (!selectedProcedure && procedures[0]) {
+      setSelectedProcedureId(procedures[0].id);
+      setSelectedVisitId(procedures[0].visits[0]?.id ?? "");
+      return;
+    }
 
-  function toggleProcedure(id: string) {
-    setExpandedIds((current) =>
-      current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id],
-    );
+    if (
+      selectedProcedure &&
+      !selectedProcedure.visits.some((visit) => visit.id === selectedVisitId)
+    ) {
+      setSelectedVisitId(selectedProcedure.visits[0]?.id ?? "");
+    }
+  }, [procedures, selectedProcedure, selectedVisitId]);
+
+  function selectProcedure(procedure: ProcedureDraft) {
+    setSelectedProcedureId(procedure.id);
+    setSelectedVisitId(procedure.visits[0]?.id ?? "");
+    setEditingDetails(false);
+    setEditingMaterialId(null);
+  }
+
+  function handleProcedureDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const visibleIds = filteredProcedureCards.map(({ procedure }) => procedure.id);
+    const oldIndex = visibleIds.indexOf(String(active.id));
+    const newIndex = visibleIds.indexOf(String(over.id));
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reorderedVisibleIds = arrayMove(visibleIds, oldIndex, newIndex);
+    const visibleIdSet = new Set(visibleIds);
+
+    setProcedures((current) => {
+      const proceduresById = new Map(
+        current.map((procedure) => [procedure.id, procedure]),
+      );
+      let visibleIndex = 0;
+
+      return current.map((procedure) => {
+        if (!visibleIdSet.has(procedure.id)) return procedure;
+        const nextId = reorderedVisibleIds[visibleIndex++];
+        return proceduresById.get(nextId) ?? procedure;
+      });
+    });
   }
 
   function updateProcedure(procedureId: string, updates: Partial<ProcedureDraft>) {
@@ -434,766 +526,892 @@ export function ProcedureCostWorkspace({
   function addProcedure() {
     const procedure = createEmptyProcedure();
     setProcedures((current) => [...current, procedure]);
-    setExpandedIds((current) => [...current, procedure.id]);
+    selectProcedure(procedure);
+    setEditingDetails(true);
   }
 
-  function removeProcedure(procedureId: string) {
-    setProcedures((current) => current.filter((procedure) => procedure.id !== procedureId));
-    setExpandedIds((current) => current.filter((id) => id !== procedureId));
-  }
-
-  function duplicateProcedure(procedureId: string) {
-    const source = procedures.find((procedure) => procedure.id === procedureId);
-    if (!source) return;
-    const cloned = cloneProcedureDraft(source);
+  function duplicateProcedure() {
+    if (!selectedProcedure) return;
+    const cloned = cloneProcedureDraft(selectedProcedure);
     setProcedures((current) => [...current, cloned]);
-    setExpandedIds((current) => [...current, cloned.id]);
+    selectProcedure(cloned);
   }
 
-  function addVisit(procedureId: string) {
+  function removeProcedure() {
+    if (!selectedProcedure) return;
+    const remaining = procedures.filter((procedure) => procedure.id !== selectedProcedure.id);
+    setProcedures(remaining);
+    setSelectedProcedureId(remaining[0]?.id ?? "");
+    setSelectedVisitId(remaining[0]?.visits[0]?.id ?? "");
+  }
+
+  function addVisit() {
+    if (!selectedProcedure) return;
+    const visit = createEmptyVisit(`${selectedProcedure.visits.length + 1} - Visit`);
     setProcedures((current) =>
       current.map((procedure) =>
-        procedure.id === procedureId
-          ? {
-              ...procedure,
-              visits: [
-                ...procedure.visits,
-                createEmptyVisit(`${procedure.visits.length + 1} - Visit`),
-              ],
-            }
+        procedure.id === selectedProcedure.id
+          ? { ...procedure, visits: [...procedure.visits, visit] }
           : procedure,
       ),
     );
+    setSelectedVisitId(visit.id);
   }
 
-  function removeVisit(procedureId: string, visitId: string) {
-    setProcedures((current) =>
-      current.map((procedure) =>
-        procedure.id === procedureId
-          ? {
-              ...procedure,
-              visits: procedure.visits.filter((visit) => visit.id !== visitId),
-            }
-          : procedure,
-      ),
-    );
+  function removeVisit() {
+    if (!selectedProcedure || !selectedVisit) return;
+    const remaining = selectedProcedure.visits.filter((visit) => visit.id !== selectedVisit.id);
+    updateProcedure(selectedProcedure.id, { visits: remaining });
+    setSelectedVisitId(remaining[0]?.id ?? "");
   }
 
-  function addMaterial(procedureId: string, visitId: string, kind: ProcedureMaterialKind) {
-    setProcedures((current) =>
-      current.map((procedure) =>
-        procedure.id === procedureId
-          ? {
-              ...procedure,
-              visits: procedure.visits.map((visit) =>
-                visit.id === visitId
-                  ? { ...visit, items: [...visit.items, createEmptyMaterial(kind)] }
-                  : visit,
-              ),
-            }
-          : procedure,
-      ),
-    );
+  function addMaterial(kind: ProcedureMaterialKind) {
+    if (!selectedProcedure || !selectedVisit) return;
+    const material = createEmptyMaterial(kind);
+    updateVisit(selectedProcedure.id, selectedVisit.id, {
+      items: [...selectedVisit.items, material],
+    });
+    setEditingMaterialId(material.id);
   }
 
-  function removeMaterial(procedureId: string, visitId: string, materialId: string) {
-    setProcedures((current) =>
-      current.map((procedure) =>
-        procedure.id === procedureId
-          ? {
-              ...procedure,
-              visits: procedure.visits.map((visit) =>
-                visit.id === visitId
-                  ? {
-                      ...visit,
-                      items: visit.items.filter((item) => item.id !== materialId),
-                    }
-                  : visit,
-              ),
-            }
-          : procedure,
-      ),
-    );
+  function addCatalogMaterial(catalogItem: SupplyCatalogItem) {
+    if (!selectedProcedure || !selectedVisit) return;
+    const material: ProcedureMaterialDraft = {
+      id: createLocalId("item"),
+      name: catalogItem.name,
+      kind: "supply",
+      cost_cents: catalogItem.current_unit_cost_cents ?? 0,
+      catalog_item_id: catalogItem.id,
+      quantity_used: 1,
+    };
+    updateVisit(selectedProcedure.id, selectedVisit.id, {
+      items: [...selectedVisit.items, material],
+    });
+    setEditingMaterialId(material.id);
+    setCatalogPickerOpen(false);
+    setCatalogQuery("");
+  }
+
+  function removeMaterial(materialId: string) {
+    if (!selectedProcedure || !selectedVisit) return;
+    updateVisit(selectedProcedure.id, selectedVisit.id, {
+      items: selectedVisit.items.filter((item) => item.id !== materialId),
+    });
+    if (editingMaterialId === materialId) setEditingMaterialId(null);
   }
 
   function resetExamples() {
-    const reset = DEFAULT_PROCEDURE_DRAFTS.map(normalizeProcedureDraft);
+    const reset = applyInitialPreferredOrder(
+      DEFAULT_PROCEDURE_DRAFTS.map(normalizeProcedureDraft),
+    );
     setProcedures(reset);
-    setExpandedIds(reset.map((procedure) => procedure.id));
+    setSelectedProcedureId(reset[0]?.id ?? "");
+    setSelectedVisitId(reset[0]?.visits[0]?.id ?? "");
+    setEditingDetails(false);
+    setEditingMaterialId(null);
     window.localStorage.removeItem(STORAGE_KEY);
   }
 
-  function expandVisibleProcedures() {
-    setExpandedIds((current) => [
-      ...new Set([...current, ...filteredProcedureCards.map(({ procedure }) => procedure.id)]),
-    ]);
+  if (!selectedProcedure || !selectedBreakdown) {
+    return (
+      <div className="rounded-lg border border-dashed px-6 py-16 text-center">
+        <p className="text-sm text-muted-foreground">No procedures are modeled yet.</p>
+        <Button className="mt-4" onClick={addProcedure}>
+          <Plus className="h-4 w-4" />
+          Add procedure
+        </Button>
+      </div>
+    );
   }
-
-  function collapseVisibleProcedures() {
-    const visibleIds = new Set(filteredProcedureCards.map(({ procedure }) => procedure.id));
-    setExpandedIds((current) => current.filter((id) => !visibleIds.has(id)));
-  }
-
-  const visibleProcedureIds = filteredProcedureCards.map(({ procedure }) => procedure.id);
-  const allVisibleExpanded =
-    visibleProcedureIds.length > 0 &&
-    visibleProcedureIds.every((id) => expandedIds.includes(id));
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">Admin only</Badge>
-            <Badge variant="secondary">Visit-based model</Badge>
-          </div>
-          <p className="max-w-3xl text-sm text-muted-foreground">
-            Model each procedure the same way you read the sheet: total cost up top, visit
-            costs in the middle, and the actual supplies and labs inside each appointment.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={resetExamples}>
-            <RotateCcw className="h-4 w-4" />
-            Reset Examples
-          </Button>
-          <Button onClick={addProcedure}>
-            <Plus className="h-4 w-4" />
-            Add Procedure
-          </Button>
-        </div>
-      </div>
-
+    <div className="overflow-hidden rounded-lg border border-t-2 border-t-cyan-600/70 bg-background shadow-sm">
       {overheadSetupRequired ? (
-        <Card className="border-amber-300/70 bg-amber-50/60">
-          <CardHeader>
-            <CardTitle className="text-base">Overhead Is Still In Preview Mode</CardTitle>
-            <CardDescription className="text-amber-900/80">
-              Procedure costing can still use the current overhead rate for planning. Saving the
-              overhead side live still depends on applying the overhead migration.
-            </CardDescription>
-          </CardHeader>
-        </Card>
+        <div className="border-b border-amber-300/70 bg-amber-50 px-5 py-3 text-sm text-amber-950">
+          Overhead is still using the current planning rate. Apply the overhead migration before
+          treating these totals as final.
+        </div>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard
-          icon={<Calculator className="h-4 w-4" />}
-          label="Current overhead rate"
-          value={formatCurrencyFromCents(overheadPerOperatoryHourCents)}
-          detail={`Full capacity reference: ${formatCurrencyFromCents(fullCapacityOverheadRateCents)}`}
-        />
-        <SummaryCard
-          icon={<DollarSign className="h-4 w-4" />}
-          label="Average modeled cost"
-          value={formatCurrencyFromCents(totals.average)}
-          detail={`${procedureCards.length} editable procedure${procedureCards.length === 1 ? "" : "s"}`}
-        />
-        <SummaryCard
-          icon={<FlaskConical className="h-4 w-4" />}
-          label="Direct cost pool"
-          value={formatCurrencyFromCents(totals.direct)}
-          detail="All supply and lab rows combined"
-        />
-        <SummaryCard
-          icon={<ClipboardList className="h-4 w-4" />}
-          label="Highest modeled cost"
-          value={
-            totals.highest
-              ? formatCurrencyFromCents(totals.highest.breakdown.total_cost_cents)
-              : "—"
-          }
-          detail={
-            totals.highest
-              ? `${totals.highest.procedure.name} • ${PROCEDURE_FAMILY_META[totals.highest.procedure.family].label}`
-              : "Add a procedure to begin"
-          }
-        />
-      </div>
+      <div className="grid min-h-[720px] lg:grid-cols-[280px_minmax(0,1fr)]">
+        <aside className="border-b bg-muted/10 lg:border-r lg:border-b-0">
+          <div className="border-b p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-md bg-cyan-50 text-cyan-700 dark:bg-cyan-950/50 dark:text-cyan-300">
+                  <ListTree className="h-4 w-4" />
+                </span>
+                <h2 className="font-semibold">Procedure navigator</h2>
+              </div>
+              <Button
+                size="icon-sm"
+                variant="outline"
+                onClick={addProcedure}
+                aria-label="Add procedure"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Procedures</CardTitle>
-          <CardDescription>
-            Keep the page quick to scan, then open a procedure only when you want the visit-by-visit
-            logic underneath it.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-3 rounded-2xl border bg-muted/15 p-3">
-            <div className="flex items-center gap-2 rounded-xl border bg-background px-3">
-              <Search className="h-4 w-4 text-muted-foreground" />
+            <div className="flex items-center gap-2 rounded-md border bg-background px-3">
+              <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
               <Input
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search procedures, visits, or supplies"
-                className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search procedures"
+                className="h-9 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
               />
             </div>
 
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-              <div className="space-y-3 xl:flex-1">
-                <div className="flex flex-wrap gap-2">
-                  <FamilyFilterChip
-                    active={familyFilter === "all"}
-                    onClick={() => setFamilyFilter("all")}
-                    className=""
-                  >
-                    All procedures
-                  </FamilyFilterChip>
-                  {PROCEDURE_FAMILY_OPTIONS.map((option) => (
-                    <FamilyFilterChip
-                      key={option.value}
-                      active={familyFilter === option.value}
-                      onClick={() => setFamilyFilter(option.value)}
-                      className={
-                        familyFilter === option.value
-                          ? PROCEDURE_FAMILY_META[option.value].chipActiveClass
-                          : PROCEDURE_FAMILY_META[option.value].chipIdleClass
-                      }
-                    >
-                      {option.label}
-                    </FamilyFilterChip>
-                  ))}
-                </div>
-
-                <div className="text-sm text-muted-foreground">
-                  {filteredProcedureCards.length} result
-                  {filteredProcedureCards.length === 1 ? "" : "s"}
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-                {filteredProcedureCards.length > 1 ? (
-                  allVisibleExpanded ? (
-                    <Button variant="outline" onClick={collapseVisibleProcedures}>
-                      Collapse all
-                    </Button>
-                  ) : (
-                    <Button variant="outline" onClick={expandVisibleProcedures}>
-                      Expand all
-                    </Button>
-                  )
-                ) : null}
-
-                <Select
-                  value={sortBy}
-                  onValueChange={(value) => {
-                    if (value === "cost_desc" || value === "name_asc" || value === "hours_desc") {
-                      setSortBy(value);
-                    }
-                  }}
-                >
-                  <SelectTrigger className="w-[190px] bg-background">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cost_desc">Highest cost first</SelectItem>
-                    <SelectItem value="name_asc">Name A-Z</SelectItem>
-                    <SelectItem value="hours_desc">Most hours first</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+            <Select
+              value={familyFilter}
+              onValueChange={(value) => setFamilyFilter(value as ProcedureFamilyFilter)}
+            >
+              <SelectTrigger className="mt-2 w-full bg-background">
+                <SelectValue>
+                  {familyFilter === "all"
+                    ? "All families"
+                    : PROCEDURE_FAMILY_LABELS[familyFilter]}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All families</SelectItem>
+                {PROCEDURE_FAMILY_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          {filteredProcedureCards.map(({ procedure, breakdown }) => {
-            const expanded = expandedIds.includes(procedure.id);
-            const familyMeta = PROCEDURE_FAMILY_META[procedure.family];
-            const isLargest =
-              totals.highest?.procedure.id === procedure.id && breakdown.total_cost_cents > 0;
+          <DndContext
+            id="procedure-navigator-dnd"
+            sensors={procedureSensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleProcedureDragEnd}
+          >
+            <SortableContext
+              items={filteredProcedureCards.map(({ procedure }) => procedure.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="max-h-[620px] overflow-y-auto">
+                {filteredProcedureCards.map(({ procedure, breakdown }) => (
+                  <SortableProcedureRow
+                    key={procedure.id}
+                    procedure={procedure}
+                    totalCostCents={breakdown.total_cost_cents}
+                    active={procedure.id === selectedProcedure.id}
+                    onSelect={() => selectProcedure(procedure)}
+                  />
+                ))}
 
-            return (
-              <div
-                key={procedure.id}
-                className={cn(
-                  "overflow-hidden rounded-2xl border bg-card transition-colors",
-                  expanded ? "border-primary/30" : "border-border",
-                )}
-              >
-                <div className={cn("h-1.5", familyMeta.stripeClass)} />
+                {filteredProcedureCards.length === 0 ? (
+                  <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+                    No matching procedures.
+                  </p>
+                ) : null}
+              </div>
+            </SortableContext>
+          </DndContext>
+        </aside>
 
-                <div className="p-4">
-                  <div className="flex items-start gap-3">
-                    <button
-                      type="button"
-                      onClick={() => toggleProcedure(procedure.id)}
-                      className="flex min-w-0 flex-1 items-start gap-3 text-left"
-                    >
-                      <div className="mt-1 text-muted-foreground">
-                        {expanded ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4" />
-                        )}
-                      </div>
-
-                      <div className="min-w-0 flex-1 space-y-3">
-                        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-                          <div className="min-w-0 space-y-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <ProcedureFamilyBadge family={procedure.family} />
-                              <div className="truncate text-lg font-semibold">{procedure.name}</div>
-                              {procedure.code ? (
-                                <Badge variant="outline">{procedure.code}</Badge>
-                              ) : null}
-                              <Badge variant="secondary">
-                                {breakdown.visit_count} visit
-                                {breakdown.visit_count === 1 ? "" : "s"}
-                              </Badge>
-                              {isLargest ? <Badge variant="outline">Highest cost</Badge> : null}
-                            </div>
-
-                            <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
-                              <span>{formatHours(breakdown.total_clinical_hours)} clinical hours</span>
-                              <span>•</span>
-                              <span>{formatCurrencyFromCents(breakdown.supply_cost_cents)} supplies</span>
-                              <span>•</span>
-                              <span>{formatCurrencyFromCents(breakdown.lab_cost_cents)} lab</span>
-                              <span>•</span>
-                              <span>{formatCurrencyFromCents(breakdown.overhead_cost_cents)} overhead</span>
-                            </div>
-                          </div>
-
-                          <div className="grid min-w-full gap-2 sm:min-w-[420px] sm:grid-cols-4 xl:min-w-[460px]">
-                            <SnapshotMetric
-                              label="Direct"
-                              value={formatCurrencyFromCents(breakdown.direct_cost_cents)}
-                            />
-                            <SnapshotMetric
-                              label="Overhead"
-                              value={formatCurrencyFromCents(breakdown.overhead_cost_cents)}
-                            />
-                            <SnapshotMetric
-                              label="Total"
-                              value={formatCurrencyFromCents(breakdown.total_cost_cents)}
-                              emphasis
-                            />
-                            <SnapshotMetric
-                              label="Cost / hr"
-                              value={formatCurrencyFromCents(breakdown.cost_per_hour_cents)}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          {procedure.visits.map((visit) => {
-                            const visitTotals = calculateVisitTotals(visit);
-                            return (
-                              <div
-                                key={visit.id}
-                                className={cn(
-                                  "rounded-full border px-3 py-1 text-xs text-muted-foreground",
-                                  familyMeta.surfaceClass,
-                                )}
-                              >
-                                <span className="font-medium text-foreground">{visit.label}</span>
-                                <span className="mx-1 text-muted-foreground">•</span>
-                                <span>{formatCurrencyFromCents(visitTotals.direct_cost_cents)}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </button>
-
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="icon-sm"
-                        onClick={() => duplicateProcedure(procedure.id)}
-                        aria-label={`Duplicate ${procedure.name}`}
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="icon-sm"
-                        onClick={() => removeProcedure(procedure.id)}
-                        aria-label={`Remove ${procedure.name}`}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  {expanded ? (
-                    <div className="mt-4 border-t pt-4">
-                      <div className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_220px_180px]">
-                        <Field
-                          label="Procedure name"
-                          value={procedure.name}
-                          onChange={(value) => {
-                            updateProcedure(procedure.id, {
-                              name: value,
-                              family: inferProcedureFamily(value),
-                            });
-                          }}
-                        />
-                        <div className="space-y-2">
-                          <Label>Treatment family</Label>
-                          <Select
-                            value={procedure.family}
-                            onValueChange={(value) =>
-                              updateProcedure(procedure.id, {
-                                family: value as ProcedureTreatmentFamily,
-                              })
-                            }
-                          >
-                            <SelectTrigger className="w-full bg-background">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {PROCEDURE_FAMILY_OPTIONS.map((option) => (
-                                <SelectItem key={option.value} value={option.value}>
-                                  {option.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <Field
-                          label="Code"
-                          value={procedure.code ?? ""}
-                          onChange={(value) =>
-                            updateProcedure(procedure.id, {
-                              code: value.trim() ? value : null,
-                            })
-                          }
-                        />
-                      </div>
-
-                      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                        <MiniMetric
-                          label="Visits"
-                          value={String(breakdown.visit_count)}
-                        />
-                        <MiniMetric
-                          label="Clinical hours"
-                          value={formatHours(breakdown.total_clinical_hours)}
-                        />
-                        <MiniMetric
-                          label="Supplies"
-                          value={formatCurrencyFromCents(breakdown.supply_cost_cents)}
-                        />
-                        <MiniMetric
-                          label="Lab"
-                          value={formatCurrencyFromCents(breakdown.lab_cost_cents)}
-                        />
-                        <MiniMetric
-                          label="Modeled total"
-                          value={formatCurrencyFromCents(breakdown.total_cost_cents)}
-                        />
-                      </div>
-
-                      <div className="mt-5 space-y-4">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                          <div>
-                            <div className="font-medium">Visit Breakdown</div>
-                            <p className="text-sm text-muted-foreground">
-                              Keep each appointment readable first, then edit the supplies and labs
-                              inside it.
-                            </p>
-                          </div>
-                          <Button variant="outline" onClick={() => addVisit(procedure.id)}>
-                            <Plus className="h-4 w-4" />
-                            Visit
-                          </Button>
-                        </div>
-
-                        {procedure.visits.map((visit) => {
-                          const visitTotals = calculateVisitTotals(visit);
-                          const familySurface = PROCEDURE_FAMILY_META[procedure.family].surfaceClass;
-
-                          return (
-                            <div
-                              key={visit.id}
-                              className={cn("rounded-2xl border", familySurface)}
-                            >
-                              <div className="border-b border-border/70 px-4 py-4">
-                                <div className="grid gap-3 xl:grid-cols-[minmax(0,1.3fr)_160px_140px_140px_140px_auto] xl:items-end">
-                                  <Field
-                                    label="Visit"
-                                    value={visit.label}
-                                    onChange={(value) =>
-                                      updateVisit(procedure.id, visit.id, {
-                                        label: value,
-                                      })
-                                    }
-                                  />
-                                  <NumberField
-                                    label="Hours"
-                                    value={visit.clinical_hours}
-                                    step="0.25"
-                                    onChange={(value) =>
-                                      updateVisit(procedure.id, visit.id, {
-                                        clinical_hours: value,
-                                      })
-                                    }
-                                  />
-                                  <ReadonlyField
-                                    label="Supplies"
-                                    value={formatCurrencyFromCents(visitTotals.supply_cost_cents)}
-                                  />
-                                  <ReadonlyField
-                                    label="Lab"
-                                    value={formatCurrencyFromCents(visitTotals.lab_cost_cents)}
-                                  />
-                                  <ReadonlyField
-                                    label="Visit total"
-                                    value={formatCurrencyFromCents(visitTotals.direct_cost_cents)}
-                                    emphasize
-                                  />
-                                  <div className="flex items-end xl:justify-end">
-                                    <Button
-                                      variant="outline"
-                                      size="icon-sm"
-                                      onClick={() => removeVisit(procedure.id, visit.id)}
-                                      aria-label={`Remove ${visit.label}`}
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </div>
-                                </div>
-
-                                <div className="mt-3 flex flex-wrap items-center gap-2">
-                                  <Badge variant="secondary">
-                                    {visit.items.length} item{visit.items.length === 1 ? "" : "s"}
-                                  </Badge>
-                                  <Badge variant="outline">
-                                    {visit.items.filter((item) => item.kind === "supply").length} supplies
-                                  </Badge>
-                                  <Badge variant="outline">
-                                    {visit.items.filter((item) => item.kind === "lab").length} lab
-                                  </Badge>
-                                </div>
-                              </div>
-
-                              <div className="space-y-3 px-4 py-4">
-                                <div className="hidden grid-cols-[minmax(0,1fr)_140px_140px_44px] gap-3 px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground md:grid">
-                                  <div>Service</div>
-                                  <div>Type</div>
-                                  <div>Cost</div>
-                                  <div />
-                                </div>
-
-                                {visit.items.map((item) => (
-                                  <div
-                                    key={item.id}
-                                    className={cn(
-                                      "grid gap-3 rounded-xl border bg-background p-3 md:grid-cols-[minmax(0,1fr)_140px_140px_44px] md:items-end",
-                                      item.kind === "lab" ? "border-amber-200/80" : "border-border",
-                                    )}
-                                  >
-                                    <div className="space-y-2">
-                                      <Label className="md:hidden">Service</Label>
-                                      <Input
-                                        value={item.name}
-                                        onChange={(e) =>
-                                          updateMaterial(procedure.id, visit.id, item.id, {
-                                            name: e.target.value,
-                                          })
-                                        }
-                                        placeholder={item.kind === "lab" ? "Lab service" : "Supply"}
-                                      />
-                                    </div>
-
-                                    <div className="space-y-2">
-                                      <Label className="md:hidden">Type</Label>
-                                      <Select
-                                        value={item.kind}
-                                        onValueChange={(value) =>
-                                          updateMaterial(procedure.id, visit.id, item.id, {
-                                            kind: value as ProcedureMaterialKind,
-                                          })
-                                        }
-                                      >
-                                        <SelectTrigger className="w-full bg-background">
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="supply">Supply</SelectItem>
-                                          <SelectItem value="lab">Lab</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                      <Label className="md:hidden">Cost</Label>
-                                      <DollarAmountInput
-                                        cents={item.cost_cents}
-                                        onCentsChange={(costCents) =>
-                                          updateMaterial(procedure.id, visit.id, item.id, {
-                                            cost_cents: costCents,
-                                          })
-                                        }
-                                      />
-                                    </div>
-
-                                    <div className="flex items-end md:justify-end">
-                                      <Button
-                                        variant="outline"
-                                        size="icon-sm"
-                                        onClick={() => removeMaterial(procedure.id, visit.id, item.id)}
-                                        aria-label={`Remove ${item.name || "item"}`}
-                                      >
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                      </Button>
-                                    </div>
-                                  </div>
-                                ))}
-
-                                {visit.items.length === 0 ? (
-                                  <div className="rounded-xl border border-dashed px-4 py-5 text-sm text-muted-foreground">
-                                    No supplies or labs yet for this visit.
-                                  </div>
-                                ) : null}
-
-                                <div className="flex flex-wrap gap-2">
-                                  <Button
-                                    variant="outline"
-                                    onClick={() => addMaterial(procedure.id, visit.id, "supply")}
-                                  >
-                                    <Plus className="h-4 w-4" />
-                                    Supply
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    onClick={() => addMaterial(procedure.id, visit.id, "lab")}
-                                  >
-                                    <Plus className="h-4 w-4" />
-                                    Lab
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-
-                        {procedure.visits.length === 0 ? (
-                          <div className="rounded-xl border border-dashed px-4 py-5 text-sm text-muted-foreground">
-                            No visits yet for this procedure.
-                          </div>
-                        ) : null}
-                      </div>
-
-                      <div className="mt-5 space-y-2">
-                        <Label>Notes</Label>
-                        <Textarea
-                          rows={3}
-                          value={procedure.notes ?? ""}
-                          onChange={(e) =>
-                            updateProcedure(procedure.id, {
-                              notes: e.target.value ? e.target.value : null,
-                            })
-                          }
-                          placeholder="Assumptions, reminders, or anything worth keeping with this procedure."
-                        />
-                      </div>
-                    </div>
+        <section className="min-w-0">
+          <div className="border-b px-5 py-5 xl:px-7">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-3xl font-semibold">{selectedProcedure.name}</h1>
+                  {selectedProcedure.code ? (
+                    <span className="rounded border px-2 py-0.5 text-xs text-muted-foreground">
+                      {selectedProcedure.code}
+                    </span>
                   ) : null}
                 </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <FamilyBadge family={selectedProcedure.family} />
+                  <span className="text-sm text-muted-foreground">
+                    {selectedBreakdown.visit_count} visit
+                    {selectedBreakdown.visit_count === 1 ? "" : "s"}
+                  </span>
+                </div>
               </div>
-            );
-          })}
 
-          {filteredProcedureCards.length === 0 ? (
-            <div className="rounded-2xl border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
-              No procedures match this search yet.
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={duplicateProcedure}>
+                  <Copy className="h-4 w-4" />
+                  Duplicate
+                </Button>
+                <Button variant="outline" onClick={() => setEditingDetails((current) => !current)}>
+                  {editingDetails ? <X className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
+                  {editingDetails ? "Close details" : "Edit details"}
+                </Button>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  onClick={removeProcedure}
+                  aria-label={`Remove ${selectedProcedure.name}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
-          ) : null}
-        </CardContent>
-      </Card>
+
+            {editingDetails ? (
+              <div className="mt-5 grid gap-4 border-t pt-5 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_220px_160px]">
+                <Field
+                  label="Procedure name"
+                  value={selectedProcedure.name}
+                  onChange={(value) =>
+                    updateProcedure(selectedProcedure.id, {
+                      name: value,
+                      family: inferProcedureFamily(value),
+                    })
+                  }
+                />
+                <div className="space-y-2">
+                  <Label>Treatment family</Label>
+                  <Select
+                    value={selectedProcedure.family}
+                    onValueChange={(value) =>
+                      updateProcedure(selectedProcedure.id, {
+                        family: value as ProcedureTreatmentFamily,
+                      })
+                    }
+                  >
+                    <SelectTrigger className="w-full bg-background">
+                      <SelectValue>
+                        {PROCEDURE_FAMILY_LABELS[selectedProcedure.family]}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PROCEDURE_FAMILY_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Field
+                  label="Code"
+                  value={selectedProcedure.code ?? ""}
+                  onChange={(value) =>
+                    updateProcedure(selectedProcedure.id, {
+                      code: value.trim() ? value : null,
+                    })
+                  }
+                />
+                <div className="space-y-2 md:col-span-2 xl:col-span-3">
+                  <Label>Notes</Label>
+                  <Textarea
+                    rows={2}
+                    value={selectedProcedure.notes ?? ""}
+                    onChange={(event) =>
+                      updateProcedure(selectedProcedure.id, {
+                        notes: event.target.value || null,
+                      })
+                    }
+                    placeholder="Assumptions or reminders for this procedure"
+                  />
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="grid border-b sm:grid-cols-2 xl:grid-cols-5">
+            <CostMetric
+              label="Total modeled cost"
+              value={formatCurrencyFromCents(selectedBreakdown.total_cost_cents)}
+              icon={CircleDollarSign}
+              accentClassName="bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300"
+              panelClassName="bg-sky-50/30 dark:bg-sky-950/10"
+              emphasized
+            />
+            <CostMetric
+              label="Supplies"
+              value={formatCurrencyFromCents(selectedBreakdown.supply_cost_cents)}
+              icon={PackageOpen}
+              accentClassName="bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300"
+            />
+            <CostMetric
+              label="Lab"
+              value={formatCurrencyFromCents(selectedBreakdown.lab_cost_cents)}
+              icon={FlaskConical}
+              accentClassName="bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300"
+            />
+            <CostMetric
+              label="Chair overhead"
+              value={formatCurrencyFromCents(selectedBreakdown.overhead_cost_cents)}
+              detail={`${formatCurrencyFromCents(overheadPerOperatoryHourCents)} / hr`}
+              icon={Clock3}
+              accentClassName="bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+            />
+            <CostMetric
+              label="Cost per hour"
+              value={formatCurrencyFromCents(selectedBreakdown.cost_per_hour_cents)}
+              detail={`Full capacity ${formatCurrencyFromCents(fullCapacityOverheadRateCents)} / hr`}
+              icon={Gauge}
+              accentClassName="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+            />
+          </div>
+
+          <div className="px-5 py-5 xl:px-7">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-medium">Visits</h3>
+              <Button size="sm" variant="outline" onClick={addVisit}>
+                <Plus className="h-4 w-4" />
+                Visit
+              </Button>
+            </div>
+
+            {selectedProcedure.visits.length ? (
+              <div className="grid overflow-hidden rounded-md border md:grid-cols-2 xl:grid-cols-3">
+                {selectedProcedure.visits.map((visit, index) => {
+                  const visitTotals = calculateVisitTotals(visit);
+                  const active = visit.id === selectedVisit?.id;
+                  return (
+                    <button
+                      key={visit.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedVisitId(visit.id);
+                        setEditingMaterialId(null);
+                      }}
+                      className={cn(
+                        "flex min-h-16 items-center gap-3 border-b px-4 py-3 text-left last:border-b-0 md:border-r",
+                        active
+                          ? "bg-cyan-50/60 ring-1 ring-inset ring-cyan-600 dark:bg-cyan-950/20"
+                          : "hover:bg-muted/40",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs",
+                          active ? "bg-cyan-700 text-white" : "bg-muted",
+                        )}
+                      >
+                        {index + 1}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium">{visit.label}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatHours(visit.clinical_hours)} hr ·{" "}
+                          {formatCurrencyFromCents(
+                            visitTotals.direct_cost_cents +
+                              Math.round(
+                                visit.clinical_hours * (overheadPerOperatoryHourCents ?? 0),
+                              ),
+                          )}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+                No visits yet. Add the first visit to begin the recipe.
+              </div>
+            )}
+
+            {selectedVisit && selectedVisitTotals ? (
+              <div className="mt-6 rounded-lg border">
+                <div className="flex flex-col gap-4 border-b px-4 py-4 xl:flex-row xl:items-end xl:justify-between">
+                  <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
+                    <Field
+                      label="Visit"
+                      value={selectedVisit.label}
+                      onChange={(value) =>
+                        updateVisit(selectedProcedure.id, selectedVisit.id, { label: value })
+                      }
+                    />
+                    <NumberField
+                      label="Clinical hours"
+                      value={selectedVisit.clinical_hours}
+                      onChange={(value) =>
+                        updateVisit(selectedProcedure.id, selectedVisit.id, {
+                          clinical_hours: value,
+                        })
+                      }
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" onClick={() => setCatalogPickerOpen(true)}>
+                      <Plus className="h-4 w-4" />
+                      Supply
+                    </Button>
+                    <Button variant="outline" onClick={() => addMaterial("lab")}>
+                      <FlaskConical className="h-4 w-4" />
+                      Lab
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      onClick={removeVisit}
+                      aria-label={`Remove ${selectedVisit.label}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="max-h-[420px] overflow-auto">
+                  <table className="w-full min-w-[760px] text-sm">
+                    <thead className="sticky top-0 z-10 border-b bg-muted text-left text-xs text-muted-foreground">
+                      <tr>
+                        <th className="px-4 py-3 font-medium">Item</th>
+                        <th className="px-4 py-3 font-medium">Source</th>
+                        <th className="px-4 py-3 font-medium">Quantity used</th>
+                        <th className="px-4 py-3 font-medium">Current cost</th>
+                        <th className="px-4 py-3 text-right font-medium">Cost per procedure</th>
+                        <th className="w-12 px-3 py-3">
+                          <span className="sr-only">Actions</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {selectedVisit.items.map((item) => {
+                        const editing = item.id === editingMaterialId;
+                        const catalogItem = item.catalog_item_id
+                          ? catalogById.get(item.catalog_item_id)
+                          : null;
+                        const unitCostCents = catalogItem?.current_unit_cost_cents
+                          ?? item.cost_cents;
+                        return (
+                          <tr
+                            key={item.id}
+                            className={cn(
+                              "transition-colors hover:bg-muted/20",
+                              editing && "bg-cyan-50/50 dark:bg-cyan-950/15",
+                            )}
+                          >
+                            <td className="px-4 py-3">
+                              {editing && !catalogItem ? (
+                                <Input
+                                  value={item.name}
+                                  onChange={(event) =>
+                                    updateMaterial(
+                                      selectedProcedure.id,
+                                      selectedVisit.id,
+                                      item.id,
+                                      { name: event.target.value },
+                                    )
+                                  }
+                                  placeholder={item.kind === "lab" ? "Lab service" : "Supply item"}
+                                />
+                              ) : (
+                                <div>
+                                  <div className="font-medium">{item.name || "Unnamed item"}</div>
+                                  <div className="mt-0.5 text-xs text-muted-foreground">
+                                    {catalogItem
+                                      ? `${catalogItem.vendor} catalog item`
+                                      : item.kind === "supply"
+                                      ? "Manual supply cost"
+                                      : "External lab or service"}
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              {editing && !catalogItem ? (
+                                <Select
+                                  value={item.kind}
+                                  onValueChange={(value) =>
+                                    updateMaterial(
+                                      selectedProcedure.id,
+                                      selectedVisit.id,
+                                      item.id,
+                                      { kind: value as ProcedureMaterialKind },
+                                    )
+                                  }
+                                >
+                                  <SelectTrigger className="w-32 bg-background">
+                                    <SelectValue>
+                                      {item.kind === "supply" ? "Supply" : "Lab"}
+                                    </SelectValue>
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="supply">Supply</SelectItem>
+                                    <SelectItem value="lab">Lab</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <span
+                                  className={cn(
+                                    "inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-medium",
+                                    item.kind === "supply"
+                                      ? "border-teal-200 bg-teal-50 text-teal-700 dark:border-teal-900 dark:bg-teal-950/40 dark:text-teal-300"
+                                      : "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300",
+                                  )}
+                                >
+                                  {catalogItem ? (
+                                    <PackageOpen className="h-3 w-3" />
+                                  ) : item.kind === "supply" ? (
+                                    <Boxes className="h-3 w-3" />
+                                  ) : (
+                                    <FlaskConical className="h-3 w-3" />
+                                  )}
+                                  {catalogItem
+                                    ? "Catalog"
+                                    : item.kind === "supply"
+                                      ? "Manual"
+                                      : "Lab"}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              {editing && catalogItem ? (
+                                <Input
+                                  className="w-24"
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={String(item.quantity_used ?? 1)}
+                                  onChange={(event) =>
+                                    updateMaterial(
+                                      selectedProcedure.id,
+                                      selectedVisit.id,
+                                      item.id,
+                                      { quantity_used: Math.max(0, Number(event.target.value) || 0) },
+                                    )
+                                  }
+                                  aria-label={`Quantity of ${item.name} used`}
+                                />
+                              ) : (
+                                <span className="text-muted-foreground">
+                                  {item.quantity_used ?? 1}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              {editing && !catalogItem ? (
+                                <DollarAmountInput
+                                  cents={item.cost_cents}
+                                  onCentsChange={(costCents) =>
+                                    updateMaterial(
+                                      selectedProcedure.id,
+                                      selectedVisit.id,
+                                      item.id,
+                                      { cost_cents: costCents },
+                                    )
+                                  }
+                                />
+                              ) : (
+                                <div>
+                                  <span className="tabular-nums">
+                                    {formatCurrencyFromCents(unitCostCents)}
+                                  </span>
+                                  {catalogItem ? (
+                                    <div className="mt-0.5 text-xs text-muted-foreground">
+                                      per {catalogItem.unit_label}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right font-semibold tabular-nums">
+                              {formatCurrencyFromCents(item.cost_cents)}
+                            </td>
+                            <td className="px-3 py-3 text-right">
+                              {editing ? (
+                                <div className="flex justify-end gap-1">
+                                  <Button
+                                    size="icon-sm"
+                                    variant="ghost"
+                                    onClick={() => setEditingMaterialId(null)}
+                                    aria-label={`Finish editing ${item.name || "item"}`}
+                                  >
+                                    <Check className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="icon-sm"
+                                    variant="ghost"
+                                    onClick={() => removeMaterial(item.id)}
+                                    aria-label={`Remove ${item.name || "item"}`}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <Button
+                                  size="icon-sm"
+                                  variant="ghost"
+                                  onClick={() => setEditingMaterialId(item.id)}
+                                  aria-label={`Edit ${item.name || "item"}`}
+                                >
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {selectedVisit.items.length === 0 ? (
+                  <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+                    No supplies or lab services are assigned to this visit.
+                  </div>
+                ) : null}
+
+                <div className="grid border-t sm:grid-cols-2 xl:grid-cols-4">
+                  <VisitTotal
+                    label="Supplies"
+                    value={formatCurrencyFromCents(selectedVisitTotals.supply_cost_cents)}
+                  />
+                  <VisitTotal
+                    label="Lab"
+                    value={formatCurrencyFromCents(selectedVisitTotals.lab_cost_cents)}
+                  />
+                  <VisitTotal
+                    label="Chair overhead"
+                    value={formatCurrencyFromCents(selectedVisitOverheadCents)}
+                  />
+                  <VisitTotal
+                    label="Visit total"
+                    value={formatCurrencyFromCents(
+                      selectedVisitTotals.direct_cost_cents + selectedVisitOverheadCents,
+                    )}
+                    emphasized
+                  />
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-4 flex justify-end">
+              <Button size="sm" variant="ghost" onClick={resetExamples}>
+                <RotateCcw className="h-4 w-4" />
+                Reset examples
+              </Button>
+            </div>
+
+            <Dialog open={catalogPickerOpen} onOpenChange={setCatalogPickerOpen}>
+              <DialogContent className="sm:max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Select a catalog supply</DialogTitle>
+                  <DialogDescription>
+                    Choose the item used during this visit. Its current catalog price will keep
+                    this procedure cost up to date.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    className="pl-9"
+                    value={catalogQuery}
+                    onChange={(event) => setCatalogQuery(event.target.value)}
+                    placeholder="Search supplies or vendors"
+                    autoFocus
+                  />
+                </div>
+                <div className="max-h-[420px] overflow-y-auto rounded-lg border">
+                  {filteredSupplyCatalog.length ? (
+                    filteredSupplyCatalog.map((catalogItem) => (
+                      <button
+                        key={catalogItem.id}
+                        type="button"
+                        className="flex w-full items-center gap-3 border-b px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-muted/50 focus-visible:bg-muted focus-visible:outline-none"
+                        onClick={() => addCatalogMaterial(catalogItem)}
+                      >
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300">
+                          <PackageSearch className="h-4 w-4" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-medium">{catalogItem.name}</span>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {catalogItem.vendor}
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-right">
+                          <span className="block font-semibold tabular-nums">
+                            {formatCurrencyFromCents(catalogItem.current_unit_cost_cents)}
+                          </span>
+                          <span className="block text-xs text-muted-foreground">
+                            per {catalogItem.unit_label}
+                          </span>
+                        </span>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-6 py-10 text-center text-sm text-muted-foreground">
+                      No priced catalog supplies match that search.
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center justify-between border-t pt-4">
+                  <p className="text-xs text-muted-foreground">
+                    Need an exception? Add it as a manual supply instead.
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setCatalogPickerOpen(false);
+                      addMaterial("supply");
+                    }}
+                  >
+                    Manual supply
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
 
-function FamilyFilterChip({
+function SortableProcedureRow({
+  procedure,
+  totalCostCents,
   active,
-  onClick,
-  className,
-  children,
+  onSelect,
 }: {
+  procedure: ProcedureDraft;
+  totalCostCents: number;
   active: boolean;
-  onClick: () => void;
-  className: string;
-  children: ReactNode;
+  onSelect: () => void;
 }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: procedure.id });
+
   return (
-    <Button
-      type="button"
-      variant={active ? "default" : "outline"}
-      size="sm"
-      onClick={onClick}
-      className={className}
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+      className={cn(
+        "group/procedure relative border-b bg-background",
+        isDragging && "z-20 opacity-70 shadow-md",
+      )}
     >
-      {children}
-    </Button>
+      <button
+        type="button"
+        className="absolute left-1 top-1/2 z-10 flex h-8 w-6 -translate-y-1/2 cursor-grab touch-none items-center justify-center rounded text-muted-foreground/40 opacity-0 transition-opacity hover:bg-muted hover:text-muted-foreground focus-visible:opacity-100 group-hover/procedure:opacity-100 active:cursor-grabbing"
+        aria-label={`Move ${procedure.name}`}
+        title="Drag to reorder"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+
+      <button
+        type="button"
+        onClick={onSelect}
+        className={cn(
+          "flex w-full items-center justify-between gap-3 px-4 py-3 pl-8 text-left transition-colors",
+          active
+            ? "border-l-2 border-l-cyan-600 bg-cyan-50/70 pl-[30px] dark:bg-cyan-950/20"
+            : "hover:bg-muted/40",
+        )}
+      >
+        <span className="min-w-0">
+          <span className="block truncate font-medium">{procedure.name}</span>
+          <FamilyBadge family={procedure.family} compact />
+        </span>
+        <span className="shrink-0 text-sm font-medium tabular-nums">
+          {formatCurrencyFromCents(totalCostCents)}
+        </span>
+      </button>
+    </div>
   );
 }
 
-function ProcedureFamilyBadge({ family }: { family: ProcedureTreatmentFamily }) {
+function CostMetric({
+  label,
+  value,
+  detail,
+  icon: Icon,
+  accentClassName,
+  panelClassName,
+  emphasized = false,
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+  icon: LucideIcon;
+  accentClassName: string;
+  panelClassName?: string;
+  emphasized?: boolean;
+}) {
+  return (
+    <div className={cn("border-b px-5 py-4 sm:border-r xl:border-b-0", panelClassName)}>
+      <div className="flex items-start gap-3">
+        <span
+          className={cn(
+            "flex h-8 w-8 shrink-0 items-center justify-center rounded-md",
+            accentClassName,
+          )}
+        >
+          <Icon className="h-4 w-4" />
+        </span>
+        <div className="min-w-0">
+          <div className="text-[11px] font-medium uppercase text-muted-foreground">{label}</div>
+          <div
+            className={cn("mt-1 font-semibold tabular-nums", emphasized ? "text-xl" : "text-lg")}
+          >
+            {value}
+          </div>
+          {detail ? <div className="mt-1 text-xs text-muted-foreground">{detail}</div> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FamilyBadge({
+  family,
+  compact = false,
+}: {
+  family: ProcedureTreatmentFamily;
+  compact?: boolean;
+}) {
   const meta = PROCEDURE_FAMILY_META[family];
+  const Icon = meta.icon;
 
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium",
-        meta.badgeClass,
+        "inline-flex items-center gap-1.5 border font-medium",
+        compact ? "mt-1 rounded px-1.5 py-0.5 text-[10px]" : "rounded-md px-2 py-1 text-xs",
+        meta.className,
       )}
     >
-      {meta.label}
+      <Icon className={compact ? "h-2.5 w-2.5" : "h-3 w-3"} />
+      {PROCEDURE_FAMILY_LABELS[family]}
     </span>
   );
 }
 
-function SnapshotMetric({
+function VisitTotal({
   label,
   value,
-  emphasis = false,
+  emphasized = false,
 }: {
   label: string;
   value: string;
-  emphasis?: boolean;
+  emphasized?: boolean;
 }) {
   return (
-    <div
-      className={cn(
-        "rounded-xl border px-3 py-2",
-        emphasis ? "border-primary/25 bg-primary/5" : "bg-background",
-      )}
-    >
-      <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
+    <div className={cn("border-b px-4 py-3 sm:border-r xl:border-b-0", emphasized && "bg-primary/5")}>
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className={cn("mt-1 font-semibold tabular-nums", emphasized && "text-primary")}>
+        {value}
       </div>
-      <div className={cn("mt-1 font-semibold", emphasis ? "text-lg" : "text-base")}>{value}</div>
     </div>
-  );
-}
-
-function SummaryCard({
-  icon,
-  label,
-  value,
-  detail,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: string;
-  detail?: string;
-}) {
-  return (
-    <Card size="sm">
-      <CardContent className="space-y-2 pt-3">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          {icon}
-          <span className="text-xs font-medium uppercase tracking-wide">{label}</span>
-        </div>
-        <div className="text-2xl font-semibold">{value}</div>
-        {detail ? <div className="text-xs text-muted-foreground">{detail}</div> : null}
-      </CardContent>
-    </Card>
   );
 }
 
@@ -1209,7 +1427,7 @@ function Field({
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
-      <Input value={value} onChange={(e) => onChange(e.target.value)} />
+      <Input value={value} onChange={(event) => onChange(event.target.value)} />
     </div>
   );
 }
@@ -1217,12 +1435,10 @@ function Field({
 function NumberField({
   label,
   value,
-  step,
   onChange,
 }: {
   label: string;
   value: number;
-  step: string;
   onChange: (value: number) => void;
 }) {
   return (
@@ -1231,9 +1447,9 @@ function NumberField({
       <Input
         type="number"
         min="0"
-        step={step}
+        step="0.25"
         value={String(value)}
-        onChange={(e) => onChange(Number(e.target.value) || 0)}
+        onChange={(event) => onChange(Number(event.target.value) || 0)}
       />
     </div>
   );
@@ -1247,72 +1463,24 @@ function DollarAmountInput({
   onCentsChange: (value: number) => void;
 }) {
   const [draft, setDraft] = useState(formatDollarInputValue(cents));
-  const [isFocused, setIsFocused] = useState(false);
-
-  useEffect(() => {
-    if (!isFocused) {
-      setDraft(formatDollarInputValue(cents));
-    }
-  }, [cents, isFocused]);
-
-  function updateDraft(value: string) {
-    setDraft(value);
-    onCentsChange(parseDollarAmountToCents(value));
-  }
-
-  function formatDraft() {
-    const nextCents = parseDollarAmountToCents(draft);
-    onCentsChange(nextCents);
-    setDraft(formatDollarInputValue(nextCents));
-    setIsFocused(false);
-  }
 
   return (
     <Input
       inputMode="decimal"
       value={draft}
-      onChange={(event) => updateDraft(event.target.value)}
+      onChange={(event) => {
+        setDraft(event.target.value);
+        onCentsChange(parseDollarAmountToCents(event.target.value));
+      }}
       onFocus={(event) => {
-        setIsFocused(true);
         event.currentTarget.select();
       }}
-      onBlur={formatDraft}
+      onBlur={() => {
+        const nextCents = parseDollarAmountToCents(draft);
+        onCentsChange(nextCents);
+        setDraft(formatDollarInputValue(nextCents));
+      }}
       placeholder="0.00"
     />
-  );
-}
-
-function ReadonlyField({
-  label,
-  value,
-  emphasize = false,
-}: {
-  label: string;
-  value: string;
-  emphasize?: boolean;
-}) {
-  return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      <div
-        className={cn(
-          "rounded-xl border px-3 py-2.5 text-sm font-medium",
-          emphasize ? "border-primary/25 bg-primary/5 text-foreground" : "bg-background",
-        )}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function MiniMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border bg-background px-4 py-3">
-      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </div>
-      <div className="mt-1 text-lg font-semibold">{value}</div>
-    </div>
   );
 }

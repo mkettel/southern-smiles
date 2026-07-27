@@ -28,6 +28,7 @@ import {
   Calculator,
   ClipboardList,
   ShoppingCart,
+  PackageSearch,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -62,6 +63,7 @@ const adminOnlyLinks: NavLink[] = [
   { href: "/admin/overhead", label: "Overhead", icon: Calculator },
   { href: "/admin/procedures", label: "Procedure Costs", icon: ClipboardList },
   { href: "/admin/supplies", label: "Supply Ordering", icon: ShoppingCart },
+  { href: "/admin/supply-invoices", label: "Supply Invoice Inbox", icon: PackageSearch },
   { href: "/admin/bills", label: "Bills", icon: ReceiptText },
   { href: "/admin/cherry-financing", label: "Approved Financing", icon: BadgeDollarSign },
   { href: "/admin/surveys", label: "Patient Surveys", icon: Mailbox },

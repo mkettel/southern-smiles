@@ -17,6 +17,8 @@ import {
 import type { SavedSupplyWorkspace } from "@/lib/supply-ordering";
 import { supplyWorkspaceSchema } from "@/lib/validators";
 
+const MAX_INVOICE_PDF_BYTES = 15 * 1024 * 1024;
+
 export interface SupplyInvoiceAttachment {
   id: string;
   filename: string | null;
@@ -199,6 +201,17 @@ export async function extractSupplyInvoice(id: string) {
       return { error: "Unable to retrieve the invoice attachment." };
     }
 
+    const pdfResponse = await fetch(attachment.download_url, {
+      cache: "no-store",
+    });
+    if (!pdfResponse.ok) {
+      return { error: "Unable to download the invoice attachment." };
+    }
+    const pdfBytes = Buffer.from(await pdfResponse.arrayBuffer());
+    if (!pdfBytes.length || pdfBytes.length > MAX_INVOICE_PDF_BYTES) {
+      return { error: "The invoice PDF is empty or too large to extract." };
+    }
+
     const model = process.env.OPENAI_INVOICE_MODEL ?? "gpt-5.6-luna";
     const openai = new OpenAI({ apiKey: openAIKey });
     const response = await openai.responses.parse({
@@ -218,7 +231,7 @@ export async function extractSupplyInvoice(id: string) {
             },
             {
               type: "input_file",
-              file_url: attachment.download_url,
+              file_data: `data:application/pdf;base64,${pdfBytes.toString("base64")}`,
               filename: pdf.filename ?? "invoice.pdf",
               detail: "high",
             },

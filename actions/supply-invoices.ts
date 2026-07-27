@@ -6,6 +6,10 @@ import { zodTextFormat } from "openai/helpers/zod";
 import { Resend } from "resend";
 import { createClient } from "@/lib/supabase/server";
 import {
+  estimateInvoiceExtractionCostMicros,
+  type InvoiceExtractionTokenUsage,
+} from "@/lib/invoice-extraction-cost";
+import {
   applyApprovedSupplyPrices,
   buildInitialInvoiceReview,
   getInvoiceMatchStatus,
@@ -44,6 +48,9 @@ export interface SupplyInvoiceReviewDetail extends SupplyInvoiceInboxRow {
   extraction: SupplyInvoiceExtraction | null;
   extracted_at: string | null;
   extraction_model: string | null;
+  extraction_usage: (InvoiceExtractionTokenUsage & {
+    estimated_cost_micros: number | null;
+  }) | null;
   review_draft: SupplyInvoiceReviewDraft | null;
   reviewed_at: string | null;
   approved_changes: unknown[] | null;
@@ -135,7 +142,7 @@ export async function getSupplyInvoiceReview(id: string): Promise<{
     context.supabase
       .from("supply_invoice_events")
       .select(
-        "id, vendor_key, vendor_name, from_address, subject, received_at, status, status_reason, has_supported_attachment, attachment_count, attachments, extraction, extracted_at, extraction_model, review_draft, reviewed_at, approved_changes, rejection_reason, updated_at",
+        "id, vendor_key, vendor_name, from_address, subject, received_at, status, status_reason, has_supported_attachment, attachment_count, attachments, extraction, extracted_at, extraction_model, extraction_usage, review_draft, reviewed_at, approved_changes, rejection_reason, updated_at",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -231,9 +238,8 @@ export async function extractSupplyInvoice(id: string) {
             },
             {
               type: "input_file",
-              file_data: `data:application/pdf;base64,${pdfBytes.toString("base64")}`,
+              file_data: pdfBytes.toString("base64"),
               filename: pdf.filename ?? "invoice.pdf",
-              detail: "high",
             },
           ],
         },
@@ -250,6 +256,20 @@ export async function extractSupplyInvoice(id: string) {
     );
     if (!parsed.success) throw new Error("The extracted invoice was invalid.");
 
+    const responseUsage = response.usage;
+    const usage: InvoiceExtractionTokenUsage | null = responseUsage
+      ? {
+          input_tokens: responseUsage.input_tokens,
+          output_tokens: responseUsage.output_tokens,
+          total_tokens: responseUsage.total_tokens,
+          cached_input_tokens:
+            responseUsage.input_tokens_details.cached_tokens ?? 0,
+          cache_write_tokens:
+            responseUsage.input_tokens_details.cache_write_tokens ?? 0,
+          reasoning_tokens:
+            responseUsage.output_tokens_details.reasoning_tokens ?? 0,
+        }
+      : null;
     const draft = buildInitialInvoiceReview(parsed.data, saved.workspace.catalog);
     const status = getInvoiceMatchStatus(
       parsed.data,
@@ -261,6 +281,15 @@ export async function extractSupplyInvoice(id: string) {
         extraction: parsed.data,
         extracted_at: new Date().toISOString(),
         extraction_model: model,
+        extraction_usage: usage
+          ? {
+              ...usage,
+              estimated_cost_micros: estimateInvoiceExtractionCostMicros(
+                model,
+                usage,
+              ),
+            }
+          : null,
         review_draft: draft,
         status,
         status_reason: "ai_extraction_ready_for_review",

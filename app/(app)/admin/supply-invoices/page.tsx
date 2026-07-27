@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { FileCheck2, FileWarning, Inbox } from "lucide-react";
+import Link from "next/link";
+import { ChevronRight, FileCheck2, FileWarning, Inbox } from "lucide-react";
 import { getProfile } from "@/actions/auth";
 import { getSupplyInvoiceInbox } from "@/actions/supply-invoices";
 import { Badge } from "@/components/ui/badge";
@@ -56,7 +57,7 @@ export default async function SupplyInvoiceInboxPage() {
           <div>
             <h2 className="font-medium">Invoice inbox schema is ready to apply</h2>
             <p className="mt-1 text-muted-foreground">
-              Apply `supabase/migrations/045_add_supply_invoice_inbox.sql`
+              Apply `supabase/migrations/047_add_supply_invoice_inbox.sql`
               before enabling Gmail forwarding.
             </p>
           </div>
@@ -84,7 +85,7 @@ export default async function SupplyInvoiceInboxPage() {
             </TableHeader>
             <TableBody>
               {inbox.rows.map((row) => (
-                <TableRow key={row.id}>
+                <TableRow key={row.id} className="group">
                   <TableCell className="whitespace-nowrap text-sm">
                     {formatReceivedAt(row.received_at)}
                   </TableCell>
@@ -95,7 +96,13 @@ export default async function SupplyInvoiceInboxPage() {
                     </div>
                   </TableCell>
                   <TableCell className="max-w-lg">
-                    <span className="line-clamp-2">{row.subject}</span>
+                    <Link
+                      href={`/admin/supply-invoices/${row.id}`}
+                      className="flex items-center gap-2 font-medium hover:underline"
+                    >
+                      <span className="line-clamp-2">{row.subject}</span>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                    </Link>
                   </TableCell>
                   <TableCell>
                     <span className="inline-flex items-center gap-1.5 text-sm">

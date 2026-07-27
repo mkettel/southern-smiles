@@ -69,6 +69,25 @@ test("extracts the original sender from a Gmail manual forward", () => {
   });
 });
 
+test("extracts a Gmail sender when the forwarded header is folded", () => {
+  const forwarded = [
+    "---------- Forwarded message ---------",
+    "From: Jolt CDP (customerservice@crazydental.com) <",
+    " system@sent-via.netsuite.com>",
+    "Date: Fri, 24 Jul 2026 18:50:22 -0700",
+    "Subject: Invoice 2852598CS",
+  ].join("\n");
+
+  assert.equal(
+    extractForwardedSender(forwarded),
+    "Jolt CDP (customerservice@crazydental.com) < system@sent-via.netsuite.com>",
+  );
+  assert.deepEqual(resolveSupplyVendor(extractForwardedSender(forwarded) ?? ""), {
+    key: "crazy_dental",
+    name: "Crazy Dental",
+  });
+});
+
 test("does not invent a sender when a message is not a forward", () => {
   assert.equal(extractForwardedSender("Invoice attached."), null);
 });

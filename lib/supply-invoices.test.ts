@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   extractEmailAddress,
+  extractForwardedSender,
   isExpectedSupplyRecipient,
   resolveSupplyVendor,
   validateSupplyAttachments,
@@ -44,6 +45,32 @@ test("classifies known vendors from sender or reply-to", () => {
     name: "EdgeEndo",
   });
   assert.equal(resolveSupplyVendor("billing@unknown.example"), null);
+});
+
+test("extracts the original sender from a Gmail manual forward", () => {
+  const forwarded = [
+    "CONTROLLED SUPPLY INVOICE TEST",
+    "",
+    "---------- Forwarded message ---------",
+    "From: Jolt CDP (customerservice@crazydental.com) <system@sent-via.netsuite.com>",
+    "Date: Fri, 24 Jul 2026 18:50:22 -0700",
+    "Subject: Invoice 2852598CS",
+    "To: meezdds@gmail.com",
+  ].join("\n");
+
+  const sender = extractForwardedSender(forwarded);
+  assert.equal(
+    sender,
+    "Jolt CDP (customerservice@crazydental.com) <system@sent-via.netsuite.com>",
+  );
+  assert.deepEqual(resolveSupplyVendor(sender ?? ""), {
+    key: "crazy_dental",
+    name: "Crazy Dental",
+  });
+});
+
+test("does not invent a sender when a message is not a forward", () => {
+  assert.equal(extractForwardedSender("Invoice attached."), null);
 });
 
 test("accepts PDF evidence and rejects oversized attachments", () => {

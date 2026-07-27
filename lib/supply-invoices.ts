@@ -97,9 +97,9 @@ export function resolveSupplyVendor(
 
 export function extractForwardedSender(content: string) {
   const match = content.match(
-    /(?:^|\r?\n)From:\s*(.+?)(?=\r?\n(?:Date|Sent|Subject|To|Cc):)/i,
+    /(?:^|\r?\n)From:\s*([\s\S]+?)(?=\r?\n(?:Date|Sent|Subject|To|Cc):)/i,
   );
-  return match?.[1]?.trim() ?? null;
+  return match?.[1]?.replace(/\r?\n\s*/g, " ").trim() ?? null;
 }
 
 export function validateSupplyAttachments(

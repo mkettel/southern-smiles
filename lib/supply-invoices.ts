@@ -95,6 +95,13 @@ export function resolveSupplyVendor(
   return null;
 }
 
+export function extractForwardedSender(content: string) {
+  const match = content.match(
+    /(?:^|\r?\n)From:\s*(.+?)(?=\r?\n(?:Date|Sent|Subject|To|Cc):)/i,
+  );
+  return match?.[1]?.trim() ?? null;
+}
+
 export function validateSupplyAttachments(
   attachments: SupplyInvoiceAttachment[],
 ) {

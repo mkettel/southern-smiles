@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { Resend, type EmailReceivedEvent } from "resend";
 import {
   extractEmailAddress,
+  extractForwardedSender,
   isExpectedSupplyRecipient,
   resolveSupplyVendor,
   validateSupplyAttachments,
@@ -88,10 +89,28 @@ export async function POST(request: Request) {
     });
   }
 
-  const vendor = resolveSupplyVendor(
+  let effectiveSender = receivedEmail.from;
+  let vendor = resolveSupplyVendor(
     receivedEmail.from,
     receivedEmail.reply_to ?? [],
   );
+  let isHistoricalForward = false;
+  const trustedForwarder = process.env.SUPPLIES_TRUSTED_FORWARDER;
+  if (
+    !vendor &&
+    trustedForwarder &&
+    extractEmailAddress(receivedEmail.from) ===
+      extractEmailAddress(trustedForwarder)
+  ) {
+    const forwardedSender = extractForwardedSender(receivedEmail.text ?? "");
+    if (forwardedSender) {
+      vendor = resolveSupplyVendor(forwardedSender);
+      if (vendor) {
+        effectiveSender = forwardedSender;
+        isHistoricalForward = true;
+      }
+    }
+  }
   if (!vendor) {
     return NextResponse.json({ ignored: true, reason: "unknown_vendor" });
   }
@@ -138,9 +157,10 @@ export async function POST(request: Request) {
     source_message_id: sourceMessageId,
     vendor_key: vendor.key,
     vendor_name: vendor.name,
-    from_address: extractEmailAddress(receivedEmail.from),
+    from_address: extractEmailAddress(effectiveSender),
     subject: receivedEmail.subject.slice(0, 500),
     received_at: receivedEmail.created_at,
+    status_reason: isHistoricalForward ? "historical_manual_forward" : null,
     has_supported_attachment: attachmentValidation.hasSupportedAttachment,
     attachment_count: attachments.length,
     attachments: attachments.map((attachment) => ({

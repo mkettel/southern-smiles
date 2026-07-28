@@ -72,6 +72,11 @@ function centsFromInput(value: string) {
   return Math.round(amount * 100);
 }
 
+function extractionCost(micros: number | null) {
+  if (micros === null) return "Cost unavailable";
+  return `~$${(micros / 1_000_000).toFixed(4)}`;
+}
+
 export function SupplyInvoiceReviewWorkspace({
   invoice,
   catalog,
@@ -249,6 +254,17 @@ export function SupplyInvoiceReviewWorkspace({
                     <p className="text-xs text-muted-foreground">
                       Extracted with {invoice.extraction_model ?? "AI"}
                     </p>
+                    {invoice.extraction_usage && (
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {invoice.extraction_usage.input_tokens.toLocaleString()}{" "}
+                        input ·{" "}
+                        {invoice.extraction_usage.output_tokens.toLocaleString()}{" "}
+                        output ·{" "}
+                        {extractionCost(
+                          invoice.extraction_usage.estimated_cost_micros,
+                        )}
+                      </p>
+                    )}
                   </div>
                   {!isClosed && (
                     <Button

@@ -3,6 +3,9 @@ import test from "node:test";
 import {
   applyApprovedSupplyPrices,
   buildInitialInvoiceReview,
+  filterSupplyCatalog,
+  hydrateInvoiceReview,
+  isValidInvoiceDate,
   suggestCatalogMatch,
   type SupplyInvoiceExtraction,
 } from "./supply-invoice-review";
@@ -75,6 +78,8 @@ test("catalog matching prefers exact vendor SKU", () => {
 
 test("initial review proposes matches without selecting price updates", () => {
   assert.deepEqual(buildInitialInvoiceReview(extraction, workspace.catalog), {
+    invoice_number: "2852598CS",
+    invoice_date: "2026-07-24",
     lines: [
       {
         line_id: "line-1",
@@ -91,6 +96,8 @@ test("approval preserves the prior cost and records an auditable note", () => {
   const result = applyApprovedSupplyPrices(
     workspace,
     {
+      invoice_number: "2852598CS",
+      invoice_date: "2026-07-24",
       lines: [
         {
           line_id: "line-1",
@@ -105,6 +112,7 @@ test("approval preserves the prior cost and records an auditable note", () => {
       vendorName: "Crazy Dental",
       invoiceNumber: "2852598CS",
       reviewedAt: "2026-07-27T12:30:00.000Z",
+      lineItems: extraction.line_items,
     },
   );
 
@@ -115,6 +123,14 @@ test("approval preserves the prior cost and records an auditable note", () => {
     "Crazy Dental invoice 2852598CS, reviewed 2026-07-27",
   );
   assert.equal(result.changes[0].old_unit_cost_cents, 4200);
+  assert.equal(result.workspace.catalog[0].vendor_id, "ABC-123");
+  assert.deepEqual(
+    suggestCatalogMatch(
+      extraction.line_items[0],
+      result.workspace.catalog,
+    ),
+    { catalog_item_id: "patient-bib", score: 1, reason: "sku" },
+  );
 });
 
 test("approval rejects unknown catalog items", () => {
@@ -123,6 +139,8 @@ test("approval rejects unknown catalog items", () => {
       applyApprovedSupplyPrices(
         workspace,
         {
+          invoice_number: null,
+          invoice_date: "2026-07-24",
           lines: [
             {
               line_id: "line-1",
@@ -140,5 +158,59 @@ test("approval rejects unknown catalog items", () => {
         },
       ),
     /unknown catalog item/,
+  );
+});
+
+test("invoice dates must be real calendar dates", () => {
+  assert.equal(isValidInvoiceDate("2026-07-24"), true);
+  assert.equal(isValidInvoiceDate("7742-02-62"), false);
+  assert.equal(isValidInvoiceDate("2026-02-29"), false);
+});
+
+test("invalid extracted dates are left blank for review", () => {
+  const invalidExtraction = { ...extraction, invoice_date: "7742-02-62" };
+  const draft = buildInitialInvoiceReview(
+    invalidExtraction,
+    workspace.catalog,
+  );
+  assert.equal(draft.invoice_date, null);
+  assert.equal(
+    hydrateInvoiceReview(
+      invalidExtraction,
+      { lines: draft.lines, notes: "" },
+      workspace.catalog,
+    ).invoice_date,
+    null,
+  );
+});
+
+test("catalog matching recognizes a contained product name", () => {
+  const catalog = [
+    {
+      ...workspace.catalog[0],
+      id: "zircad",
+      name: "Zircad Cement",
+      vendor_id: null,
+    },
+  ];
+  assert.deepEqual(
+    suggestCatalogMatch(
+      {
+        ...extraction.line_items[0],
+        sku: "579-746964EN",
+        description: "Vivadent ZirCAD Cement 8.5g",
+      },
+      catalog,
+    ),
+    { catalog_item_id: "zircad", score: 0.9, reason: "name_contains" },
+  );
+});
+
+test("catalog search filters by product, vendor, and SKU tokens", () => {
+  assert.deepEqual(
+    filterSupplyCatalog(workspace.catalog, "crazy abc 123").map(
+      (item) => item.id,
+    ),
+    ["patient-bib"],
   );
 });

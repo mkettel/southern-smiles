@@ -6,6 +6,17 @@ import type {
 
 const nullableMoney = z.number().int().min(0).max(100_000_000).nullable();
 
+export function isValidInvoiceDate(value: string | null | undefined) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
 export const supplyInvoiceExtractionSchema = z.object({
   invoice_number: z.string().trim().max(120).nullable(),
   invoice_date: z
@@ -40,6 +51,13 @@ export type SupplyInvoiceExtraction = z.infer<
 >;
 
 export const supplyInvoiceReviewDraftSchema = z.object({
+  invoice_number: z.string().trim().max(120).nullable().optional(),
+  invoice_date: z
+    .string()
+    .trim()
+    .refine(isValidInvoiceDate, "Enter a valid invoice date.")
+    .nullable()
+    .optional(),
   lines: z
     .array(
       z.object({
@@ -60,7 +78,7 @@ export type SupplyInvoiceReviewDraft = z.infer<
 export interface CatalogMatchSuggestion {
   catalog_item_id: string | null;
   score: number;
-  reason: "sku" | "exact_name" | "similar_name" | "none";
+  reason: "sku" | "exact_name" | "name_contains" | "similar_name" | "none";
 }
 
 export interface ApprovedSupplyPriceChange {
@@ -108,6 +126,26 @@ export function suggestCatalogMatch(
     return { catalog_item_id: exact.id, score: 1, reason: "exact_name" };
   }
 
+  const contained = catalog
+    .map((item) => {
+      const itemName = normalize(item.name);
+      const tokens = itemName.split(" ").filter(Boolean);
+      const contains =
+        itemName.length >= 5 &&
+        tokens.length >= 2 &&
+        (description.includes(itemName) || itemName.includes(description));
+      return { item, itemName, contains };
+    })
+    .filter((candidate) => candidate.contains)
+    .sort((a, b) => b.itemName.length - a.itemName.length)[0];
+  if (contained) {
+    return {
+      catalog_item_id: contained.item.id,
+      score: 0.9,
+      reason: "name_contains",
+    };
+  }
+
   const ranked = catalog
     .map((item) => ({
       item,
@@ -126,11 +164,29 @@ export function suggestCatalogMatch(
   return { catalog_item_id: null, score: best?.score ?? 0, reason: "none" };
 }
 
+export function filterSupplyCatalog(
+  catalog: SupplyCatalogItem[],
+  query: string,
+) {
+  const tokens = normalize(query).split(" ").filter(Boolean);
+  if (!tokens.length) return catalog;
+  return catalog.filter((item) => {
+    const searchable = normalize(
+      `${item.name} ${item.vendor} ${item.vendor_id ?? ""}`,
+    );
+    return tokens.every((token) => searchable.includes(token));
+  });
+}
+
 export function buildInitialInvoiceReview(
   extraction: SupplyInvoiceExtraction,
   catalog: SupplyCatalogItem[],
 ): SupplyInvoiceReviewDraft {
   return {
+    invoice_number: extraction.invoice_number,
+    invoice_date: isValidInvoiceDate(extraction.invoice_date)
+      ? extraction.invoice_date
+      : null,
     lines: extraction.line_items.map((line) => {
       const suggestion = suggestCatalogMatch(line, catalog);
       return {
@@ -141,6 +197,24 @@ export function buildInitialInvoiceReview(
       };
     }),
     notes: "",
+  };
+}
+
+export function hydrateInvoiceReview(
+  extraction: SupplyInvoiceExtraction,
+  draft: SupplyInvoiceReviewDraft | null,
+  catalog: SupplyCatalogItem[],
+): SupplyInvoiceReviewDraft {
+  const initial = buildInitialInvoiceReview(extraction, catalog);
+  if (!draft) return initial;
+  return {
+    ...draft,
+    invoice_number:
+      draft.invoice_number === undefined
+        ? initial.invoice_number
+        : draft.invoice_number,
+    invoice_date:
+      draft.invoice_date === undefined ? initial.invoice_date : draft.invoice_date,
   };
 }
 
@@ -165,6 +239,7 @@ export function applyApprovedSupplyPrices(
     vendorName: string;
     invoiceNumber: string | null;
     reviewedAt: string;
+    lineItems?: SupplyInvoiceExtraction["line_items"];
   },
 ): {
   workspace: SavedSupplyWorkspace;
@@ -195,6 +270,9 @@ export function applyApprovedSupplyPrices(
   }
 
   const date = context.reviewedAt.slice(0, 10);
+  const invoiceLines = new Map(
+    (context.lineItems ?? []).map((line) => [line.line_id, line]),
+  );
   const evidence = context.invoiceNumber
     ? `${context.vendorName} invoice ${context.invoiceNumber}`
     : `${context.vendorName} invoice`;
@@ -211,6 +289,7 @@ export function applyApprovedSupplyPrices(
     });
     return {
       ...item,
+      vendor_id: invoiceLines.get(line.line_id)?.sku ?? item.vendor_id,
       prior_unit_cost_cents: item.current_unit_cost_cents,
       current_unit_cost_cents: line.proposed_unit_cost_cents,
       last_price_note: `${evidence}, reviewed ${date}`,

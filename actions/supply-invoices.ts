@@ -331,18 +331,35 @@ export async function saveSupplyInvoiceReview(
   const { supabase } = await getAdminContext();
   const { data: invoice } = await supabase
     .from("supply_invoice_events")
-    .select("status")
+    .select("status, review_draft")
     .eq("id", id)
     .maybeSingle();
   if (!invoice) return { error: "Invoice not found." };
-  if (invoice.status === "reconciled" || invoice.status === "rejected") {
+  if (invoice.status === "rejected") {
     return { error: "This invoice review is already closed." };
   }
+  const existingDraft = supplyInvoiceReviewDraftSchema.safeParse(
+    invoice.review_draft,
+  );
+  if (invoice.status === "reconciled" && !parsed.data.invoice_date) {
+    return { error: "Enter a valid invoice date before saving." };
+  }
+  if (invoice.status === "reconciled" && !existingDraft.success) {
+    return { error: "The reconciled invoice review is not valid." };
+  }
+  const reviewDraft =
+    invoice.status === "reconciled" && existingDraft.success
+      ? {
+          ...existingDraft.data,
+          invoice_number: parsed.data.invoice_number,
+          invoice_date: parsed.data.invoice_date,
+        }
+      : parsed.data;
 
   const { error } = await supabase
     .from("supply_invoice_events")
     .update({
-      review_draft: parsed.data,
+      review_draft: reviewDraft,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
@@ -357,6 +374,9 @@ export async function approveSupplyInvoice(
 ) {
   const parsed = supplyInvoiceReviewDraftSchema.safeParse(value);
   if (!parsed.success) return { error: "The invoice review is not valid." };
+  if (!parsed.data.invoice_date) {
+    return { error: "Enter a valid invoice date before approving prices." };
+  }
   const context = await getAdminContext();
   const [{ data: invoice, error }, saved] = await Promise.all([
     context.supabase
@@ -383,8 +403,10 @@ export async function approveSupplyInvoice(
     const reviewedAt = new Date().toISOString();
     const result = applyApprovedSupplyPrices(saved.workspace, parsed.data, {
       vendorName: invoice.vendor_name,
-      invoiceNumber: extraction.data.invoice_number,
+      invoiceNumber:
+        parsed.data.invoice_number ?? extraction.data.invoice_number,
       reviewedAt,
+      lineItems: extraction.data.line_items,
     });
     const { error: rpcError } = await context.supabase.rpc(
       "reconcile_supply_invoice",

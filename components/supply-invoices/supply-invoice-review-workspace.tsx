@@ -9,6 +9,7 @@ import {
   Loader2,
   RotateCcw,
   Save,
+  Search,
   ShieldCheck,
   X,
 } from "lucide-react";
@@ -21,7 +22,9 @@ import {
   type SupplyInvoiceReviewDetail,
 } from "@/actions/supply-invoices";
 import {
-  buildInitialInvoiceReview,
+  filterSupplyCatalog,
+  hydrateInvoiceReview,
+  isValidInvoiceDate,
   suggestCatalogMatch,
   type SupplyInvoiceReviewDraft,
 } from "@/lib/supply-invoice-review";
@@ -86,9 +89,9 @@ export function SupplyInvoiceReviewWorkspace({
 }) {
   const router = useRouter();
   const extraction = invoice.extraction;
-  const initialDraft =
-    invoice.review_draft ??
-    (extraction ? buildInitialInvoiceReview(extraction, catalog) : null);
+  const initialDraft = extraction
+    ? hydrateInvoiceReview(extraction, invoice.review_draft, catalog)
+    : null;
   const [draft, setDraft] = useState<SupplyInvoiceReviewDraft | null>(
     initialDraft,
   );
@@ -96,6 +99,9 @@ export function SupplyInvoiceReviewWorkspace({
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
+  const [catalogQueries, setCatalogQueries] = useState<Record<string, string>>(
+    {},
+  );
   const isClosed =
     invoice.status === "reconciled" || invoice.status === "rejected";
   const pdf = invoice.attachments.find(
@@ -148,8 +154,6 @@ export function SupplyInvoiceReviewWorkspace({
 
   const summary = extraction
     ? [
-        ["Invoice", extraction.invoice_number ?? "Not found"],
-        ["Date", extraction.invoice_date ?? "Not found"],
         ["Subtotal", money(extraction.subtotal_cents, extraction.currency)],
         ["Tax", money(extraction.tax_cents, extraction.currency)],
         ["Shipping", money(extraction.shipping_cents, extraction.currency)],
@@ -284,7 +288,57 @@ export function SupplyInvoiceReviewWorkspace({
                     </Button>
                   )}
                 </div>
-                <dl className="grid grid-cols-2 border-y sm:grid-cols-3">
+                <div className="grid gap-3 border-y py-3 sm:grid-cols-2">
+                  <div>
+                    <Label htmlFor="invoice-number">Invoice number</Label>
+                    <Input
+                      id="invoice-number"
+                      className="mt-1"
+                      value={draft?.invoice_number ?? ""}
+                      onChange={(event) =>
+                        setDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                invoice_number: event.target.value || null,
+                              }
+                            : current,
+                        )
+                      }
+                      disabled={invoice.status === "rejected"}
+                      placeholder="Not found"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="invoice-date">Invoice date</Label>
+                    <Input
+                      id="invoice-date"
+                      className="mt-1"
+                      type="date"
+                      value={draft?.invoice_date ?? ""}
+                      onChange={(event) =>
+                        setDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                invoice_date: event.target.value || null,
+                              }
+                            : current,
+                        )
+                      }
+                      disabled={invoice.status === "rejected"}
+                    />
+                    {extraction.invoice_date &&
+                      !isValidInvoiceDate(extraction.invoice_date) &&
+                      !draft?.invoice_date && (
+                        <p className="mt-1 text-xs text-destructive">
+                          The extracted date was invalid. Enter the date shown
+                          on the PDF.
+                        </p>
+                      )}
+                  </div>
+                </div>
+                <dl className="grid grid-cols-2 border-b sm:grid-cols-4">
                   {summary.map(([label, value]) => (
                     <div key={label} className="border-b px-3 py-2 last:border-b-0">
                       <dt className="text-xs text-muted-foreground">{label}</dt>
@@ -292,6 +346,25 @@ export function SupplyInvoiceReviewWorkspace({
                     </div>
                   ))}
                 </dl>
+                {invoice.status === "reconciled" && (
+                  <div className="mt-3 flex justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        draft &&
+                        run(
+                          () => saveSupplyInvoiceReview(invoice.id, draft),
+                          "Invoice details saved",
+                        )
+                      }
+                      disabled={pending || !draft?.invoice_date}
+                    >
+                      <Save />
+                      Save invoice details
+                    </Button>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -312,6 +385,20 @@ export function SupplyInvoiceReviewWorkspace({
                       ? catalogById.get(reviewLine.catalog_item_id)
                       : null;
                     const proposed = reviewLine?.proposed_unit_cost_cents ?? null;
+                    const catalogQuery = catalogQueries[line.line_id] ?? "";
+                    const filteredCatalog = filterSupplyCatalog(
+                      catalog,
+                      catalogQuery,
+                    );
+                    const catalogOptions = [...filteredCatalog].sort(
+                      (left, right) => {
+                        if (left.id === reviewLine?.catalog_item_id) return -1;
+                        if (right.id === reviewLine?.catalog_item_id) return 1;
+                        if (left.id === suggestion.catalog_item_id) return -1;
+                        if (right.id === suggestion.catalog_item_id) return 1;
+                        return left.name.localeCompare(right.name);
+                      },
+                    );
                     return (
                       <div
                         key={line.line_id}
@@ -334,7 +421,29 @@ export function SupplyInvoiceReviewWorkspace({
 
                         <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_130px]">
                           <div>
-                            <Label htmlFor={`catalog-${line.line_id}`}>
+                            <Label htmlFor={`catalog-search-${line.line_id}`}>
+                              Search catalog
+                            </Label>
+                            <div className="relative mt-1">
+                              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                              <Input
+                                id={`catalog-search-${line.line_id}`}
+                                className="pl-8"
+                                value={catalogQuery}
+                                onChange={(event) =>
+                                  setCatalogQueries((current) => ({
+                                    ...current,
+                                    [line.line_id]: event.target.value,
+                                  }))
+                                }
+                                disabled={isClosed}
+                                placeholder="Product, vendor, or SKU"
+                              />
+                            </div>
+                            <Label
+                              className="mt-3"
+                              htmlFor={`catalog-${line.line_id}`}
+                            >
                               Catalog item
                             </Label>
                             <Select
@@ -353,7 +462,7 @@ export function SupplyInvoiceReviewWorkspace({
                             >
                               <SelectTrigger
                                 id={`catalog-${line.line_id}`}
-                                className="mt-1 w-full"
+                                className="mt-2 w-full"
                               >
                                 <SelectValue />
                               </SelectTrigger>
@@ -361,11 +470,16 @@ export function SupplyInvoiceReviewWorkspace({
                                 <SelectItem value="__none">
                                   No catalog match
                                 </SelectItem>
-                                {catalog.map((item) => (
+                                {catalogOptions.map((item) => (
                                   <SelectItem key={item.id} value={item.id}>
                                     {item.name} · {item.vendor}
                                   </SelectItem>
                                 ))}
+                                {catalogOptions.length === 0 && (
+                                  <SelectItem value="__empty" disabled>
+                                    No catalog items found
+                                  </SelectItem>
+                                )}
                               </SelectContent>
                             </Select>
                             {suggestion.catalog_item_id && (

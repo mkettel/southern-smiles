@@ -9,6 +9,7 @@ import {
   estimateInvoiceExtractionCostMicros,
   type InvoiceExtractionTokenUsage,
 } from "@/lib/invoice-extraction-cost";
+import { encodeInvoicePdfDataUrl } from "@/lib/invoice-file-data";
 import {
   applyApprovedSupplyPrices,
   buildInitialInvoiceReview,
@@ -238,7 +239,7 @@ export async function extractSupplyInvoice(id: string) {
             },
             {
               type: "input_file",
-              file_data: pdfBytes.toString("base64"),
+              file_data: encodeInvoicePdfDataUrl(pdfBytes),
               filename: pdf.filename ?? "invoice.pdf",
             },
           ],

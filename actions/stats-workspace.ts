@@ -11,10 +11,12 @@ import { isBillsManagedStat } from "@/lib/bills";
 import {
   calculateCollectionsPerStaffWeek,
   calculateRatioOfSumsWeek,
+  calculateSumOfWeeklyTotals,
   getDailyInputStatId,
   isNewPatientBookingsInput,
   isWeeklyFormulaActive,
 } from "@/lib/stat-formulas";
+import { refreshSumOfWeeklyTotalDependents } from "@/lib/sum-weekly-stat-sync";
 import { isCherryApprovedFinancingStat } from "@/lib/cherry-financing";
 import type { DailyStatEntry, Post, Profile, Stat, StatEntry } from "@/lib/types";
 
@@ -103,6 +105,16 @@ async function calculateWeeklyValue(
   stat: Stat,
   weekStart: string,
 ) {
+  if (stat.weekly_formula === "sum_of_weekly_totals") {
+    if (!stat.formula_source_stat_ids.length) return null;
+    const { data: sourceEntries } = await admin
+      .from("stat_entries")
+      .select("value")
+      .in("stat_id", stat.formula_source_stat_ids)
+      .eq("week_start", weekStart);
+    return calculateSumOfWeeklyTotals(sourceEntries ?? []);
+  }
+
   if (stat.weekly_formula === "ratio_of_sums") {
     if (!stat.formula_source_stat_id || !stat.formula_denominator_stat_id) return null;
     const [{ data: numeratorEntries }, { data: denominatorEntries }] = await Promise.all([
@@ -210,6 +222,12 @@ async function refreshDependents(sourceStatId: string, entryDate: string, actorI
     admin.from("stats").select("*").eq("formula_denominator_stat_id", sourceStatId).eq("weekly_formula", "ratio_of_sums"),
   ]);
   const weekStart = weekStartForDate(entryDate);
+  await refreshSumOfWeeklyTotalDependents(
+    sourceStatId,
+    weekStart,
+    actorId,
+    practiceId,
+  );
   const dependents = new Map<string, Stat>();
   for (const dependent of [...(sourceDependents ?? []), ...(denominatorDependents ?? [])] as Stat[]) {
     dependents.set(dependent.id, dependent);
@@ -352,6 +370,9 @@ export async function saveDailyStatInput(input: { statId: string; entryDate: str
   if (stat.weekly_formula === "ratio_of_sums") {
     return { error: "This stat is calculated from its weekly source totals" };
   }
+  if (stat.weekly_formula === "sum_of_weekly_totals") {
+    return { error: "This stat is calculated from its source stats" };
+  }
 
   if (input.value !== null && (!Number.isFinite(input.value) || input.value < 0)) {
     return { error: "Enter a value of 0 or greater" };
@@ -439,6 +460,12 @@ export async function saveWeeklyOverride(input: { statId: string; weekStart: str
     },
     { onConflict: "stat_id,week_start" },
   );
+  await refreshSumOfWeeklyTotalDependents(
+    stat.id,
+    input.weekStart,
+    user.id,
+    practiceId,
+  );
   revalidatePath("/stats");
   revalidatePath("/dashboard");
   return { success: true };
@@ -452,6 +479,12 @@ export async function resetWeeklyOverride(statId: string, weekStart: string) {
   const admin = createAdminClient();
   await admin.from("stat_entries").update({ is_manual_override: false }).eq("stat_id", statId).eq("week_start", weekStart);
   await syncWeekly(stat, weekStart, user.id, practiceId);
+  await refreshSumOfWeeklyTotalDependents(
+    stat.id,
+    weekStart,
+    user.id,
+    practiceId,
+  );
   revalidatePath("/stats");
   revalidatePath("/dashboard");
   return { success: true };

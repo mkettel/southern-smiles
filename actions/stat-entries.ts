@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { calculateCondition, type ConditionName } from "@/lib/conditions";
+import { refreshSumOfWeeklyTotalDependents } from "@/lib/sum-weekly-stat-sync";
 import type {
   Stat,
   StatComparisonOption,
@@ -20,14 +21,22 @@ export async function deleteStatEntry(entryId: string) {
   } = await supabase.auth.getUser();
   if (!user) return { error: "Unauthorized" };
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
+  const [{ data: profile }, { data: entry }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("role, practice_id")
+      .eq("id", user.id)
+      .single(),
+    supabase
+      .from("stat_entries")
+      .select("stat_id, week_start, practice_id")
+      .eq("id", entryId)
+      .maybeSingle(),
+  ]);
   if (profile?.role !== "admin") {
     return { error: "Only admins can delete stat entries" };
   }
+  if (!entry) return { error: "Entry not found" };
 
   const { error } = await supabase
     .from("stat_entries")
@@ -36,6 +45,12 @@ export async function deleteStatEntry(entryId: string) {
 
   if (error) return { error: error.message };
 
+  await refreshSumOfWeeklyTotalDependents(
+    entry.stat_id,
+    entry.week_start,
+    user.id,
+    entry.practice_id ?? profile.practice_id,
+  );
   revalidatePath("/dashboard");
   revalidatePath("/stats/[statId]", "page");
   return { success: true };
@@ -55,7 +70,7 @@ export async function updateStatEntry(entryId: string, value: number) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, practice_id")
     .eq("id", user.id)
     .single();
   if (profile?.role !== "admin") {
@@ -68,9 +83,12 @@ export async function updateStatEntry(entryId: string, value: number) {
 
   const { data: existing } = await supabase
     .from("stat_entries")
-    .select("previous_value, stat:stats(good_direction)")
+    .select("stat_id, week_start, practice_id, previous_value, stat:stats(good_direction)")
     .eq("id", entryId)
     .single<{
+      stat_id: string;
+      week_start: string;
+      practice_id: string;
       previous_value: number | null;
       stat: { good_direction: "up" | "down" } | null;
     }>();
@@ -95,6 +113,12 @@ export async function updateStatEntry(entryId: string, value: number) {
 
   if (error) return { error: error.message };
 
+  await refreshSumOfWeeklyTotalDependents(
+    existing.stat_id,
+    existing.week_start,
+    user.id,
+    existing.practice_id ?? profile.practice_id,
+  );
   revalidatePath("/dashboard");
   revalidatePath("/stats/[statId]", "page");
   return { success: true };

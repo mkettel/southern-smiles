@@ -32,6 +32,7 @@ const FORMULA_LABELS = {
   manual: "Manual weekly",
   collections_per_staff: "Collections / staff-days",
   ratio_of_sums: "Ratio of weekly totals",
+  sum_of_weekly_totals: "Sum of weekly totals",
 } as const;
 
 function todayString() {
@@ -169,6 +170,7 @@ export function StatsWorkspace({
       (item) =>
         item.stat.daily_tracking_enabled &&
         item.stat.weekly_formula !== "manual" &&
+        item.stat.weekly_formula !== "sum_of_weekly_totals" &&
         (item.stat.weekly_formula !== "ratio_of_sums" || item.dailyInputStatId !== item.stat.id),
     ),
     [stats],

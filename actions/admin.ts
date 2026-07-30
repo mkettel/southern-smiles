@@ -235,6 +235,7 @@ export async function updateStatFormula(
     weekly_formula: WeeklyFormula;
     formula_source_stat_id?: string | null;
     formula_denominator_stat_id?: string | null;
+    formula_source_stat_ids?: string[];
   },
 ) {
   const { supabase } = await requireAdmin();
@@ -249,6 +250,12 @@ export async function updateStatFormula(
     (!input.formula_source_stat_id || !input.formula_denominator_stat_id)
   ) {
     return { error: "Choose both the numerator and denominator stats" };
+  }
+  if (
+    input.weekly_formula === "sum_of_weekly_totals" &&
+    !input.formula_source_stat_ids?.length
+  ) {
+    return { error: "Choose at least one source stat" };
   }
 
   const { error } = await supabase
@@ -265,6 +272,10 @@ export async function updateStatFormula(
         input.weekly_formula === "ratio_of_sums"
           ? input.formula_denominator_stat_id
           : null,
+      formula_source_stat_ids:
+        input.weekly_formula === "sum_of_weekly_totals"
+          ? input.formula_source_stat_ids
+          : [],
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);

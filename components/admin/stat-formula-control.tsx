@@ -18,6 +18,7 @@ const LABELS: Record<WeeklyFormula, string> = {
   manual: "Manual weekly",
   collections_per_staff: "Collections / staff-days",
   ratio_of_sums: "Ratio of weekly totals",
+  sum_of_weekly_totals: "Sum of weekly totals",
 };
 
 export function StatFormulaControl({ stat, stats }: { stat: Stat; stats: Stat[] }) {
@@ -53,6 +54,10 @@ export function StatFormulaControl({ stat, stats }: { stat: Stat; stats: Stat[] 
             : null,
         formula_denominator_stat_id:
           nextFormula === "ratio_of_sums" ? fallbackDenominator : null,
+        formula_source_stat_ids:
+          nextFormula === "sum_of_weekly_totals"
+            ? stat.formula_source_stat_ids
+            : [],
       });
       if (result.error) toast.error(result.error);
       else toast.success("Formula updated");
@@ -66,9 +71,11 @@ export function StatFormulaControl({ stat, stats }: { stat: Stat; stats: Stat[] 
           <SelectValue>{(value) => LABELS[value as WeeklyFormula] ?? "Choose formula"}</SelectValue>
         </SelectTrigger>
         <SelectContent>
-          {Object.entries(LABELS).map(([value, label]) => (
+          {Object.entries(LABELS)
+            .filter(([value]) => value !== "sum_of_weekly_totals" || formula === value)
+            .map(([value, label]) => (
             <SelectItem key={value} value={value}>{label}</SelectItem>
-          ))}
+            ))}
         </SelectContent>
       </Select>
       {(formula === "collections_per_staff" || formula === "ratio_of_sums") && (

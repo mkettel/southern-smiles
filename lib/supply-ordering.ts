@@ -350,4 +350,11 @@ export function calculateSupplyBudgetCents(
 ) {
   return Math.round(collectionsCents * (targetPercent / 100));
 }
+
+export function getSupplyPurchasesForMonth(
+  purchases: SupplyPurchase[],
+  budgetMonth: string,
+) {
+  return purchases.filter((purchase) => purchase.purchased_at.startsWith(budgetMonth));
+}
 import importedSupplyCatalog from "@/lib/supply-catalog-seed.json";

@@ -5,6 +5,7 @@ import {
   DEFAULT_SUPPLY_BUDGET_SETTINGS,
   DEFAULT_SUPPLY_CATALOG,
   DEFAULT_SUPPLY_VENDORS,
+  getSupplyPurchasesForMonth,
 } from "./supply-ordering";
 import { supplyWorkspaceSchema } from "./validators";
 
@@ -83,4 +84,36 @@ test("accepts vendor directory and frozen purchase snapshots", () => {
   });
 
   assert.equal(result.success, true);
+});
+
+test("filters supply purchases to the selected budget month", () => {
+  const purchases = [
+    {
+      id: "july-purchase",
+      catalog_item_id: "gloves",
+      vendor: "Net32",
+      purchased_at: "2026-07-31",
+      quantity: 1,
+      unit_cost_cents: 1000,
+      category: "routine" as const,
+      case_reference: null,
+      notes: null,
+    },
+    {
+      id: "august-purchase",
+      catalog_item_id: "paper",
+      vendor: "Amazon",
+      purchased_at: "2026-08-01",
+      quantity: 1,
+      unit_cost_cents: 2000,
+      category: "office" as const,
+      case_reference: null,
+      notes: null,
+    },
+  ];
+
+  assert.deepEqual(
+    getSupplyPurchasesForMonth(purchases, "2026-08").map((purchase) => purchase.id),
+    ["august-purchase"],
+  );
 });

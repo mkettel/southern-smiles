@@ -62,6 +62,7 @@ import {
   DEFAULT_SUPPLY_BUDGET_SETTINGS,
   DEFAULT_SUPPLY_CATALOG,
   DEFAULT_SUPPLY_VENDORS,
+  getSupplyPurchasesForMonth,
   normalizeSupplyVendors,
   SUPPLY_CATALOG_GROUP_META,
   SUPPLY_CATEGORY_META,
@@ -305,8 +306,13 @@ export function SupplyOrderingWorkspace({
     };
   }, [settings]);
 
+  const budgetMonthPurchases = useMemo(
+    () => getSupplyPurchasesForMonth(purchases, settings.budget_month),
+    [purchases, settings.budget_month],
+  );
+
   const purchaseTotals = useMemo(() => {
-    return purchases.reduce(
+    return budgetMonthPurchases.reduce(
       (totals, purchase) => {
         const amountCents = purchase.quantity * purchase.unit_cost_cents;
         totals[purchase.category] += amountCents;
@@ -314,7 +320,7 @@ export function SupplyOrderingWorkspace({
       },
       { routine: 0, office: 0, implant_graft: 0 } as Record<SupplyCategory, number>,
     );
-  }, [purchases]);
+  }, [budgetMonthPurchases]);
 
   const filteredCatalog = useMemo(() => {
     const normalizedQuery = catalogQuery.trim().toLowerCase();
@@ -563,7 +569,7 @@ export function SupplyOrderingWorkspace({
             onSettingsChange={updateBudgetSettings}
             canManageBudget={canManageBudget}
             onLogPurchase={() => openPurchaseDialog()}
-            recentPurchases={recentPurchases}
+            budgetMonthPurchaseCount={budgetMonthPurchases.length}
           />
         </TabsContent>
 
@@ -736,7 +742,7 @@ function OverviewTab({
   onSettingsChange,
   canManageBudget,
   onLogPurchase,
-  recentPurchases,
+  budgetMonthPurchaseCount,
 }: {
   budget: { routineCents: number; officeCents: number; combinedCents: number };
   purchaseTotals: Record<SupplyCategory, number>;
@@ -744,7 +750,7 @@ function OverviewTab({
   onSettingsChange: (settings: SupplyBudgetSettings) => void;
   canManageBudget: boolean;
   onLogPurchase: () => void;
-  recentPurchases: SupplyPurchase[];
+  budgetMonthPurchaseCount: number;
 }) {
   const loggedOperatingSpend = purchaseTotals.routine + purchaseTotals.office;
   const operatingRemaining = budget.combinedCents - loggedOperatingSpend;
@@ -782,9 +788,9 @@ function OverviewTab({
           label="Logged operating spend"
           value={formatCurrency(loggedOperatingSpend)}
           detail={
-            recentPurchases.length
-              ? `${recentPurchases.length} purchase${recentPurchases.length === 1 ? "" : "s"} in this draft`
-              : "No purchases logged yet"
+            budgetMonthPurchaseCount
+              ? `${budgetMonthPurchaseCount} purchase${budgetMonthPurchaseCount === 1 ? "" : "s"} in ${budgetMonth}`
+              : `No purchases logged in ${budgetMonth}`
           }
           tone={loggedOperatingSpend > budget.combinedCents ? "danger" : "default"}
         />
@@ -1942,7 +1948,53 @@ function PriceChange({ current, prior }: { current: number | null; prior: number
 
 function DollarField({ label, cents, onChange }: { label: string; cents: number; onChange: (cents: number) => void }) { return <div><Label className="mb-1.5">{label}</Label><Input key={String(cents)} defaultValue={moneyInputValue(cents)} inputMode="decimal" onBlur={(event) => { const next = parseDollarAmountToCents(event.target.value); if (Number.isFinite(next) && next >= 0) onChange(next); }} /></div>; }
 
-function PercentField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) { return <div><Label className="mb-1.5">{label}</Label><div className="relative"><Input value={String(value)} inputMode="decimal" onChange={(event) => { const next = Number(event.target.value); if (Number.isFinite(next) && next >= 0 && next <= 100) onChange(next); }} className="pr-8" /><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span></div></div>; }
+function PercentField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(value));
+
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  function commitDraft() {
+    const next = Number(draft.trim().replace(",", "."));
+    if (!Number.isFinite(next) || next < 0 || next > 100) {
+      setDraft(String(value));
+      return;
+    }
+
+    setDraft(String(next));
+    if (next !== value) onChange(next);
+  }
+
+  return (
+    <div>
+      <Label className="mb-1.5">{label}</Label>
+      <div className="relative">
+        <Input
+          value={draft}
+          inputMode="decimal"
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commitDraft}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.currentTarget.blur();
+          }}
+          className="pr-8"
+        />
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+          %
+        </span>
+      </div>
+    </div>
+  );
+}
 
 function BudgetTreatmentSelect({ value, onChange }: { value: SupplyCategory; onChange: (value: SupplyCategory) => void }) { return <Select value={value} onValueChange={(next) => onChange((next ?? "routine") as SupplyCategory)}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{(Object.keys(SUPPLY_CATEGORY_META) as SupplyCategory[]).map((category) => <SelectItem key={category} value={category}>{SUPPLY_CATEGORY_META[category].label}</SelectItem>)}</SelectContent></Select>; }
 

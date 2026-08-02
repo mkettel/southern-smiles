@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { calculateCondition } from "@/lib/conditions";
+import { refreshSumOfWeeklyTotalDependents } from "@/lib/sum-weekly-stat-sync";
 import { getCurrentWeekStart } from "@/lib/constants";
 import { generateSurveyCode, normalizeSurveyCode } from "@/lib/survey/code";
 import { calculateCreditTotals } from "@/lib/survey/credit-totals";
@@ -675,9 +676,9 @@ export async function sendBatch(campaignId: string) {
 }
 
 /**
- * Add `count` letters to this week's Personalized Outflow (abbreviation 'PO')
- * stat entry. Reuses the upsert + condition pattern from stat submission.
- * Skips gracefully if the practice has no PO stat.
+ * Add `count` letters to this week's Personalized Letters stat entry.
+ * Reuses the upsert + condition pattern from stat submission.
+ * Skips gracefully if the practice has no PL/PO stat.
  */
 async function incrementPersonalizedOutflow(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -689,10 +690,10 @@ async function incrementPersonalizedOutflow(
     .from("stats")
     .select("id, post_id, good_direction")
     .eq("practice_id", practiceId)
-    .eq("abbreviation", "PO")
+    .in("abbreviation", ["PL", "PO"])
     .eq("is_active", true)
     .maybeSingle();
-  if (!stat) return; // no PO stat configured — nothing to do
+  if (!stat) return; // no personalized-letter stat configured
 
   // Owning employee for the PO post (fallback to the acting admin).
   const { data: assignment } = await supabase
@@ -710,7 +711,6 @@ async function incrementPersonalizedOutflow(
     .from("stat_entries")
     .select("value, previous_value")
     .eq("stat_id", stat.id)
-    .eq("profile_id", profileId)
     .eq("week_start", week)
     .maybeSingle();
 
@@ -725,7 +725,6 @@ async function incrementPersonalizedOutflow(
       .from("stat_entries")
       .select("value")
       .eq("stat_id", stat.id)
-      .eq("profile_id", profileId)
       .lt("week_start", week)
       .order("week_start", { ascending: false })
       .limit(1)
@@ -752,7 +751,14 @@ async function incrementPersonalizedOutflow(
       updated_at: new Date().toISOString(),
       practice_id: practiceId,
     },
-    { onConflict: "stat_id,profile_id,week_start" }
+    { onConflict: "stat_id,week_start" }
+  );
+
+  await refreshSumOfWeeklyTotalDependents(
+    stat.id,
+    week,
+    fallbackProfileId,
+    practiceId,
   );
 }
 

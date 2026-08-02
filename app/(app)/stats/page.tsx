@@ -37,6 +37,7 @@ export default async function StatsPage({
     (item) =>
       item.stat.daily_tracking_enabled &&
       item.stat.weekly_formula !== "manual" &&
+      item.stat.weekly_formula !== "sum_of_weekly_totals" &&
       (item.stat.weekly_formula !== "ratio_of_sums" ||
         item.dailyInputStatId !== item.stat.id),
   );

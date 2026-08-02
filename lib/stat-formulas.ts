@@ -110,6 +110,15 @@ export function calculateRatioOfSumsWeek(
   return (numerator / denominator) * 100;
 }
 
+export function calculateSumOfWeeklyTotals(entries: RatioEntry[]) {
+  const values = entries
+    .map((entry) => toFiniteNumber(entry.value))
+    .filter((value): value is number => value !== null);
+
+  if (!values.length) return null;
+  return values.reduce((sum, value) => sum + value, 0);
+}
+
 export function isWeeklyFormulaActive(
   formulaEffectiveFrom: string | null | undefined,
   weekStart: string,

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   calculateCollectionsPerStaffWeek,
   calculateRatioOfSumsWeek,
+  calculateSumOfWeeklyTotals,
   getDailyInputStatId,
   isNewPatientBookingsInput,
   isWeeklyFormulaActive,
@@ -126,6 +127,24 @@ test("does not average daily conversion rates", () => {
 test("returns null when the weekly ratio denominator is zero or missing", () => {
   assert.equal(calculateRatioOfSumsWeek([{ value: 2 }], []), null);
   assert.equal(calculateRatioOfSumsWeek([{ value: 2 }], [{ value: 0 }]), null);
+});
+
+test("adds existing weekly source totals for a derived stat", () => {
+  assert.equal(
+    calculateSumOfWeeklyTotals([
+      { value: 120 },
+      { value: "35" },
+      { value: 18 },
+      { value: 9 },
+      { value: 22 },
+    ]),
+    204,
+  );
+});
+
+test("returns null when no weekly source totals exist", () => {
+  assert.equal(calculateSumOfWeeklyTotals([]), null);
+  assert.equal(calculateSumOfWeeklyTotals([{ value: null }]), null);
 });
 
 test("keeps formula-driven recalculation off before its effective week", () => {

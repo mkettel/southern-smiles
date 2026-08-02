@@ -10,7 +10,8 @@ export type WeeklyFormula =
   | "average"
   | "manual"
   | "collections_per_staff"
-  | "ratio_of_sums";
+  | "ratio_of_sums"
+  | "sum_of_weekly_totals";
 export type UserRole = "admin" | "employee";
 
 export interface Division {
@@ -100,6 +101,7 @@ export interface Stat {
   daily_tracking_enabled: boolean;
   weekly_formula: WeeklyFormula;
   formula_source_stat_id: string | null;
+  formula_source_stat_ids: string[];
   formula_denominator_stat_id: string | null;
   formula_effective_from: string | null;
   /** Admin-assigned lifetime condition for this stat. Null = not set. */

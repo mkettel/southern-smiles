@@ -32,6 +32,7 @@ const FORMULA_LABELS = {
   manual: "Manual weekly",
   collections_per_staff: "Collections / staff-days",
   ratio_of_sums: "Ratio of weekly totals",
+  sum_of_weekly_totals: "Sum of weekly totals",
 } as const;
 
 function todayString() {
@@ -169,6 +170,7 @@ export function StatsWorkspace({
       (item) =>
         item.stat.daily_tracking_enabled &&
         item.stat.weekly_formula !== "manual" &&
+        item.stat.weekly_formula !== "sum_of_weekly_totals" &&
         (item.stat.weekly_formula !== "ratio_of_sums" || item.dailyInputStatId !== item.stat.id),
     ),
     [stats],
@@ -383,6 +385,8 @@ export function StatsWorkspace({
                 <div className="grid gap-3 lg:grid-cols-2">
                   {group.stats.map((item) => {
                     const overridden = Boolean(item.weeklyEntry?.is_manual_override);
+                    const isSourceTotal =
+                      item.stat.weekly_formula === "sum_of_weekly_totals";
                     const missingStaffDates = getMissingStaffDaysForCollections(item, stats, dailyValues);
                     return (
                       <Card
@@ -403,19 +407,35 @@ export function StatsWorkspace({
                           </div>
                         </CardHeader>
                         <CardContent className="space-y-3">
-                          <div className="flex gap-2">
-                            <Input
-                              type="number"
-                              min="0"
-                              step={item.stat.stat_type === "count" ? "1" : "0.01"}
-                              value={weeklyValues[item.stat.id] ?? ""}
-                              onChange={(event) => setWeeklyValues((current) => ({ ...current, [item.stat.id]: event.target.value }))}
-                              aria-label={`${item.stat.name} weekly value`}
-                            />
-                            <Button size="icon" onClick={() => saveWeekly(item)} disabled={isPending && pendingKey === item.stat.id} aria-label="Save weekly total">
-                              <Save className="h-4 w-4" />
-                            </Button>
-                          </div>
+                          {isSourceTotal ? (
+                            <div>
+                              <p className="text-3xl font-semibold tabular-nums">
+                                {item.weeklyEntry
+                                  ? formatStatValue(
+                                      Number(item.weeklyEntry.value),
+                                      item.stat.stat_type,
+                                    )
+                                  : "—"}
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Calculated automatically from the five outflow stats.
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="flex gap-2">
+                              <Input
+                                type="number"
+                                min="0"
+                                step={item.stat.stat_type === "count" ? "1" : "0.01"}
+                                value={weeklyValues[item.stat.id] ?? ""}
+                                onChange={(event) => setWeeklyValues((current) => ({ ...current, [item.stat.id]: event.target.value }))}
+                                aria-label={`${item.stat.name} weekly value`}
+                              />
+                              <Button size="icon" onClick={() => saveWeekly(item)} disabled={isPending && pendingKey === item.stat.id} aria-label="Save weekly total">
+                                <Save className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          )}
                           {overridden && item.weeklyEntry?.calculated_value != null && (
                             <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
                               <span>Calculated: {formatStatValue(Number(item.weeklyEntry.calculated_value), item.stat.stat_type)}</span>

@@ -206,6 +206,9 @@ export async function saveSupplyWorkspace(workspace: unknown) {
     safeWorkspace = {
       ...safeWorkspace,
       settings: saved.success ? saved.data.settings : DEFAULT_SUPPLY_BUDGET_SETTINGS,
+      budget_settings_by_month: saved.success
+        ? saved.data.budget_settings_by_month
+        : undefined,
     };
   }
 

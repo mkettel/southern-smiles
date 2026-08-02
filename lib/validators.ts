@@ -213,6 +213,17 @@ const supplyCatalogItemSchema = z.object({
   updated_at: z.string().max(100),
 });
 
+const supplyBudgetSettingsSchema = z.object({
+  budget_month: z.string().regex(/^\d{4}-\d{2}$/),
+  published_at: z.string().max(100).nullable(),
+  published_by: z.string().max(200).nullable(),
+  collections_cents: z.number().int().nonnegative(),
+  routine_target_percent: z.number().nonnegative().max(100),
+  office_target_percent: z.number().nonnegative().max(100),
+  routine_baseline_cents: z.number().int().nonnegative(),
+  office_baseline_cents: z.number().int().nonnegative(),
+});
+
 export const supplyWorkspaceSchema = z.object({
   catalog: z.array(supplyCatalogItemSchema).max(2_000),
   purchases: z.array(z.object({
@@ -229,16 +240,11 @@ export const supplyWorkspaceSchema = z.object({
     case_reference: z.string().max(300).nullable(),
     notes: z.string().max(2_000).nullable(),
   })).max(20_000),
-  settings: z.object({
-    budget_month: z.string().regex(/^\d{4}-\d{2}$/),
-    published_at: z.string().max(100).nullable(),
-    published_by: z.string().max(200).nullable(),
-    collections_cents: z.number().int().nonnegative(),
-    routine_target_percent: z.number().nonnegative().max(100),
-    office_target_percent: z.number().nonnegative().max(100),
-    routine_baseline_cents: z.number().int().nonnegative(),
-    office_baseline_cents: z.number().int().nonnegative(),
-  }),
+  settings: supplyBudgetSettingsSchema,
+  budget_settings_by_month: z.record(
+    z.string().regex(/^\d{4}-\d{2}$/),
+    supplyBudgetSettingsSchema,
+  ).optional(),
   orderDraft: z.array(z.object({
     id: z.string().trim().min(1).max(200),
     catalog_item_id: z.string().trim().min(1).max(200),

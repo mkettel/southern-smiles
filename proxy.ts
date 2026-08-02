@@ -2,7 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
 export default async function proxy(request: NextRequest) {
-  if (request.nextUrl.pathname.startsWith("/api/webhooks/")) {
+  if (
+    request.nextUrl.pathname.startsWith("/api/webhooks/") ||
+    request.nextUrl.pathname.startsWith("/api/cron/")
+  ) {
     return NextResponse.next();
   }
 

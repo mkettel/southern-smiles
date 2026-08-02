@@ -124,6 +124,7 @@ export default async function StatsPage({
           isAdmin={data.isAdmin}
           billsManagedHidden={data.billsManagedHidden ?? false}
           approvedFinancingManagedHidden={data.approvedFinancingManagedHidden ?? false}
+          financialDebtManagedHidden={data.financialDebtManagedHidden ?? false}
         />
       )}
     </div>

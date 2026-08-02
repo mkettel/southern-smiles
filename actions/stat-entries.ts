@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { calculateCondition, type ConditionName } from "@/lib/conditions";
 import { refreshSumOfWeeklyTotalDependents } from "@/lib/sum-weekly-stat-sync";
+import { isTotalCreditCardDebtStat } from "@/lib/financial-connections";
 import type {
   Stat,
   StatComparisonOption,
@@ -29,7 +30,7 @@ export async function deleteStatEntry(entryId: string) {
       .single(),
     supabase
       .from("stat_entries")
-      .select("stat_id, week_start, practice_id")
+      .select("stat_id, week_start, practice_id, stat:stats(name, stat_type)")
       .eq("id", entryId)
       .maybeSingle(),
   ]);
@@ -37,6 +38,15 @@ export async function deleteStatEntry(entryId: string) {
     return { error: "Only admins can delete stat entries" };
   }
   if (!entry) return { error: "Entry not found" };
+  const entryStat = Array.isArray(entry.stat) ? entry.stat[0] : entry.stat;
+  if (
+    entryStat &&
+    isTotalCreditCardDebtStat(
+      entryStat as unknown as Pick<Stat, "name" | "stat_type">,
+    )
+  ) {
+    return { error: "Total Credit Card Debt is updated from Financial Connections" };
+  }
 
   const { error } = await supabase
     .from("stat_entries")
@@ -83,17 +93,24 @@ export async function updateStatEntry(entryId: string, value: number) {
 
   const { data: existing } = await supabase
     .from("stat_entries")
-    .select("stat_id, week_start, practice_id, previous_value, stat:stats(good_direction)")
+    .select("stat_id, week_start, practice_id, previous_value, stat:stats(name, stat_type, good_direction)")
     .eq("id", entryId)
     .single<{
       stat_id: string;
       week_start: string;
       practice_id: string;
       previous_value: number | null;
-      stat: { good_direction: "up" | "down" } | null;
+      stat: {
+        name: string;
+        stat_type: "dollar" | "percentage" | "count";
+        good_direction: "up" | "down";
+      } | null;
     }>();
 
   if (!existing) return { error: "Entry not found" };
+  if (existing.stat && isTotalCreditCardDebtStat(existing.stat)) {
+    return { error: "Total Credit Card Debt is updated from Financial Connections" };
+  }
 
   const result = calculateCondition(
     value,

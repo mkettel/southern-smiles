@@ -18,6 +18,7 @@ import {
 } from "@/lib/stat-formulas";
 import { refreshSumOfWeeklyTotalDependents } from "@/lib/sum-weekly-stat-sync";
 import { isCherryApprovedFinancingStat } from "@/lib/cherry-financing";
+import { isTotalCreditCardDebtStat } from "@/lib/financial-connections";
 import type { DailyStatEntry, Post, Profile, Stat, StatEntry } from "@/lib/types";
 
 export interface WorkspaceStat {
@@ -74,6 +75,9 @@ async function canEditStat(statId: string) {
   }
   if (isCherryApprovedFinancingStat(stat as Stat & { post: Post })) {
     return { error: "Approved Financing is updated from Cherry approval imports" as const };
+  }
+  if (isTotalCreditCardDebtStat(stat as Stat & { post: Post })) {
+    return { error: "Total Credit Card Debt is updated from Financial Connections" as const };
   }
 
   if (profile.role !== "admin") {
@@ -273,6 +277,7 @@ export async function getStatsWorkspace(weekStart = getCurrentWeekStart()) {
         isAdmin: false,
         billsManagedHidden: false,
         approvedFinancingManagedHidden: false,
+        financialDebtManagedHidden: false,
       };
     }
   }
@@ -291,6 +296,7 @@ export async function getStatsWorkspace(weekStart = getCurrentWeekStart()) {
       isAdmin: profile.role === "admin",
       billsManagedHidden: false,
       approvedFinancingManagedHidden: false,
+      financialDebtManagedHidden: false,
     };
   }
   if (error) throw new Error(error.message);
@@ -303,6 +309,7 @@ export async function getStatsWorkspace(weekStart = getCurrentWeekStart()) {
       isAdmin: profile.role === "admin",
       billsManagedHidden: false,
       approvedFinancingManagedHidden: false,
+      financialDebtManagedHidden: false,
     };
   }
   const [{ data: daily, error: dailyError }, { data: weekly }] = await Promise.all([
@@ -316,6 +323,7 @@ export async function getStatsWorkspace(weekStart = getCurrentWeekStart()) {
       isAdmin: profile.role === "admin",
       billsManagedHidden: false,
       approvedFinancingManagedHidden: false,
+      financialDebtManagedHidden: false,
     };
   }
   if (dailyError) throw new Error(dailyError.message);
@@ -324,13 +332,17 @@ export async function getStatsWorkspace(weekStart = getCurrentWeekStart()) {
     (stat) =>
       !isNewPatientBookingsInput(stat) &&
       !isBillsManagedStat(stat as Stat & { post: Post }) &&
-      !isCherryApprovedFinancingStat(stat as Stat & { post: Post }),
+      !isCherryApprovedFinancingStat(stat as Stat & { post: Post }) &&
+      !isTotalCreditCardDebtStat(stat as Stat & { post: Post }),
   );
   const hiddenBillsStats = (stats ?? []).filter((stat) =>
     isBillsManagedStat(stat as Stat & { post: Post }),
   );
   const hiddenApprovedFinancingStats = (stats ?? []).filter((stat) =>
     isCherryApprovedFinancingStat(stat as Stat & { post: Post }),
+  );
+  const hiddenFinancialDebtStats = (stats ?? []).filter((stat) =>
+    isTotalCreditCardDebtStat(stat as Stat & { post: Post }),
   );
 
   return {
@@ -341,6 +353,8 @@ export async function getStatsWorkspace(weekStart = getCurrentWeekStart()) {
     billsManagedHidden: visibleStats.length === 0 && hiddenBillsStats.length > 0,
     approvedFinancingManagedHidden:
       visibleStats.length === 0 && hiddenApprovedFinancingStats.length > 0,
+    financialDebtManagedHidden:
+      visibleStats.length === 0 && hiddenFinancialDebtStats.length > 0,
     stats: visibleStats.map((stat) => {
       const typedStat = stat as Stat;
       const dailyInputStatId = getDailyInputStatId(typedStat);

@@ -34,3 +34,30 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Financial Connections
+
+The Financial Connections admin page uses Plaid Liabilities for read-only
+credit-card balances. Configure these server-only environment variables in
+Vercel (and `.env.local` for sandbox testing):
+
+```bash
+PLAID_ENV=sandbox
+PLAID_CLIENT_ID=...
+PLAID_SECRET=...
+FINANCIAL_TOKEN_ENCRYPTION_KEY=...
+PLAID_REDIRECT_URI=https://ssmiles.survivalboard.org/admin/financial-connections
+PLAID_WEBHOOK_URL=https://ssmiles.survivalboard.org/api/webhooks/plaid
+CRON_SECRET=...
+```
+
+Generate the two application secrets separately:
+
+```bash
+openssl rand -base64 32
+```
+
+Apply `supabase/migrations/20260802224648_add_financial_connections.sql`, then
+add the redirect URI in the Plaid dashboard. Keep `PLAID_ENV=sandbox` until the
+test institution flow and daily sync are verified. Production Capital One
+connections require Plaid Production access and the same HTTPS redirect URI.

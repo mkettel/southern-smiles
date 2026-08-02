@@ -24,6 +24,7 @@ interface Props {
   isAdmin: boolean;
   billsManagedHidden?: boolean;
   approvedFinancingManagedHidden?: boolean;
+  financialDebtManagedHidden?: boolean;
 }
 
 const FORMULA_LABELS = {
@@ -143,6 +144,7 @@ export function StatsWorkspace({
   isAdmin,
   billsManagedHidden = false,
   approvedFinancingManagedHidden = false,
+  financialDebtManagedHidden = false,
 }: Props) {
   const router = useRouter();
   const [pendingKey, setPendingKey] = useState<string | null>(null);
@@ -297,9 +299,11 @@ export function StatsWorkspace({
             ? "Your Bills stat is updated automatically from the Bills tracker — there's nothing to enter here."
             : approvedFinancingManagedHidden
               ? "Your Approved Financing stat is updated automatically from Cherry approval imports — there's nothing to enter here."
-            : isAdmin
-              ? "No active stats are configured."
-              : "No stats are assigned to you."}
+              : financialDebtManagedHidden
+                ? "Your Total Credit Card Debt stat is updated automatically from Financial Connections — there's nothing to enter here."
+                : isAdmin
+                  ? "No active stats are configured."
+                  : "No stats are assigned to you."}
         </CardContent>
       </Card>
     );

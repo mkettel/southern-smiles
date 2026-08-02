@@ -83,6 +83,7 @@ export interface SavedSupplyWorkspace {
   catalog: SupplyCatalogItem[];
   purchases: SupplyPurchase[];
   settings: SupplyBudgetSettings;
+  budget_settings_by_month?: Record<string, SupplyBudgetSettings>;
   orderDraft: SupplyOrderDraftLine[];
   vendors?: SupplyVendor[];
 }
@@ -165,6 +166,29 @@ export const DEFAULT_SUPPLY_BUDGET_SETTINGS: SupplyBudgetSettings = {
   routine_baseline_cents: 301_000,
   office_baseline_cents: 108_700,
 };
+
+export function createSupplyBudgetSettingsForMonth(
+  budgetMonth: string,
+  template: SupplyBudgetSettings = DEFAULT_SUPPLY_BUDGET_SETTINGS,
+): SupplyBudgetSettings {
+  return {
+    ...template,
+    budget_month: budgetMonth,
+    published_at: null,
+    published_by: null,
+  };
+}
+
+export function buildSupplyBudgetSettingsByMonth(
+  workspace: Pick<SavedSupplyWorkspace, "settings" | "budget_settings_by_month">,
+): Record<string, SupplyBudgetSettings> {
+  const saved = workspace.budget_settings_by_month ?? {};
+  return {
+    [DEFAULT_SUPPLY_BUDGET_SETTINGS.budget_month]: DEFAULT_SUPPLY_BUDGET_SETTINGS,
+    ...saved,
+    [workspace.settings.budget_month]: workspace.settings,
+  };
+}
 
 const PROCEDURE_COST_SEED: SupplyCatalogItem[] = [
   {

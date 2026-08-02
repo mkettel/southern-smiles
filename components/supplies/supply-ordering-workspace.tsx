@@ -54,7 +54,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { formatCurrency, parseDollarAmountToCents, todayString } from "@/lib/bills";
 import {
   calculateSupplyBudgetCents,
+  buildSupplyBudgetSettingsByMonth,
   buildSupplyVendorDirectory,
+  createSupplyBudgetSettingsForMonth,
   createSupplyId,
   createSupplyVendor,
   DEFAULT_SUPPLY_BUDGET_SETTINGS,
@@ -166,6 +168,9 @@ export function SupplyOrderingWorkspace({
   const [settings, setSettings] = useState<SupplyBudgetSettings>(
     DEFAULT_SUPPLY_BUDGET_SETTINGS,
   );
+  const [budgetSettingsByMonth, setBudgetSettingsByMonth] = useState<
+    Record<string, SupplyBudgetSettings>
+  >(() => buildSupplyBudgetSettingsByMonth({ settings: DEFAULT_SUPPLY_BUDGET_SETTINGS }));
   const [hasHydrated, setHasHydrated] = useState(false);
   const [catalogDialogOpen, setCatalogDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
@@ -203,13 +208,22 @@ export function SupplyOrderingWorkspace({
           )?.id ?? null,
           order_method: line.order_method ?? "online",
         })));
-        setSettings(normalizeSettings(restored.settings));
+        const restoredSettings = normalizeSettings(restored.settings);
+        const restoredBudgetSettings = Object.fromEntries(
+          Object.entries(buildSupplyBudgetSettingsByMonth(restored)).map(([month, monthSettings]) => [
+            month,
+            normalizeSettings({ ...monthSettings, budget_month: month }),
+          ]),
+        );
+        setSettings(restoredSettings);
+        setBudgetSettingsByMonth(restoredBudgetSettings);
         setSelectedCatalogItemId(restoredCatalog[0]?.id ?? "");
         if (initialWorkspace) {
           lastSavedWorkspace.current = JSON.stringify({
             catalog: restoredCatalog,
             purchases: restored.purchases,
-            settings: normalizeSettings(restored.settings),
+            settings: restoredSettings,
+            budget_settings_by_month: restoredBudgetSettings,
             orderDraft: restored.orderDraft ?? [],
             vendors: restoredVendors,
           } satisfies SavedSupplyWorkspace);
@@ -224,7 +238,14 @@ export function SupplyOrderingWorkspace({
 
   useEffect(() => {
     if (!hasHydrated) return;
-    const workspace = { catalog, purchases, settings, orderDraft, vendors } satisfies SavedSupplyWorkspace;
+    const workspace = {
+      catalog,
+      purchases,
+      settings,
+      budget_settings_by_month: budgetSettingsByMonth,
+      orderDraft,
+      vendors,
+    } satisfies SavedSupplyWorkspace;
     const serialized = JSON.stringify(workspace);
     window.localStorage.setItem(STORAGE_KEY, serialized);
     if (!sharedPersistenceEnabled) return;
@@ -245,7 +266,28 @@ export function SupplyOrderingWorkspace({
     }, 750);
 
     return () => window.clearTimeout(timeout);
-  }, [catalog, hasHydrated, orderDraft, purchases, settings, sharedPersistenceEnabled, vendors]);
+  }, [budgetSettingsByMonth, catalog, hasHydrated, orderDraft, purchases, settings, sharedPersistenceEnabled, vendors]);
+
+  function updateBudgetSettings(nextSettings: SupplyBudgetSettings) {
+    if (nextSettings.budget_month !== settings.budget_month) {
+      const selectedMonth = nextSettings.budget_month;
+      const selectedSettings = budgetSettingsByMonth[selectedMonth]
+        ?? createSupplyBudgetSettingsForMonth(selectedMonth, settings);
+      setBudgetSettingsByMonth((current) => ({
+        ...current,
+        [settings.budget_month]: settings,
+        [selectedMonth]: selectedSettings,
+      }));
+      setSettings(selectedSettings);
+      return;
+    }
+
+    setSettings(nextSettings);
+    setBudgetSettingsByMonth((current) => ({
+      ...current,
+      [nextSettings.budget_month]: nextSettings,
+    }));
+  }
 
   const budget = useMemo(() => {
     const routineCents = calculateSupplyBudgetCents(
@@ -518,7 +560,7 @@ export function SupplyOrderingWorkspace({
             budget={budget}
             purchaseTotals={purchaseTotals}
             settings={settings}
-            onSettingsChange={setSettings}
+            onSettingsChange={updateBudgetSettings}
             canManageBudget={canManageBudget}
             onLogPurchase={() => openPurchaseDialog()}
             recentPurchases={recentPurchases}

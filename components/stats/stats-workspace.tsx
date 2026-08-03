@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Calculator, RotateCcw, Save, Search } from "lucide-react";
+import { Calculator, ExternalLink, RotateCcw, Save, Search } from "lucide-react";
 import { toast } from "sonner";
 import {
   resetWeeklyOverride,
@@ -11,8 +12,9 @@ import {
   type WorkspaceStat,
 } from "@/actions/stats-workspace";
 import { formatStatValue } from "@/lib/utils";
+import { isTotalCreditCardDebtStat } from "@/lib/financial-connections";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
@@ -391,6 +393,7 @@ export function StatsWorkspace({
                     const overridden = Boolean(item.weeklyEntry?.is_manual_override);
                     const isSourceTotal =
                       item.stat.weekly_formula === "sum_of_weekly_totals";
+                    const isFinancialDebt = isTotalCreditCardDebtStat(item.stat);
                     const missingStaffDates = getMissingStaffDaysForCollections(item, stats, dailyValues);
                     return (
                       <Card
@@ -406,12 +409,41 @@ export function StatsWorkspace({
                               <p className="mt-1 text-xs text-muted-foreground">{item.post.title}</p>
                             </div>
                             <Badge variant={overridden ? "default" : "secondary"}>
-                              {overridden ? "Manual override" : FORMULA_LABELS[item.stat.weekly_formula]}
+                              {isFinancialDebt
+                                ? "Auto-synced"
+                                : overridden
+                                  ? "Manual override"
+                                  : FORMULA_LABELS[item.stat.weekly_formula]}
                             </Badge>
                           </div>
                         </CardHeader>
                         <CardContent className="space-y-3">
-                          {isSourceTotal ? (
+                          {isFinancialDebt ? (
+                            <div className="space-y-3">
+                              <div>
+                                <p className="text-3xl font-semibold tabular-nums">
+                                  {item.weeklyEntry
+                                    ? formatStatValue(
+                                        Number(item.weeklyEntry.value),
+                                        item.stat.stat_type,
+                                      )
+                                    : "—"}
+                                </p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  Updated automatically from included cards in Financial Connections.
+                                </p>
+                              </div>
+                              {isAdmin && (
+                                <Link
+                                  href="/admin/financial-connections"
+                                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                                >
+                                  Review connections
+                                  <ExternalLink />
+                                </Link>
+                              )}
+                            </div>
+                          ) : isSourceTotal ? (
                             <div>
                               <p className="text-3xl font-semibold tabular-nums">
                                 {item.weeklyEntry

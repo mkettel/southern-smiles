@@ -332,8 +332,7 @@ export async function getStatsWorkspace(weekStart = getCurrentWeekStart()) {
     (stat) =>
       !isNewPatientBookingsInput(stat) &&
       !isBillsManagedStat(stat as Stat & { post: Post }) &&
-      !isCherryApprovedFinancingStat(stat as Stat & { post: Post }) &&
-      !isTotalCreditCardDebtStat(stat as Stat & { post: Post }),
+      !isCherryApprovedFinancingStat(stat as Stat & { post: Post }),
   );
   const hiddenBillsStats = (stats ?? []).filter((stat) =>
     isBillsManagedStat(stat as Stat & { post: Post }),

@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
-  BOOKKEEPING_CATEGORIES,
   calculateTransactionTotals,
+  normalizeVendorName,
+  transactionDisplayName,
   type FinancialTransaction,
   type FinancialTransactionDashboardData,
 } from "@/lib/financial-transactions";
@@ -12,17 +13,13 @@ import { syncFinancialTransactions } from "@/lib/financial-sync";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
-const categoryValues = BOOKKEEPING_CATEGORIES.map((category) => category.value) as [
-  string,
-  ...string[],
-];
 const reviewSchema = z.object({
   transactionId: z.string().uuid(),
-  category: z.enum(categoryValues).nullable(),
+  accountId: z.string().uuid().nullable(),
   status: z.enum(["reviewed", "excluded"]),
   note: z.string().trim().max(1000).nullable().optional(),
-}).refine((value) => value.status === "excluded" || value.category !== null, {
-  message: "Choose a category before approving",
+}).refine((value) => value.status === "excluded" || value.accountId !== null, {
+  message: "Choose an account before approving",
 });
 const connectionIdSchema = z.string().uuid().optional();
 
@@ -52,6 +49,8 @@ function isSetupMissing(error: { code?: string; message?: string } | null) {
   return Boolean(
     error &&
       (message.includes("financial_transactions") ||
+        message.includes("bookkeeping_accounts") ||
+        message.includes("bookkeeping_vendor_rules") ||
         message.includes("transactions_status") ||
         error.code === "PGRST204" ||
         error.code === "PGRST205"),
@@ -80,6 +79,24 @@ export async function getFinancialTransactionDashboardData(): Promise<
     .eq("is_active", true)
     .order("name", { ascending: true });
   if (accountError) throw new Error(accountError.message);
+
+  const { data: bookkeepingAccounts, error: bookkeepingAccountError } = await supabase
+    .from("bookkeeping_accounts")
+    .select("id, account_number, name, account_type, detail_type, external_source")
+    .eq("practice_id", practiceId)
+    .eq("is_active", true)
+    .order("account_type", { ascending: true })
+    .order("account_number", { ascending: true, nullsFirst: false })
+    .order("name", { ascending: true });
+  if (isSetupMissing(bookkeepingAccountError)) return null;
+  if (bookkeepingAccountError) throw new Error(bookkeepingAccountError.message);
+
+  const { data: vendorRules, error: vendorRuleError } = await supabase
+    .from("bookkeeping_vendor_rules")
+    .select("normalized_vendor, bookkeeping_account_id")
+    .eq("practice_id", practiceId);
+  if (isSetupMissing(vendorRuleError)) return null;
+  if (vendorRuleError) throw new Error(vendorRuleError.message);
 
   const { data: transactions, error: transactionError } = await supabase
     .from("financial_transactions")
@@ -118,6 +135,19 @@ export async function getFinancialTransactionDashboardData(): Promise<
   if (reviewedError) throw new Error(reviewedError.message);
 
   const typedTransactions = (transactions ?? []) as FinancialTransaction[];
+  const activeBookkeepingAccountIds = new Set(
+    (bookkeepingAccounts ?? []).map((account) => account.id as string),
+  );
+  const ruleByVendor = new Map(
+    (vendorRules ?? [])
+      .filter((rule) =>
+        activeBookkeepingAccountIds.has(rule.bookkeeping_account_id as string),
+      )
+      .map((rule) => [
+        rule.normalized_vendor as string,
+        rule.bookkeeping_account_id as string,
+      ]),
+  );
   const currentMonthTotals = calculateTransactionTotals(
     currentMonthRows as Pick<
       FinancialTransaction,
@@ -142,6 +172,22 @@ export async function getFinancialTransactionDashboardData(): Promise<
         institutionByConnection.get(account.connection_id as string) ??
         "Financial institution",
     })),
+    bookkeepingAccounts: (bookkeepingAccounts ?? []).map((account) => ({
+      id: account.id as string,
+      accountNumber: account.account_number as string | null,
+      name: account.name as string,
+      accountType: account.account_type as string,
+      detailType: account.detail_type as string | null,
+      externalSource: account.external_source as "quickbooks" | "manual",
+    })),
+    suggestedBookkeepingAccountByTransaction: Object.fromEntries(
+      typedTransactions.flatMap((transaction) => {
+        if (transaction.bookkeeping_account_id) return [];
+        const normalizedVendor = normalizeVendorName(transactionDisplayName(transaction));
+        const suggestedAccountId = ruleByVendor.get(normalizedVendor);
+        return suggestedAccountId ? [[transaction.id, suggestedAccountId]] : [];
+      }),
+    ),
     pendingCount: pendingCount ?? 0,
     reviewedCount: reviewedCount ?? 0,
     currentMonthOutflowCents: currentMonthTotals.outflowCents,
@@ -166,11 +212,37 @@ export async function reviewFinancialTransaction(input: unknown) {
   }
   const { supabase, userId, practiceId } = await requireAdmin();
   const now = new Date().toISOString();
+  const { data: transaction, error: transactionError } = await supabase
+    .from("financial_transactions")
+    .select("id, name, merchant_name, counterparty_name")
+    .eq("id", parsed.data.transactionId)
+    .eq("practice_id", practiceId)
+    .eq("is_removed", false)
+    .single();
+  if (transactionError || !transaction) {
+    return { error: transactionError?.message ?? "Transaction not found" };
+  }
+
+  if (parsed.data.status === "reviewed") {
+    const { data: account, error: accountError } = await supabase
+      .from("bookkeeping_accounts")
+      .select("id")
+      .eq("id", parsed.data.accountId)
+      .eq("practice_id", practiceId)
+      .eq("is_active", true)
+      .single();
+    if (accountError || !account) {
+      return { error: accountError?.message ?? "Bookkeeping account not found" };
+    }
+  }
+
   const { error } = await supabase
     .from("financial_transactions")
     .update({
-      bookkeeping_category:
-        parsed.data.status === "excluded" ? null : parsed.data.category,
+      bookkeeping_category: null,
+      bookkeeping_account_id:
+        parsed.data.status === "excluded" ? null : parsed.data.accountId,
+      category_source: parsed.data.status === "excluded" ? null : "manual",
       review_status: parsed.data.status,
       review_note: parsed.data.note || null,
       reviewed_by: userId,
@@ -181,6 +253,35 @@ export async function reviewFinancialTransaction(input: unknown) {
     .eq("practice_id", practiceId)
     .eq("is_removed", false);
   if (error) return { error: error.message };
+
+  const normalizedVendor = normalizeVendorName(
+    transactionDisplayName(transaction as Pick<
+      FinancialTransaction,
+      "merchant_name" | "counterparty_name" | "name"
+    >),
+  );
+  if (
+    parsed.data.status === "reviewed" &&
+    parsed.data.accountId &&
+    normalizedVendor.length >= 2
+  ) {
+    const { error: ruleError } = await supabase
+      .from("bookkeeping_vendor_rules")
+      .upsert(
+        {
+          practice_id: practiceId,
+          normalized_vendor: normalizedVendor,
+          bookkeeping_account_id: parsed.data.accountId,
+          source: "review",
+          sample_count: 1,
+          confidence: 1,
+          updated_by: userId,
+          updated_at: now,
+        },
+        { onConflict: "practice_id,normalized_vendor" },
+      );
+    if (ruleError) return { error: ruleError.message };
+  }
 
   revalidatePath("/admin/financial-transactions");
   return { success: true };

@@ -4,7 +4,7 @@ import type { Transaction } from "plaid";
 import {
   calculateTransactionTotals,
   mapPlaidTransaction,
-  suggestBookkeepingCategory,
+  normalizeVendorName,
   transactionDisplayName,
   type FinancialTransaction,
 } from "@/lib/financial-transactions";
@@ -74,21 +74,7 @@ test("transactionDisplayName prefers the recognized merchant", () => {
   assert.equal(transactionDisplayName(transaction), "Recognized Merchant");
 });
 
-test("suggestBookkeepingCategory prefills obvious Plaid classifications", () => {
-  assert.equal(
-    suggestBookkeepingCategory({
-      amount_cents: 12500,
-      plaid_category_primary: "TRANSFER_OUT",
-      plaid_category_detailed: "TRANSFER_OUT_CREDIT_CARD_PAYMENT",
-    }),
-    "credit-card-payment",
-  );
-  assert.equal(
-    suggestBookkeepingCategory({
-      amount_cents: 4999,
-      plaid_category_primary: "FOOD_AND_DRINK",
-      plaid_category_detailed: "FOOD_AND_DRINK_RESTAURANT",
-    }),
-    "meals",
-  );
+test("normalizeVendorName creates a stable rule key", () => {
+  assert.equal(normalizeVendorName(" NET32* PA Dental "), "net32 pa dental");
+  assert.equal(normalizeVendorName("Google Ads / Southern Smiles"), "google ads southern smiles");
 });

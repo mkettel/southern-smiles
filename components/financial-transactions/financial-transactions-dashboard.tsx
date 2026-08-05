@@ -30,10 +30,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  BOOKKEEPING_CATEGORIES,
-  suggestBookkeepingCategory,
   transactionDisplayName,
-  type BookkeepingCategory,
   type FinancialTransaction,
   type FinancialTransactionDashboardData,
 } from "@/lib/financial-transactions";
@@ -55,14 +52,26 @@ export function FinancialTransactionsDashboard({
   const [accountId, setAccountId] = useState("all");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [transactions, setTransactions] = useState(initialData.transactions);
-  const [categories, setCategories] = useState<Record<string, BookkeepingCategory | "">>(
+  const [bookkeepingAccountIds, setBookkeepingAccountIds] = useState<Record<string, string>>(
     () => Object.fromEntries(
       transactions.map((transaction) => [
         transaction.id,
-        transaction.bookkeeping_category ?? suggestBookkeepingCategory(transaction) ?? "",
+        transaction.bookkeeping_account_id ??
+          initialData.suggestedBookkeepingAccountByTransaction[transaction.id] ??
+          "",
       ]),
     ),
   );
+
+  const bookkeepingAccountsByType = useMemo(() => {
+    const grouped = new Map<string, typeof initialData.bookkeepingAccounts>();
+    for (const account of initialData.bookkeepingAccounts) {
+      const group = grouped.get(account.accountType) ?? [];
+      group.push(account);
+      grouped.set(account.accountType, group);
+    }
+    return [...grouped.entries()];
+  }, [initialData.bookkeepingAccounts]);
 
   const accountById = useMemo(
     () => new Map(initialData.accounts.map((account) => [account.id, account])),
@@ -112,9 +121,9 @@ export function FinancialTransactionsDashboard({
   }
 
   async function review(transaction: FinancialTransaction, excluded = false) {
-    const category = categories[transaction.id] || null;
-    if (!excluded && !category) {
-      toast.error("Choose a category before approving");
+    const bookkeepingAccountId = bookkeepingAccountIds[transaction.id] || null;
+    if (!excluded && !bookkeepingAccountId) {
+      toast.error("Choose an account before approving");
       return;
     }
     if (previewMode) {
@@ -123,7 +132,8 @@ export function FinancialTransactionsDashboard({
           item.id === transaction.id
             ? {
                 ...item,
-                bookkeeping_category: excluded ? null : category,
+                bookkeeping_account_id: excluded ? null : bookkeepingAccountId,
+                category_source: excluded ? null : "manual",
                 review_status: excluded ? "excluded" : "reviewed",
               }
             : item,
@@ -136,7 +146,7 @@ export function FinancialTransactionsDashboard({
     setBusyId(transaction.id);
     const result = await reviewFinancialTransaction({
       transactionId: transaction.id,
-      category,
+      accountId: bookkeepingAccountId,
       status: excluded ? "excluded" : "reviewed",
     });
     setBusyId(null);
@@ -229,6 +239,12 @@ export function FinancialTransactionsDashboard({
         </Button>
       </div>
 
+      {initialData.bookkeepingAccounts.length === 0 && (
+        <div className="border-y border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+          Import the QuickBooks chart of accounts before approving transactions.
+        </div>
+      )}
+
       {filtered.length === 0 ? (
         <div className="border-y py-14 text-center">
           <Check className="mx-auto h-6 w-6 text-muted-foreground" />
@@ -245,7 +261,7 @@ export function FinancialTransactionsDashboard({
                 <TableHead className="w-28">Date</TableHead>
                 <TableHead>Transaction</TableHead>
                 <TableHead>Account</TableHead>
-                <TableHead className="w-60">Bookkeeping category</TableHead>
+                <TableHead className="w-72">Chart of accounts</TableHead>
                 <TableHead className="w-32 text-right">Amount</TableHead>
                 <TableHead className="w-24 text-right">Review</TableHead>
               </TableRow>
@@ -281,23 +297,34 @@ export function FinancialTransactionsDashboard({
                     <TableCell>
                       <select
                         className="h-8 w-full rounded-md border bg-background px-2 text-sm"
-                        value={categories[transaction.id] ?? ""}
+                        value={bookkeepingAccountIds[transaction.id] ?? ""}
                         onChange={(event) =>
-                          setCategories((current) => ({
+                          setBookkeepingAccountIds((current) => ({
                             ...current,
-                            [transaction.id]: event.target.value as BookkeepingCategory | "",
+                            [transaction.id]: event.target.value,
                           }))
                         }
                         disabled={rowBusy}
-                        aria-label={`Category for ${transactionDisplayName(transaction)}`}
+                        aria-label={`Account for ${transactionDisplayName(transaction)}`}
                       >
-                        <option value="">Choose category</option>
-                        {BOOKKEEPING_CATEGORIES.map((category) => (
-                          <option key={category.value} value={category.value}>
-                            {category.label}
-                          </option>
+                        <option value="">Choose account</option>
+                        {bookkeepingAccountsByType.map(([accountType, accounts]) => (
+                          <optgroup key={accountType} label={accountType}>
+                            {accounts.map((account) => (
+                              <option key={account.id} value={account.id}>
+                                {account.accountNumber ? `${account.accountNumber} ` : ""}
+                                {account.name}
+                              </option>
+                            ))}
+                          </optgroup>
                         ))}
                       </select>
+                      {initialData.suggestedBookkeepingAccountByTransaction[transaction.id] &&
+                        !transaction.bookkeeping_account_id && (
+                          <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
+                            Suggested from prior vendor history
+                          </p>
+                        )}
                     </TableCell>
                     <TableCell
                       className={cn(
@@ -322,10 +349,10 @@ export function FinancialTransactionsDashboard({
                         </Button>
                         <Button
                           size="icon-sm"
-                          title="Approve category"
+                          title="Approve account"
                           aria-label={`Approve ${transactionDisplayName(transaction)}`}
                           onClick={() => review(transaction)}
-                          disabled={disabled || !categories[transaction.id]}
+                          disabled={disabled || !bookkeepingAccountIds[transaction.id]}
                         >
                           {rowBusy ? <Loader2 className="animate-spin" /> : <Check />}
                         </Button>
@@ -339,7 +366,7 @@ export function FinancialTransactionsDashboard({
         </div>
       )}
       <p className="text-xs text-muted-foreground">
-        Showing up to 500 recent transactions. Imported amounts are read-only; only your review category and status are editable.
+        Showing up to 500 recent transactions. Imported amounts are read-only; approving an account teaches the next transaction from that vendor.
       </p>
     </div>
   );

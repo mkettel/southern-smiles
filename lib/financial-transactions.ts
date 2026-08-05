@@ -1,33 +1,15 @@
 import type { Transaction } from "plaid";
 
-export const BOOKKEEPING_CATEGORIES = [
-  { value: "advertising", label: "Advertising", kind: "expense" },
-  { value: "bank-fees", label: "Bank & card fees", kind: "expense" },
-  { value: "clinical-supplies", label: "Clinical supplies", kind: "expense" },
-  { value: "office-supplies", label: "Office supplies", kind: "expense" },
-  { value: "lab-fees", label: "Lab fees", kind: "expense" },
-  { value: "rent", label: "Rent", kind: "expense" },
-  { value: "utilities", label: "Utilities", kind: "expense" },
-  { value: "payroll", label: "Payroll", kind: "expense" },
-  { value: "insurance", label: "Insurance", kind: "expense" },
-  { value: "software", label: "Software & subscriptions", kind: "expense" },
-  { value: "repairs-maintenance", label: "Repairs & maintenance", kind: "expense" },
-  { value: "professional-services", label: "Professional services", kind: "expense" },
-  { value: "meals", label: "Meals", kind: "expense" },
-  { value: "travel", label: "Travel", kind: "expense" },
-  { value: "taxes", label: "Taxes", kind: "expense" },
-  { value: "income", label: "Income", kind: "income" },
-  { value: "refund", label: "Refund", kind: "income" },
-  { value: "transfer", label: "Transfer", kind: "transfer" },
-  { value: "credit-card-payment", label: "Credit card payment", kind: "transfer" },
-  { value: "debt-payment", label: "Debt payment", kind: "transfer" },
-  { value: "owner-contribution", label: "Owner contribution", kind: "equity" },
-  { value: "owner-draw", label: "Owner draw", kind: "equity" },
-  { value: "other-expense", label: "Other expense", kind: "expense" },
-] as const;
-
-export type BookkeepingCategory = (typeof BOOKKEEPING_CATEGORIES)[number]["value"];
 export type FinancialTransactionReviewStatus = "pending" | "reviewed" | "excluded";
+
+export interface BookkeepingAccount {
+  id: string;
+  accountNumber: string | null;
+  name: string;
+  accountType: string;
+  detailType: string | null;
+  externalSource: "quickbooks" | "manual";
+}
 
 export interface FinancialTransaction {
   id: string;
@@ -55,7 +37,9 @@ export interface FinancialTransaction {
   plaid_category_primary: string | null;
   plaid_category_detailed: string | null;
   plaid_category_confidence: string | null;
-  bookkeeping_category: BookkeepingCategory | null;
+  bookkeeping_category: string | null;
+  bookkeeping_account_id: string | null;
+  category_source: "vendor_rule" | "manual" | null;
   review_status: FinancialTransactionReviewStatus;
   review_note: string | null;
   reviewed_by: string | null;
@@ -77,6 +61,8 @@ export interface FinancialTransactionAccountSummary {
 export interface FinancialTransactionDashboardData {
   transactions: FinancialTransaction[];
   accounts: FinancialTransactionAccountSummary[];
+  bookkeepingAccounts: BookkeepingAccount[];
+  suggestedBookkeepingAccountByTransaction: Record<string, string>;
   pendingCount: number;
   reviewedCount: number;
   currentMonthOutflowCents: number;
@@ -114,10 +100,6 @@ export interface FinancialTransactionUpsert {
   is_removed: false;
   removed_at: null;
   updated_at: string;
-}
-
-export function isBookkeepingCategory(value: string): value is BookkeepingCategory {
-  return BOOKKEEPING_CATEGORIES.some((category) => category.value === value);
 }
 
 export function mapPlaidTransaction({
@@ -175,33 +157,12 @@ export function transactionDisplayName(
   return transaction.merchant_name ?? transaction.counterparty_name ?? transaction.name;
 }
 
-export function suggestBookkeepingCategory(
-  transaction: Pick<
-    FinancialTransaction,
-    "amount_cents" | "plaid_category_primary" | "plaid_category_detailed"
-  >,
-): BookkeepingCategory | null {
-  const primary = transaction.plaid_category_primary ?? "";
-  const detailed = transaction.plaid_category_detailed ?? "";
-
-  if (detailed.includes("CREDIT_CARD_PAYMENT")) return "credit-card-payment";
-  if (primary.includes("TRANSFER")) return "transfer";
-  if (primary.includes("INCOME") || transaction.amount_cents < 0) return "income";
-  if (primary.includes("LOAN_PAYMENTS")) return "debt-payment";
-  if (primary.includes("BANK_FEES")) return "bank-fees";
-  if (primary.includes("FOOD_AND_DRINK")) return "meals";
-  if (primary.includes("TRAVEL")) return "travel";
-  if (primary.includes("RENT_AND_UTILITIES")) {
-    return detailed.includes("RENT") ? "rent" : "utilities";
-  }
-  if (detailed.includes("INSURANCE")) return "insurance";
-  if (detailed.includes("TAX")) return "taxes";
-  if (detailed.includes("OFFICE_SUPPLIES")) return "office-supplies";
-  if (detailed.includes("ADVERTISING")) return "advertising";
-  if (detailed.includes("ACCOUNTING") || detailed.includes("LEGAL")) {
-    return "professional-services";
-  }
-  return null;
+export function normalizeVendorName(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .slice(0, 300);
 }
 
 export function calculateTransactionTotals(

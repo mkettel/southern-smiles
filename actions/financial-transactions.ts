@@ -72,12 +72,22 @@ export async function getFinancialTransactionDashboardData(): Promise<
   if (isSetupMissing(connectionError)) return null;
   if (connectionError) throw new Error(connectionError.message);
 
-  const { data: accounts, error: accountError } = await supabase
+  let { data: accounts, error: accountError } = await supabase
     .from("financial_accounts")
-    .select("id, connection_id, name, mask, included_in_bookkeeping")
+    .select("id, connection_id, name, nickname, mask, included_in_bookkeeping")
     .eq("practice_id", practiceId)
     .eq("is_active", true)
     .order("name", { ascending: true });
+  if (accountError?.code === "PGRST204") {
+    const fallback = await supabase
+      .from("financial_accounts")
+      .select("id, connection_id, name, mask, included_in_bookkeeping")
+      .eq("practice_id", practiceId)
+      .eq("is_active", true)
+      .order("name", { ascending: true });
+    accounts = fallback.data?.map((account) => ({ ...account, nickname: null })) ?? null;
+    accountError = fallback.error;
+  }
   if (accountError) throw new Error(accountError.message);
   const includedAccounts = (accounts ?? []).filter(
     (account) => account.included_in_bookkeeping,
@@ -171,6 +181,7 @@ export async function getFinancialTransactionDashboardData(): Promise<
       id: account.id as string,
       connectionId: account.connection_id as string,
       name: account.name as string,
+      nickname: account.nickname as string | null,
       mask: account.mask as string | null,
       institutionName:
         institutionByConnection.get(account.connection_id as string) ??

@@ -1,10 +1,9 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DatabaseZap } from "lucide-react";
 import { getProfile } from "@/actions/auth";
 import { getFinancialTransactionDashboardData } from "@/actions/financial-transactions";
+import { FinancialWorkspaceShell } from "@/components/financial/financial-workspace-shell";
 import { FinancialTransactionsDashboard } from "@/components/financial-transactions/financial-transactions-dashboard";
-import { Button } from "@/components/ui/button";
 
 export default async function AdminFinancialTransactionsPage() {
   const profile = await getProfile();
@@ -14,21 +13,10 @@ export default async function AdminFinancialTransactionsPage() {
   const data = await getFinancialTransactionDashboardData().catch(() => null);
 
   return (
-    <div className="mx-auto max-w-[1500px] space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Transaction Inbox</h1>
-          <p className="text-sm text-muted-foreground">
-            Review imported bank activity before it becomes trusted bookkeeping data.
-          </p>
-        </div>
-        <Button variant="outline" render={<Link href="/admin/financial-connections" />}>
-          Manage connections
-        </Button>
-      </div>
-
+    <FinancialWorkspaceShell active="bookkeeping">
+      <div className="mb-5"><h2 className="text-lg font-semibold">Bookkeeping</h2><p className="mt-1 text-sm text-muted-foreground">Reconcile each connected account and review imported activity before it becomes trusted bookkeeping data.</p></div>
       {data ? <FinancialTransactionsDashboard initialData={data} /> : <SchemaSetupNotice />}
-    </div>
+    </FinancialWorkspaceShell>
   );
 }
 

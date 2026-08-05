@@ -30,7 +30,6 @@ import {
   ShoppingCart,
   PackageSearch,
   Landmark,
-  ListChecks,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -67,8 +66,7 @@ const adminOnlyLinks: NavLink[] = [
   { href: "/admin/supplies", label: "Supply Ordering", icon: ShoppingCart },
   { href: "/admin/supply-invoices", label: "Supply Invoice Inbox", icon: PackageSearch },
   { href: "/admin/bills", label: "Bills", icon: ReceiptText },
-  { href: "/admin/financial-connections", label: "Financial Connections", icon: Landmark },
-  { href: "/admin/financial-transactions", label: "Transaction Inbox", icon: ListChecks },
+  { href: "/admin/financial", label: "Financial", icon: Landmark },
   { href: "/admin/cherry-financing", label: "Approved Financing", icon: BadgeDollarSign },
   { href: "/admin/surveys", label: "Patient Surveys", icon: Mailbox },
   { href: "/admin/export", label: "Export & Analyze", icon: Download },
@@ -358,6 +356,9 @@ export function Sidebar({
                   active={
                     pathname === link.href ||
                     pathname.startsWith(link.href + "/") ||
+                    (link.href === "/admin/financial" &&
+                      (pathname === "/admin/financial-connections" ||
+                        pathname === "/admin/financial-transactions")) ||
                     (link.href === "/admin/supplies" &&
                       pathname === "/supply-ordering-preview")
                   }

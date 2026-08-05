@@ -38,6 +38,7 @@ export interface FinancialAccount {
   connection_id: string;
   provider_account_id: string;
   name: string;
+  nickname: string | null;
   official_name: string | null;
   mask: string | null;
   account_type: string;

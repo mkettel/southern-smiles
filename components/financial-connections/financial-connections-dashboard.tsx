@@ -5,12 +5,15 @@ import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   Building2,
+  Check,
   CreditCard,
   Link2,
   Loader2,
+  Pencil,
   RefreshCw,
   ShieldCheck,
   Unlink,
+  X,
 } from "lucide-react";
 import {
   usePlaidLink,
@@ -26,10 +29,12 @@ import {
   refreshFinancialConnection,
   setFinancialAccountBookkeepingIncluded,
   setFinancialAccountIncluded,
+  setFinancialAccountNickname,
 } from "@/actions/financial-connections";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type {
   FinancialAccount,
@@ -159,6 +164,19 @@ export function FinancialConnectionsDashboard({
     }
     toast.success(included ? "Account added to bookkeeping" : "Account removed from bookkeeping");
     startTransition(() => router.refresh());
+  }
+
+  async function renameAccount(accountId: string, nickname: string) {
+    setBusyId(accountId);
+    const result = await setFinancialAccountNickname({ accountId, nickname });
+    setBusyId(null);
+    if (result.error) {
+      toast.error(result.error);
+      return false;
+    }
+    toast.success(result.nickname ? "Account name updated" : "Custom name removed");
+    startTransition(() => router.refresh());
+    return true;
   }
 
   async function disconnect(connectionId: string, institutionName: string) {
@@ -360,6 +378,7 @@ export function FinancialConnectionsDashboard({
                           disabled={disabled}
                           onToggle={toggleAccount}
                           onBookkeepingToggle={toggleBookkeepingAccount}
+                          onRename={renameAccount}
                         />
                       ))}
                     </div>
@@ -405,20 +424,64 @@ function AccountRow({
   disabled,
   onToggle,
   onBookkeepingToggle,
+  onRename,
 }: {
   account: FinancialAccount;
   busy: boolean;
   disabled: boolean;
   onToggle: (accountId: string, included: boolean) => Promise<void>;
   onBookkeepingToggle: (accountId: string, included: boolean) => Promise<void>;
+  onRename: (accountId: string, nickname: string) => Promise<boolean>;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [nickname, setNickname] = useState(account.nickname ?? "");
   const isCreditCard =
     account.account_type === "credit" && account.account_subtype === "credit card";
+
+  async function saveNickname() {
+    const saved = await onRename(account.id, nickname);
+    if (saved) setEditing(false);
+  }
 
   return (
     <div className="grid gap-4 px-5 py-4 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center">
       <div className="min-w-0">
-        <p className="truncate font-medium">{account.name}</p>
+        {editing ? (
+          <div className="flex max-w-md items-center gap-1.5">
+            <Input
+              className="h-8"
+              maxLength={80}
+              value={nickname}
+              onChange={(event) => setNickname(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void saveNickname();
+                if (event.key === "Escape") {
+                  setNickname(account.nickname ?? "");
+                  setEditing(false);
+                }
+              }}
+              placeholder="e.g. Payroll Checking"
+              aria-label={`Display name for ${account.name}`}
+              autoFocus
+            />
+            <Button size="icon-sm" variant="ghost" title="Save display name" aria-label="Save display name" disabled={disabled} onClick={() => void saveNickname()}>
+              {busy ? <Loader2 className="animate-spin" /> : <Check />}
+            </Button>
+            <Button size="icon-sm" variant="ghost" title="Cancel" aria-label="Cancel editing display name" disabled={disabled} onClick={() => { setNickname(account.nickname ?? ""); setEditing(false); }}>
+              <X />
+            </Button>
+          </div>
+        ) : (
+          <div className="flex min-w-0 items-center gap-1.5">
+            <p className="truncate font-medium">{account.nickname ?? account.name}</p>
+            <Button size="icon-sm" variant="ghost" className="h-7 w-7 shrink-0 text-muted-foreground" title="Edit display name" aria-label={`Edit display name for ${account.nickname ?? account.name}`} disabled={disabled} onClick={() => setEditing(true)}>
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        )}
+        {account.nickname && !editing && (
+          <p className="truncate text-xs text-muted-foreground">Bank name: {account.name}</p>
+        )}
         <p className="text-sm text-muted-foreground">
           {account.mask ? `Ending ${account.mask}` : "Account number unavailable"}
           {account.account_subtype ? ` · ${formatAccountType(account.account_subtype)}` : ""}

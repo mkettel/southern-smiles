@@ -54,6 +54,7 @@ export interface FinancialTransactionAccountSummary {
   id: string;
   connectionId: string;
   name: string;
+  nickname: string | null;
   mask: string | null;
   institutionName: string;
 }

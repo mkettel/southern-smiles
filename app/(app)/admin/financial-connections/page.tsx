@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Landmark } from "lucide-react";
 import { getProfile } from "@/actions/auth";
 import { getFinancialConnectionsDashboardData } from "@/actions/financial-connections";
+import { FinancialWorkspaceShell } from "@/components/financial/financial-workspace-shell";
 import { FinancialConnectionsDashboard } from "@/components/financial-connections/financial-connections-dashboard";
 
 export default async function AdminFinancialConnectionsPage() {
@@ -12,20 +13,14 @@ export default async function AdminFinancialConnectionsPage() {
   const data = await getFinancialConnectionsDashboardData().catch(() => null);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Financial Connections</h1>
-        <p className="text-sm text-muted-foreground">
-          Manage the credit cards included in the Owner Total Credit Card Debt stat.
-        </p>
-      </div>
-
+    <FinancialWorkspaceShell active="connections">
+      <div className="mb-5"><h2 className="text-lg font-semibold">Connections</h2><p className="mt-1 text-sm text-muted-foreground">Choose which connected bank and credit-card accounts belong in bookkeeping and debt totals.</p></div>
       {data ? (
         <FinancialConnectionsDashboard initialData={data} />
       ) : (
         <SchemaSetupNotice />
       )}
-    </div>
+    </FinancialWorkspaceShell>
   );
 }
 
@@ -44,4 +39,3 @@ function SchemaSetupNotice() {
     </div>
   );
 }
-

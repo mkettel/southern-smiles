@@ -123,3 +123,67 @@ final result: passed
 ## Final Result
 
 passed
+---
+
+# Financial Workspace Design QA
+
+## Visual Truth
+
+- Source: `/Users/monzershakally/.codex/generated_images/019ed3da-cf40-7190-8586-876e15c858a9/exec-2b292365-c111-4c4e-9982-38d4b377b411.png`
+- Implementation: `/Users/monzershakally/Documents/Survival Board/southern-smiles-pr-transactions/design-qa-implementation.png`
+- Combined comparison: `/Users/monzershakally/Documents/Survival Board/southern-smiles-pr-transactions/design-qa-comparison.png`
+- Source pixels: 1440 x 1024
+- Browser CSS viewport: 1280 x 720 at device scale 1
+- Full-page implementation capture: 1280 x 936
+- State: Financial Overview, August 2026
+
+## Normalization
+
+- The source main workspace was cropped from x=300, y=50 to remove unrelated global chrome.
+- Source and implementation were each fit into equal 620 x 680 comparison panels.
+- The production route retains the existing authenticated app shell; the visual capture used the existing public preview surface without exposing financial data.
+
+## Comparison History
+
+### Iteration 1
+
+- P2: the chart did not paint on the unsupported cross-origin development host and the workspace inherited the practice serif font.
+- Fixes: used the supported local host, moved financial charts to Chart.js, and scoped Geist to the Financial workspace.
+
+### Iteration 2
+
+- P2: the attention queue stacked below the P&L panel at the 1280 px browser boundary.
+- Fixes: moved the overview split to the `lg` breakpoint, reduced chart height, and removed secondary connection metrics from the attention card.
+
+### Final
+
+- No actionable P0, P1, or P2 differences remain.
+- The implementation preserves the source hierarchy, tab rhythm, P&L/attention split, chart proportions, and dense activity table.
+- The activity table uses real ledger fields rather than the mock's illustrative vendor/payer split.
+
+## Required Fidelity Surfaces
+
+- Fonts and typography: Geist is scoped to this workspace; hierarchy, weights, wrapping, and tab density match the source.
+- Spacing and layout rhythm: period controls, two-panel summary, and activity table align with the selected composition.
+- Colors and visual tokens: neutral app surfaces are retained with restrained teal for the selected tab, review CTA, financial links, and revenue series.
+- Image quality and asset fidelity: no photographic assets are present; icons use Lucide and data charts use Chart.js.
+- Copy and content: labels match the selected system while financial values and queue counts are backed by reviewed, allowlisted bookkeeping data.
+
+## Interaction QA
+
+- Verified all six workspace tabs expose the intended routes.
+- Verified the review CTA points to Bookkeeping.
+- Verified chart rendering and a clean browser console.
+- Verified desktop and 390 px mobile layouts without horizontal page overflow.
+
+## Engineering Validation
+
+- `npm test`: 82 passing.
+- Targeted ESLint: no errors; one pre-existing sidebar image warning remains.
+- `npm run build`: passed.
+
+## Follow-up Polish
+
+- P3: add a normalized vendor/payer field later if reporting needs it rather than deriving it from the transaction description.
+
+final result: passed

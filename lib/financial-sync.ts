@@ -1,4 +1,9 @@
-import type { AccountBase, CreditCardLiability } from "plaid";
+import {
+  PersonalFinanceCategoryVersion,
+  type AccountBase,
+  type CreditCardLiability,
+  type Transaction,
+} from "plaid";
 import { calculateCondition } from "@/lib/conditions";
 import { getCurrentWeekStart } from "@/lib/constants";
 import {
@@ -7,6 +12,7 @@ import {
   type FinancialAccount,
 } from "@/lib/financial-connections";
 import { decryptFinancialToken } from "@/lib/financial-token-crypto";
+import { mapPlaidTransaction } from "@/lib/financial-transactions";
 import { getPlaidApiErrorDetails, getPlaidClient } from "@/lib/plaid-client";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -16,6 +22,7 @@ interface FinancialConnectionSecret {
   id: string;
   practice_id: string;
   access_token_ciphertext: string;
+  transactions_cursor?: string | null;
 }
 
 export interface FinancialAccountUpsert {
@@ -91,7 +98,11 @@ export async function syncFinancialConnection({
   connectionId: string;
   practiceId: string;
   actorId: string | null;
-}): Promise<{ accountCount: number; totalDebtCents: number }> {
+}): Promise<{
+  accountCount: number;
+  totalDebtCents: number;
+  transactionChanges: number;
+}> {
   const { data: connection, error: connectionError } = await supabase
     .from("financial_connections")
     .select("id, practice_id, access_token_ciphertext")
@@ -108,21 +119,15 @@ export async function syncFinancialConnection({
   const syncedAt = new Date().toISOString();
 
   try {
-    const response = await getPlaidClient().liabilitiesGet({
+    const accountsResponse = await getPlaidClient().accountsGet({
       access_token: accessToken,
     });
-    const creditLiabilities = new Map(
-      (response.data.liabilities.credit ?? [])
-        .filter((liability) => liability.account_id)
-        .map((liability) => [liability.account_id as string, liability]),
-    );
-    const creditAccounts = response.data.accounts.filter(
-      (account) => account.type === "credit" && account.subtype === "credit card",
-    );
+    const creditLiabilities = await getCreditLiabilities(accessToken);
+    const returnedAccounts = accountsResponse.data.accounts;
 
     const { data: existingRows, error: existingError } = await supabase
       .from("financial_accounts")
-      .select("id, provider_account_id, included_in_total")
+      .select("id, provider_account_id, included_in_total, account_type, account_subtype")
       .eq("practice_id", practiceId)
       .eq("connection_id", connectionId);
     if (existingError) throw new Error(existingError.message);
@@ -130,16 +135,15 @@ export async function syncFinancialConnection({
     const existingByProviderId = new Map(
       (existingRows ?? []).map((row) => [row.provider_account_id as string, row]),
     );
-    const upserts = creditAccounts.map((account) =>
+    const upserts = returnedAccounts.map((account) =>
       mapPlaidCreditCardAccount({
         account,
         liability: creditLiabilities.get(account.account_id) ?? null,
         practiceId,
         connectionId,
         includedInTotal:
-          (existingByProviderId.get(account.account_id)?.included_in_total as
-            | boolean
-            | undefined) ?? true,
+          (existingByProviderId.get(account.account_id)?.included_in_total as boolean | undefined) ??
+          isCreditCard(account),
         syncedAt,
       }),
     );
@@ -151,7 +155,7 @@ export async function syncFinancialConnection({
       if (upsertError) throw new Error(upsertError.message);
     }
 
-    const returnedIds = new Set(creditAccounts.map((account) => account.account_id));
+    const returnedIds = new Set(returnedAccounts.map((account) => account.account_id));
     const missingIds = (existingRows ?? [])
       .filter((row) => !returnedIds.has(row.provider_account_id as string))
       .map((row) => row.id as string);
@@ -193,7 +197,7 @@ export async function syncFinancialConnection({
       .from("financial_connections")
       .update({
         status: "active",
-        consent_expiration_time: response.data.item.consent_expiration_time,
+        consent_expiration_time: accountsResponse.data.item.consent_expiration_time,
         last_synced_at: syncedAt,
         last_error: null,
         updated_at: syncedAt,
@@ -202,12 +206,29 @@ export async function syncFinancialConnection({
       .eq("practice_id", practiceId);
     if (updateError) throw new Error(updateError.message);
 
+    let transactionChanges = 0;
+    try {
+      const transactionSync = await syncFinancialTransactions({
+        supabase,
+        connectionId,
+        practiceId,
+      });
+      transactionChanges = transactionSync.changeCount;
+    } catch {
+      // Balance and liability sync remains useful even if Transactions needs
+      // additional consent or a later retry. The transaction status stores it.
+    }
+
     const totalDebtCents = await syncTotalCreditCardDebtStat(
       supabase,
       practiceId,
       actorId,
     );
-    return { accountCount: creditAccounts.length, totalDebtCents };
+    return {
+      accountCount: returnedAccounts.length,
+      totalDebtCents,
+      transactionChanges,
+    };
   } catch (error) {
     const details = getPlaidApiErrorDetails(error);
     await supabase
@@ -221,6 +242,249 @@ export async function syncFinancialConnection({
       .eq("practice_id", practiceId);
     throw new Error(details.message);
   }
+}
+
+function isCreditCard(account: AccountBase) {
+  return account.type === "credit" && account.subtype === "credit card";
+}
+
+async function getCreditLiabilities(accessToken: string) {
+  try {
+    const response = await getPlaidClient().liabilitiesGet({ access_token: accessToken });
+    return new Map(
+      (response.data.liabilities.credit ?? [])
+        .filter((liability) => liability.account_id)
+        .map((liability) => [liability.account_id as string, liability]),
+    );
+  } catch (error) {
+    const details = getPlaidApiErrorDetails(error);
+    if (isUnavailableProductCode(details.code)) {
+      return new Map<string, CreditCardLiability>();
+    }
+    throw error;
+  }
+}
+
+function isUnavailableProductCode(code: string | null) {
+  return (
+    code === "PRODUCT_NOT_READY" ||
+    code === "PRODUCTS_NOT_SUPPORTED" ||
+    code === "NO_PRODUCT_PERMISSIONS" ||
+    code === "PRODUCT_NOT_ENABLED" ||
+    code === "ADDITIONAL_CONSENT_REQUIRED" ||
+    code === "CONSENT_NOT_GRANTED" ||
+    code === "SANDBOX_PRODUCT_NOT_ENABLED"
+  );
+}
+
+export interface FinancialTransactionSyncResult {
+  changeCount: number;
+  status: "not_enabled" | "pending" | "ready";
+}
+
+export async function syncFinancialTransactions({
+  supabase,
+  connectionId,
+  practiceId,
+}: {
+  supabase: AdminClient;
+  connectionId: string;
+  practiceId: string;
+}): Promise<FinancialTransactionSyncResult> {
+  const { data: connection, error: connectionError } = await supabase
+    .from("financial_connections")
+    .select("id, practice_id, access_token_ciphertext, transactions_cursor")
+    .eq("id", connectionId)
+    .eq("practice_id", practiceId)
+    .neq("status", "disconnected")
+    .maybeSingle();
+  if (connectionError) throw new Error(connectionError.message);
+  if (!connection) throw new Error("Financial connection not found");
+
+  const typedConnection = connection as FinancialConnectionSecret;
+  const accessToken = decryptFinancialToken(typedConnection.access_token_ciphertext);
+  const originalCursor = typedConnection.transactions_cursor ?? null;
+  const syncedAt = new Date().toISOString();
+
+  try {
+    const batch = await fetchTransactionBatch(accessToken, originalCursor);
+    await upsertTransactionAccounts({
+      supabase,
+      practiceId,
+      connectionId,
+      accounts: batch.accounts,
+      syncedAt,
+    });
+
+    const { data: storedAccounts, error: accountsError } = await supabase
+      .from("financial_accounts")
+      .select("id, provider_account_id")
+      .eq("practice_id", practiceId)
+      .eq("connection_id", connectionId);
+    if (accountsError) throw new Error(accountsError.message);
+    const accountIds = new Map(
+      (storedAccounts ?? []).map((account) => [
+        account.provider_account_id as string,
+        account.id as string,
+      ]),
+    );
+
+    const changedTransactions = [...batch.added, ...batch.modified];
+    if (changedTransactions.length) {
+      const rows = changedTransactions.map((transaction) =>
+        mapPlaidTransaction({
+          transaction,
+          practiceId,
+          connectionId,
+          accountId: accountIds.get(transaction.account_id) ?? null,
+          syncedAt,
+        }),
+      );
+      const { error: upsertError } = await supabase
+        .from("financial_transactions")
+        .upsert(rows, { onConflict: "connection_id,provider_transaction_id" });
+      if (upsertError) throw new Error(upsertError.message);
+    }
+
+    const removedIds = [...new Set(batch.removedIds)];
+    if (removedIds.length) {
+      const { error: removedError } = await supabase
+        .from("financial_transactions")
+        .update({ is_removed: true, removed_at: syncedAt, updated_at: syncedAt })
+        .eq("practice_id", practiceId)
+        .eq("connection_id", connectionId)
+        .in("provider_transaction_id", removedIds);
+      if (removedError) throw new Error(removedError.message);
+    }
+
+    const status = batch.updateStatus === "NOT_READY" ? "pending" : "ready";
+    const { error: updateError } = await supabase
+      .from("financial_connections")
+      .update({
+        transactions_cursor: batch.nextCursor || originalCursor,
+        transactions_status: status,
+        transactions_last_synced_at: syncedAt,
+        transactions_last_error: null,
+        updated_at: syncedAt,
+      })
+      .eq("id", connectionId)
+      .eq("practice_id", practiceId);
+    if (updateError) throw new Error(updateError.message);
+
+    return {
+      changeCount: changedTransactions.length + removedIds.length,
+      status,
+    };
+  } catch (error) {
+    const details = getPlaidApiErrorDetails(error);
+    const consentRequired = isUnavailableProductCode(details.code);
+    await supabase
+      .from("financial_connections")
+      .update({
+        transactions_status: consentRequired ? "not_enabled" : "error",
+        transactions_last_error: details.message,
+        updated_at: syncedAt,
+      })
+      .eq("id", connectionId)
+      .eq("practice_id", practiceId);
+    if (consentRequired) return { changeCount: 0, status: "not_enabled" };
+    throw new Error(details.message);
+  }
+}
+
+async function fetchTransactionBatch(accessToken: string, originalCursor: string | null) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    let cursor = originalCursor;
+    const added: Transaction[] = [];
+    const modified: Transaction[] = [];
+    const removedIds: string[] = [];
+    const accounts = new Map<string, AccountBase>();
+    let updateStatus = "NOT_READY";
+
+    try {
+      for (let page = 0; page < 100; page += 1) {
+        const response = await getPlaidClient().transactionsSync({
+          access_token: accessToken,
+          cursor: cursor ?? undefined,
+          count: 500,
+          options: {
+            include_original_description: true,
+            days_requested: 730,
+            personal_finance_category_version: PersonalFinanceCategoryVersion.V2,
+          },
+        });
+        added.push(...response.data.added);
+        modified.push(...response.data.modified);
+        removedIds.push(...response.data.removed.map((item) => item.transaction_id));
+        response.data.accounts.forEach((account) => accounts.set(account.account_id, account));
+        cursor = response.data.next_cursor;
+        updateStatus = response.data.transactions_update_status;
+        if (!response.data.has_more) {
+          return {
+            added,
+            modified,
+            removedIds,
+            accounts: [...accounts.values()],
+            nextCursor: cursor,
+            updateStatus,
+          };
+        }
+      }
+      throw new Error("Plaid transaction sync exceeded 100 pages");
+    } catch (error) {
+      const details = getPlaidApiErrorDetails(error);
+      if (
+        details.code === "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION" &&
+        attempt === 0
+      ) {
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error("Plaid transaction sync could not stabilize");
+}
+
+async function upsertTransactionAccounts({
+  supabase,
+  practiceId,
+  connectionId,
+  accounts,
+  syncedAt,
+}: {
+  supabase: AdminClient;
+  practiceId: string;
+  connectionId: string;
+  accounts: AccountBase[];
+  syncedAt: string;
+}) {
+  if (!accounts.length) return;
+  const { data: existing, error: existingError } = await supabase
+    .from("financial_accounts")
+    .select("provider_account_id, included_in_total")
+    .eq("practice_id", practiceId)
+    .eq("connection_id", connectionId);
+  if (existingError) throw new Error(existingError.message);
+  const existingByProviderId = new Map(
+    (existing ?? []).map((account) => [account.provider_account_id as string, account]),
+  );
+  const rows = accounts.map((account) =>
+    mapPlaidCreditCardAccount({
+      account,
+      liability: null,
+      practiceId,
+      connectionId,
+      includedInTotal:
+        (existingByProviderId.get(account.account_id)?.included_in_total as
+          | boolean
+          | undefined) ?? isCreditCard(account),
+      syncedAt,
+    }),
+  );
+  const { error } = await supabase
+    .from("financial_accounts")
+    .upsert(rows, { onConflict: "connection_id,provider_account_id" });
+  if (error) throw new Error(error.message);
 }
 
 export async function syncTotalCreditCardDebtStat(
@@ -340,4 +604,3 @@ async function getPracticeAdminProfileId(
     .maybeSingle();
   return (data?.id as string | null | undefined) ?? null;
 }
-

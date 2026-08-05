@@ -80,7 +80,7 @@ export async function getFinancialConnectionsDashboardData(): Promise<
   const { data: connections, error: connectionError } = await supabase
     .from("financial_connections")
     .select(
-      "id, practice_id, provider, provider_item_id, institution_id, institution_name, status, consent_expiration_time, last_synced_at, last_error, created_at, updated_at",
+      "id, practice_id, provider, provider_item_id, institution_id, institution_name, status, consent_expiration_time, last_synced_at, last_error, transactions_status, transactions_last_synced_at, transactions_last_error, created_at, updated_at",
     )
     .eq("practice_id", practiceId)
     .neq("status", "disconnected")
@@ -99,6 +99,10 @@ export async function getFinancialConnectionsDashboardData(): Promise<
   const typedAccounts = (accounts ?? []) as FinancialAccount[];
   const typedConnections = (connections ?? []) as FinancialConnection[];
   const activeAccounts = typedAccounts.filter((account) => account.is_active);
+  const activeCreditCards = activeAccounts.filter(
+    (account) =>
+      account.account_type === "credit" && account.account_subtype === "credit card",
+  );
   const lastSyncedAt = typedConnections
     .map((connection) => connection.last_synced_at)
     .filter((value): value is string => Boolean(value))
@@ -110,12 +114,12 @@ export async function getFinancialConnectionsDashboardData(): Promise<
     environment: getPlaidEnvironment(),
     connections: typedConnections.map((connection) => ({
       ...connection,
-      accounts: activeAccounts.filter(
+      accounts: activeCreditCards.filter(
         (account) => account.connection_id === connection.id,
       ),
     })),
-    totalDebtCents: calculateTotalCreditCardDebtCents(activeAccounts),
-    includedAccountCount: activeAccounts.filter(
+    totalDebtCents: calculateTotalCreditCardDebtCents(activeCreditCards),
+    includedAccountCount: activeCreditCards.filter(
       (account) => account.included_in_total,
     ).length,
     lastSyncedAt,
@@ -309,8 +313,8 @@ export async function disconnectFinancialConnection(connectionId: string) {
 
 function revalidateFinancialPaths() {
   revalidatePath("/admin/financial-connections");
+  revalidatePath("/admin/financial-transactions");
   revalidatePath("/dashboard");
   revalidatePath("/stats");
   revalidatePath("/stats/[statId]", "page");
 }
-

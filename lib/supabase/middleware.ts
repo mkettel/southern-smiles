@@ -2,9 +2,10 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function updateSession(request: NextRequest) {
-  const isLocalSupplyPreview =
+  const isLocalPreview =
     process.env.NODE_ENV === "development" &&
-    request.nextUrl.pathname.startsWith("/supply-ordering-preview");
+    (request.nextUrl.pathname.startsWith("/supply-ordering-preview") ||
+      request.nextUrl.pathname.startsWith("/financial-transactions-preview"));
   let supabaseResponse = NextResponse.next({
     request,
   });
@@ -81,7 +82,7 @@ export async function updateSession(request: NextRequest) {
     !request.nextUrl.pathname.startsWith("/survey") &&
     !request.nextUrl.pathname.startsWith("/api/auth") &&
     request.nextUrl.pathname !== "/api/cherry/approvals" &&
-    !isLocalSupplyPreview
+    !isLocalPreview
   ) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";

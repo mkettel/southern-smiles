@@ -8,6 +8,12 @@ export type FinancialConnectionStatus =
   | "error"
   | "disconnected";
 
+export type FinancialTransactionsStatus =
+  | "not_enabled"
+  | "pending"
+  | "ready"
+  | "error";
+
 export interface FinancialConnection {
   id: string;
   practice_id: string;
@@ -19,6 +25,9 @@ export interface FinancialConnection {
   consent_expiration_time: string | null;
   last_synced_at: string | null;
   last_error: string | null;
+  transactions_status: FinancialTransactionsStatus;
+  transactions_last_synced_at: string | null;
+  transactions_last_error: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -82,4 +91,3 @@ export function isTotalCreditCardDebtStat(
     stat.name.trim().toLowerCase() === TOTAL_CREDIT_CARD_DEBT_STAT_NAME.toLowerCase()
   );
 }
-

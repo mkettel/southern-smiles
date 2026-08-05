@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Combobox } from "@base-ui/react/combobox";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -370,10 +371,14 @@ export function FinancialTransactionsDashboard({
                   <div className="flex h-9 items-center rounded-md border bg-background px-3 text-sm">{formatPlaidCategory(selected.plaid_category_detailed) ?? "Uncategorized bank activity"}</div>
                 </InspectorField>
                 <InspectorField label="Chart of account">
-                  <select className="h-9 w-full rounded-md border bg-background px-2 text-sm" value={bookkeepingAccountIds[selected.id] ?? ""} onChange={(event) => setBookkeepingAccountIds((current) => ({ ...current, [selected.id]: event.target.value }))}>
-                    <option value="">Choose account</option>
-                    {bookkeepingAccountsByType.map(([accountType, accounts]) => <optgroup key={accountType} label={accountType}>{accounts.map((account) => <option key={account.id} value={account.id}>{account.accountNumber ? `${account.accountNumber} ` : ""}{account.name}</option>)}</optgroup>)}
-                  </select>
+                  <BookkeepingAccountCombobox
+                    accountsByType={bookkeepingAccountsByType}
+                    value={bookkeepingAccountIds[selected.id] ?? ""}
+                    onValueChange={(value) => setBookkeepingAccountIds((current) => ({
+                      ...current,
+                      [selected.id]: value,
+                    }))}
+                  />
                 </InspectorField>
 
                 {initialData.suggestedBookkeepingAccountByTransaction[selected.id] && !selected.bookkeeping_account_id && (
@@ -440,6 +445,99 @@ function TransactionRow({ transaction, account, selected, bookkeepingAccountId, 
     <span className={cn("text-right font-semibold tabular-nums", transaction.amount_cents < 0 && "text-emerald-700")}>{formatSignedAmount(transaction.amount_cents)}</span>
     <ChevronRight className="h-4 w-4 text-muted-foreground" />
   </button>;
+}
+
+function BookkeepingAccountCombobox({
+  accountsByType,
+  value,
+  onValueChange,
+}: {
+  accountsByType: [string, BookkeepingAccount[]][];
+  value: string;
+  onValueChange: (value: string) => void;
+}) {
+  const groups = useMemo(
+    () => accountsByType.map(([accountType, accounts]) => ({ value: accountType, items: accounts })),
+    [accountsByType],
+  );
+  const selectedAccount = useMemo(
+    () => accountsByType.flatMap(([, accounts]) => accounts).find((account) => account.id === value) ?? null,
+    [accountsByType, value],
+  );
+
+  return (
+    <Combobox.Root
+      items={groups}
+      value={selectedAccount}
+      onValueChange={(account) => onValueChange(account?.id ?? "")}
+      itemToStringLabel={bookkeepingAccountSearchLabel}
+      itemToStringValue={(account) => account.id}
+      isItemEqualToValue={(account, selected) => account.id === selected.id}
+      autoHighlight
+    >
+      <Combobox.Trigger
+        aria-label="Chart of account"
+        className="flex h-9 w-full items-center justify-between gap-2 rounded-md border bg-background px-3 text-sm outline-none transition-colors hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 data-placeholder:text-muted-foreground"
+      >
+        <Combobox.Value placeholder="Choose account" />
+        <Combobox.Icon>
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </Combobox.Icon>
+      </Combobox.Trigger>
+      <Combobox.Portal>
+        <Combobox.Positioner align="start" sideOffset={4} className="isolate z-50">
+          <Combobox.Popup
+            aria-label="Choose chart of account"
+            className="relative isolate z-50 w-(--anchor-width) min-w-72 overflow-hidden rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
+          >
+            <div className="relative border-b bg-background">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Combobox.Input
+                aria-label="Search chart of accounts"
+                placeholder="Search name or account number"
+                className="h-10 w-full bg-transparent pr-3 pl-9 text-sm outline-none placeholder:text-muted-foreground"
+              />
+            </div>
+            <div className="max-h-72 overflow-y-auto p-1">
+              <Combobox.Empty className="px-3 py-8 text-center text-sm text-muted-foreground">
+                No matching accounts
+              </Combobox.Empty>
+              <Combobox.List>
+                {(group: { value: string; items: BookkeepingAccount[] }) => (
+                  <Combobox.Group key={group.value} items={group.items} className="not-last:mb-1">
+                    <Combobox.GroupLabel className="px-2 py-1.5 text-[11px] font-medium uppercase text-muted-foreground">
+                      {group.value}
+                    </Combobox.GroupLabel>
+                    <Combobox.Collection>
+                      {(account: BookkeepingAccount) => (
+                        <Combobox.Item
+                          key={account.id}
+                          value={account}
+                          className="relative flex min-h-9 cursor-default items-center rounded-md py-2 pr-9 pl-2 text-sm outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                        >
+                          <span className="min-w-0 flex-1 truncate">
+                            {account.accountNumber ? <span className="mr-1.5 font-medium tabular-nums">{account.accountNumber}</span> : null}
+                            {account.name}
+                          </span>
+                          <Combobox.ItemIndicator className="absolute right-2 flex h-4 w-4 items-center justify-center text-emerald-700">
+                            <Check className="h-4 w-4" />
+                          </Combobox.ItemIndicator>
+                        </Combobox.Item>
+                      )}
+                    </Combobox.Collection>
+                  </Combobox.Group>
+                )}
+              </Combobox.List>
+            </div>
+          </Combobox.Popup>
+        </Combobox.Positioner>
+      </Combobox.Portal>
+    </Combobox.Root>
+  );
+}
+
+function bookkeepingAccountSearchLabel(account: BookkeepingAccount) {
+  return [account.accountNumber, account.name].filter(Boolean).join(" ");
 }
 
 function SummaryStat({ label, value }: { label: string; value: string }) { return <div className="px-4 first:pl-0"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 font-semibold tabular-nums">{value}</p></div>; }

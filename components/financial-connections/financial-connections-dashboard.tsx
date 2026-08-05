@@ -24,6 +24,7 @@ import {
   disconnectFinancialConnection,
   exchangeFinancialPublicToken,
   refreshFinancialConnection,
+  setFinancialAccountBookkeepingIncluded,
   setFinancialAccountIncluded,
 } from "@/actions/financial-connections";
 import { Badge } from "@/components/ui/badge";
@@ -145,6 +146,21 @@ export function FinancialConnectionsDashboard({
     startTransition(() => router.refresh());
   }
 
+  async function toggleBookkeepingAccount(accountId: string, included: boolean) {
+    setBusyId(accountId);
+    const result = await setFinancialAccountBookkeepingIncluded({
+      accountId,
+      included,
+    });
+    setBusyId(null);
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success(included ? "Account added to bookkeeping" : "Account removed from bookkeeping");
+    startTransition(() => router.refresh());
+  }
+
   async function disconnect(connectionId: string, institutionName: string) {
     if (
       !window.confirm(
@@ -200,7 +216,7 @@ export function FinancialConnectionsDashboard({
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="Total credit card debt"
           value={formatCurrency(initialData.totalDebtCents)}
@@ -212,6 +228,12 @@ export function FinancialConnectionsDashboard({
           value={String(initialData.includedAccountCount)}
           detail="Active cards in total"
           icon={Building2}
+        />
+        <MetricCard
+          label="Bookkeeping accounts"
+          value={String(initialData.includedBookkeepingAccountCount)}
+          detail="Included in transaction inbox"
+          icon={ShieldCheck}
         />
         <MetricCard
           label="Last successful sync"
@@ -326,7 +348,7 @@ export function FinancialConnectionsDashboard({
                 <CardContent className="p-0">
                   {connection.accounts.length === 0 ? (
                     <p className="px-5 py-8 text-center text-sm text-muted-foreground">
-                      No active credit cards were returned for this connection.
+                      No active accounts were returned for this connection.
                     </p>
                   ) : (
                     <div className="divide-y">
@@ -337,6 +359,7 @@ export function FinancialConnectionsDashboard({
                           busy={busyId === account.id}
                           disabled={disabled}
                           onToggle={toggleAccount}
+                          onBookkeepingToggle={toggleBookkeepingAccount}
                         />
                       ))}
                     </div>
@@ -381,18 +404,24 @@ function AccountRow({
   busy,
   disabled,
   onToggle,
+  onBookkeepingToggle,
 }: {
   account: FinancialAccount;
   busy: boolean;
   disabled: boolean;
   onToggle: (accountId: string, included: boolean) => Promise<void>;
+  onBookkeepingToggle: (accountId: string, included: boolean) => Promise<void>;
 }) {
+  const isCreditCard =
+    account.account_type === "credit" && account.account_subtype === "credit card";
+
   return (
     <div className="grid gap-4 px-5 py-4 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center">
       <div className="min-w-0">
         <p className="truncate font-medium">{account.name}</p>
         <p className="text-sm text-muted-foreground">
-          {account.mask ? `Ending ${account.mask}` : "Card number unavailable"}
+          {account.mask ? `Ending ${account.mask}` : "Account number unavailable"}
+          {account.account_subtype ? ` · ${formatAccountType(account.account_subtype)}` : ""}
           {account.credit_limit_cents !== null
             ? ` · ${formatCurrency(account.credit_limit_cents)} limit`
             : ""}
@@ -423,15 +452,33 @@ function AccountRow({
           <input
             type="checkbox"
             className="h-4 w-4 accent-primary"
+            checked={account.included_in_bookkeeping}
+            disabled={disabled}
+            onChange={(event) =>
+              onBookkeepingToggle(account.id, event.target.checked)
+            }
+          />
+        )}
+        Use in bookkeeping
+      </label>
+      {isCreditCard && (
+        <label className="flex min-w-28 items-center gap-2 text-sm md:col-start-3">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-primary"
             checked={account.included_in_total}
             disabled={disabled}
             onChange={(event) => onToggle(account.id, event.target.checked)}
           />
-        )}
-        Include in total
-      </label>
+          Include in debt total
+        </label>
+      )}
     </div>
   );
+}
+
+function formatAccountType(value: string) {
+  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function ConnectionStatus({ status }: { status: string }) {

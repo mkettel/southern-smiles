@@ -114,13 +114,16 @@ export async function getFinancialConnectionsDashboardData(): Promise<
     environment: getPlaidEnvironment(),
     connections: typedConnections.map((connection) => ({
       ...connection,
-      accounts: activeCreditCards.filter(
+      accounts: activeAccounts.filter(
         (account) => account.connection_id === connection.id,
       ),
     })),
     totalDebtCents: calculateTotalCreditCardDebtCents(activeCreditCards),
     includedAccountCount: activeCreditCards.filter(
       (account) => account.included_in_total,
+    ).length,
+    includedBookkeepingAccountCount: activeAccounts.filter(
+      (account) => account.included_in_bookkeeping,
     ).length,
     lastSyncedAt,
   };
@@ -263,6 +266,26 @@ export async function setFinancialAccountIncluded(input: unknown) {
   );
   revalidateFinancialPaths();
   return { success: true, totalDebtCents };
+}
+
+export async function setFinancialAccountBookkeepingIncluded(input: unknown) {
+  const parsed = accountToggleSchema.safeParse(input);
+  if (!parsed.success) return { error: "Invalid bookkeeping account selection" };
+
+  const { supabase, practiceId } = await requireAdmin();
+  const { error } = await supabase
+    .from("financial_accounts")
+    .update({
+      included_in_bookkeeping: parsed.data.included,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", parsed.data.accountId)
+    .eq("practice_id", practiceId)
+    .eq("is_active", true);
+  if (error) return { error: error.message };
+
+  revalidateFinancialPaths();
+  return { success: true };
 }
 
 export async function disconnectFinancialConnection(connectionId: string) {

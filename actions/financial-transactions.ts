@@ -74,11 +74,15 @@ export async function getFinancialTransactionDashboardData(): Promise<
 
   const { data: accounts, error: accountError } = await supabase
     .from("financial_accounts")
-    .select("id, connection_id, name, mask")
+    .select("id, connection_id, name, mask, included_in_bookkeeping")
     .eq("practice_id", practiceId)
     .eq("is_active", true)
     .order("name", { ascending: true });
   if (accountError) throw new Error(accountError.message);
+  const includedAccounts = (accounts ?? []).filter(
+    (account) => account.included_in_bookkeeping,
+  );
+  const includedAccountIds = includedAccounts.map((account) => account.id as string);
 
   const { data: bookkeepingAccounts, error: bookkeepingAccountError } = await supabase
     .from("bookkeeping_accounts")
@@ -98,14 +102,18 @@ export async function getFinancialTransactionDashboardData(): Promise<
   if (isSetupMissing(vendorRuleError)) return null;
   if (vendorRuleError) throw new Error(vendorRuleError.message);
 
-  const { data: transactions, error: transactionError } = await supabase
-    .from("financial_transactions")
-    .select("*")
-    .eq("practice_id", practiceId)
-    .eq("is_removed", false)
-    .order("transaction_date", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(500);
+  const transactionResult = includedAccountIds.length
+    ? await supabase
+        .from("financial_transactions")
+        .select("*")
+        .eq("practice_id", practiceId)
+        .eq("is_removed", false)
+        .in("account_id", includedAccountIds)
+        .order("transaction_date", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(500)
+    : { data: [], error: null };
+  const { data: transactions, error: transactionError } = transactionResult;
   if (isSetupMissing(transactionError)) return null;
   if (transactionError) throw new Error(transactionError.message);
 
@@ -117,19 +125,15 @@ export async function getFinancialTransactionDashboardData(): Promise<
     currentMonthRows,
   ] =
     await Promise.all([
-      supabase
-        .from("financial_transactions")
-        .select("id", { count: "exact", head: true })
-        .eq("practice_id", practiceId)
-        .eq("is_removed", false)
-        .eq("review_status", "pending"),
-      supabase
-        .from("financial_transactions")
-        .select("id", { count: "exact", head: true })
-        .eq("practice_id", practiceId)
-        .eq("is_removed", false)
-        .eq("review_status", "reviewed"),
-      getMonthTransactionRows(supabase, practiceId, monthStart, monthEnd),
+      getTransactionCount(supabase, practiceId, includedAccountIds, "pending"),
+      getTransactionCount(supabase, practiceId, includedAccountIds, "reviewed"),
+      getMonthTransactionRows(
+        supabase,
+        practiceId,
+        includedAccountIds,
+        monthStart,
+        monthEnd,
+      ),
     ]);
   if (pendingError) throw new Error(pendingError.message);
   if (reviewedError) throw new Error(reviewedError.message);
@@ -163,7 +167,7 @@ export async function getFinancialTransactionDashboardData(): Promise<
 
   return {
     transactions: typedTransactions,
-    accounts: (accounts ?? []).map((account) => ({
+    accounts: includedAccounts.map((account) => ({
       id: account.id as string,
       connectionId: account.connection_id as string,
       name: account.name as string,
@@ -214,13 +218,28 @@ export async function reviewFinancialTransaction(input: unknown) {
   const now = new Date().toISOString();
   const { data: transaction, error: transactionError } = await supabase
     .from("financial_transactions")
-    .select("id, name, merchant_name, counterparty_name")
+    .select("id, account_id, name, merchant_name, counterparty_name")
     .eq("id", parsed.data.transactionId)
     .eq("practice_id", practiceId)
     .eq("is_removed", false)
     .single();
   if (transactionError || !transaction) {
     return { error: transactionError?.message ?? "Transaction not found" };
+  }
+  if (!transaction.account_id) {
+    return { error: "This transaction is not linked to a bank account" };
+  }
+
+  const { data: sourceAccount, error: sourceAccountError } = await supabase
+    .from("financial_accounts")
+    .select("id")
+    .eq("id", transaction.account_id)
+    .eq("practice_id", practiceId)
+    .eq("is_active", true)
+    .eq("included_in_bookkeeping", true)
+    .maybeSingle();
+  if (sourceAccountError || !sourceAccount) {
+    return { error: "This bank account is not included in bookkeeping" };
   }
 
   if (parsed.data.status === "reviewed") {
@@ -344,6 +363,7 @@ function getPhoenixMonthBounds() {
 async function getMonthTransactionRows(
   supabase: ReturnType<typeof createAdminClient>,
   practiceId: string,
+  accountIds: string[],
   monthStart: string,
   monthEnd: string,
 ) {
@@ -352,6 +372,7 @@ async function getMonthTransactionRows(
     pending: boolean;
     is_removed: boolean;
   }> = [];
+  if (!accountIds.length) return rows;
   const pageSize = 1000;
   for (let from = 0; ; from += pageSize) {
     const { data, error } = await supabase
@@ -359,6 +380,7 @@ async function getMonthTransactionRows(
       .select("amount_cents, pending, is_removed")
       .eq("practice_id", practiceId)
       .eq("is_removed", false)
+      .in("account_id", accountIds)
       .gte("transaction_date", monthStart)
       .lt("transaction_date", monthEnd)
       .range(from, from + pageSize - 1);
@@ -366,4 +388,20 @@ async function getMonthTransactionRows(
     rows.push(...((data ?? []) as typeof rows));
     if ((data?.length ?? 0) < pageSize) return rows;
   }
+}
+
+async function getTransactionCount(
+  supabase: ReturnType<typeof createAdminClient>,
+  practiceId: string,
+  accountIds: string[],
+  status: "pending" | "reviewed",
+) {
+  if (!accountIds.length) return { count: 0, error: null };
+  return supabase
+    .from("financial_transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("practice_id", practiceId)
+    .eq("is_removed", false)
+    .eq("review_status", status)
+    .in("account_id", accountIds);
 }

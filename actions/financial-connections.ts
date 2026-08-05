@@ -37,6 +37,10 @@ const accountToggleSchema = z.object({
   accountId: z.string().uuid(),
   included: z.boolean(),
 });
+const accountNicknameSchema = z.object({
+  accountId: z.string().uuid(),
+  nickname: z.string().trim().max(80),
+});
 
 function isSetupMissing(error: { code?: string; message?: string } | null) {
   const message = error?.message?.toLowerCase() ?? "";
@@ -286,6 +290,24 @@ export async function setFinancialAccountBookkeepingIncluded(input: unknown) {
 
   revalidateFinancialPaths();
   return { success: true };
+}
+
+export async function setFinancialAccountNickname(input: unknown) {
+  const parsed = accountNicknameSchema.safeParse(input);
+  if (!parsed.success) return { error: "Use a name up to 80 characters" };
+
+  const { supabase, practiceId } = await requireAdmin();
+  const nickname = parsed.data.nickname || null;
+  const { error } = await supabase
+    .from("financial_accounts")
+    .update({ nickname, updated_at: new Date().toISOString() })
+    .eq("id", parsed.data.accountId)
+    .eq("practice_id", practiceId)
+    .eq("is_active", true);
+  if (error) return { error: error.message };
+
+  revalidateFinancialPaths();
+  return { success: true, nickname };
 }
 
 export async function disconnectFinancialConnection(connectionId: string) {

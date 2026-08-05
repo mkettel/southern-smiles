@@ -112,6 +112,7 @@ const previewData: FinancialTransactionDashboardData = {
       id: "00000000-0000-4000-8000-000000000020",
       connectionId: "00000000-0000-4000-8000-000000000010",
       name: "Business Card",
+      nickname: "Practice Card",
       mask: "7672",
       institutionName: "Capital One",
     },
@@ -119,6 +120,7 @@ const previewData: FinancialTransactionDashboardData = {
       id: "00000000-0000-4000-8000-000000000021",
       connectionId: "00000000-0000-4000-8000-000000000011",
       name: "Business Checking",
+      nickname: "Operating Checking",
       mask: "9777",
       institutionName: "BMO",
     },
@@ -204,9 +206,9 @@ export default function FinancialTransactionsPreviewPage() {
         <main className="min-w-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-[1500px] space-y-6">
             <div>
-              <h1 className="text-2xl font-bold">Transaction Inbox</h1>
+              <h1 className="text-2xl font-bold">Bookkeeping</h1>
               <p className="text-sm text-muted-foreground">
-                Interactive local preview using sample Southern Smiles activity.
+                Reconcile each connected account and review imported activity before it becomes trusted bookkeeping data.
               </p>
             </div>
             <FinancialTransactionsDashboard initialData={previewData} previewMode />

@@ -187,3 +187,105 @@ passed
 - P3: add a normalized vendor/payer field later if reporting needs it rather than deriving it from the transaction description.
 
 final result: passed
+
+---
+
+# Bookkeeping Account-First Reconciliation Design QA
+
+## Evidence
+
+- Source visual truth: `/Users/monzershakally/.codex/generated_images/019ed3da-cf40-7190-8586-876e15c858a9/exec-1293e302-e91b-490d-99e0-18a611dcc6a6.png`
+- Browser-rendered implementation: `/tmp/bookkeeping-implementation-qa-final.png`
+- Full-view comparison: `/tmp/bookkeeping-design-comparison-qa-final.png`
+- Focused table/inspector comparison: `/tmp/bookkeeping-design-focus-final.png`
+- Narrow desktop evidence: `/tmp/bookkeeping-implementation-1225-final.png`
+- Source pixels: 1487 x 1058, normalized to 1440 x 1024 for comparison.
+- Implementation pixels/CSS viewport: 1440 x 1024 at device pixel ratio 1.
+- Responsive check: 1225 x 800 with `scrollWidth` 1225 (no horizontal overflow).
+- State: light theme, August 2026, one connected credit-card account selected, needs-review queue, first transaction selected.
+
+## Findings
+
+No actionable P0, P1, or P2 differences remain.
+
+- Fonts and typography: the Bookkeeping component uses the product's Geist sans token, compact 12-14px work-surface text, tabular amounts, and hierarchy comparable to the source. Long merchant and imported-description text truncates at the narrow breakpoint instead of shifting columns.
+- Spacing and layout rhythm: the account rail, ledger, and inspector preserve the source's three-pane structure and divider-led hierarchy. Tracks were narrowed after the first pass so the amount column remains visible at 1225px.
+- Colors and visual tokens: the implementation uses the existing neutral surfaces, border tokens, emerald selection/approval treatment, and semantic inflow color. No decorative gradients or nested cards were introduced.
+- Image quality and asset fidelity: this screen contains no bespoke raster imagery. Existing product branding remains owned by the application shell, and interface icons use the installed icon library.
+- Copy and content: account, month, transaction, rule, vendor-history, memo, approval, and exclusion language matches the selected workflow. The preview intentionally contains fewer transactions than the visual target; production renders the full imported dataset through the same grouped list.
+
+## Interaction Verification
+
+- Selected the Google Ads transaction and confirmed the inspector updated.
+- Searched for `Net32` and confirmed nonmatching rows were removed.
+- Approved a sample transaction and confirmed the pending queue transitioned to its empty state.
+- Verified month, account, status, chart-of-account, memo, previous/next, approve, and exclude controls are interactive.
+- Verified the browser console contained no warnings or errors.
+
+## Comparison History
+
+1. Initial comparison found a P2 narrow-desktop crowding issue in the center ledger and a P2 workflow issue where inspector actions could fall below the viewport.
+2. Reduced account/inspector tracks and compacted ledger columns; post-fix evidence at 1225 x 800 showed no horizontal overflow and fully visible amounts.
+3. Added an independently scrolling inspector with sticky Approve, Exclude, and Next actions; post-fix evidence shows all primary review controls remain visible at the narrow desktop height.
+4. Applied the product font token to the component and aligned preview copy with the production Bookkeeping page.
+
+## Open Questions
+
+- The source visual includes a separate editable high-level category plus chart account. The current bookkeeping model persists the chart account and retains Plaid's imported category as read-only context, so the implementation reflects the real data contract.
+- Attachment upload remains outside this iteration because receipt matching and storage are not yet part of the existing transaction action.
+
+## Follow-up Polish
+
+- P3: add optional receipt matching once the financial transaction attachment model exists.
+- P3: add statement balance/period metrics when those fields are available from the connected account data.
+
+## Implementation Checklist
+
+- [x] Account-first navigation and account progress
+- [x] Month and status filtering
+- [x] Weekly transaction grouping
+- [x] Persistent transaction inspector
+- [x] Rule and vendor-history context
+- [x] Memo persistence on approval
+- [x] Keyboard review shortcuts
+- [x] Narrow desktop overflow check
+- [x] Primary interaction and console verification
+
+final result: passed
+
+---
+
+# Bookkeeping Account Color and Naming QA
+
+## Evidence
+
+- Source and implementation comparison: `/tmp/bookkeeping-color-comparison.png`
+- Selected-account color state: `/tmp/bookkeeping-account-colors.png`
+- Viewport: 1225 x 800 at device pixel ratio 1.
+
+## Findings
+
+No actionable P0, P1, or P2 visual differences remain for this refinement.
+
+- Account color is confined to the icon tile, progress line, active edge, and heading dot. Transaction amounts and approval states retain their semantic colors.
+- Custom account names are the primary label throughout the account rail, heading, account selector, transaction row, and inspector.
+- The last four digits are appended only when they are not already part of the displayed name, removing the duplicated `9777 ·9777` pattern.
+- The 1225 px layout has no horizontal page overflow or clipped interactive controls.
+- Switching from the emerald Practice Card to the sky Operating Checking updated both the active rail treatment and heading indicator.
+- Browser console contained no warnings or errors.
+
+## Engineering Validation
+
+- `npm test`: 82 passing.
+- Targeted ESLint: passed.
+- `npm run build`: passed.
+- Supabase migration added for a nullable, constrained `financial_accounts.nickname` field.
+
+## Data Note
+
+- Plaid's synchronized `name` remains unchanged. The user-defined `nickname` is stored independently so institution refreshes preserve it.
+- Applied the migration to the production Southern Smiles project and verified `nickname` as nullable text.
+- Supabase Security Advisor and Performance Advisor both reported no errors after the change.
+- Verified the live Connections page exposes the nickname editor for every account; open and cancel behavior produced no browser warnings or errors.
+
+final result: passed

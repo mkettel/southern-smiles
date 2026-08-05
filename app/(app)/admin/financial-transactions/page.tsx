@@ -14,7 +14,7 @@ export default async function AdminFinancialTransactionsPage() {
 
   return (
     <FinancialWorkspaceShell active="bookkeeping">
-      <div className="mb-5"><h2 className="text-lg font-semibold">Bookkeeping</h2><p className="mt-1 text-sm text-muted-foreground">Review imported bank activity before it becomes trusted bookkeeping data.</p></div>
+      <div className="mb-5"><h2 className="text-lg font-semibold">Bookkeeping</h2><p className="mt-1 text-sm text-muted-foreground">Reconcile each connected account and review imported activity before it becomes trusted bookkeeping data.</p></div>
       {data ? <FinancialTransactionsDashboard initialData={data} /> : <SchemaSetupNotice />}
     </FinancialWorkspaceShell>
   );

@@ -1,8 +1,9 @@
-import type { BookkeepingAccount, FinancialTransaction } from "@/lib/financial-transactions";
+import type { BookkeepingAccount, FinancialRuleMatchType, FinancialTransaction } from "@/lib/financial-transactions";
 
 export interface FinancialWorkspaceRule {
   id: string;
   normalizedVendor: string;
+  matchType: FinancialRuleMatchType;
   bookkeepingAccountId: string;
   source: "quickbooks_history" | "review";
   sampleCount: number;

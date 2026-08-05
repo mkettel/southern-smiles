@@ -58,11 +58,11 @@ export function FinancialRulesTable({ rules, accounts }: { rules: FinancialWorks
       </div>
       <div className="overflow-hidden rounded-lg border bg-card">
         <Table>
-          <TableHeader><TableRow className="bg-muted/40 hover:bg-muted/40"><TableHead>Vendor</TableHead><TableHead>Send to</TableHead><TableHead>Source</TableHead><TableHead>Learned from</TableHead><TableHead className="w-16" /></TableRow></TableHeader>
+          <TableHeader><TableRow className="bg-muted/40 hover:bg-muted/40"><TableHead>Match</TableHead><TableHead>Send to</TableHead><TableHead>Source</TableHead><TableHead>Learned from</TableHead><TableHead className="w-16" /></TableRow></TableHeader>
           <TableBody>
             {filtered.map((rule) => (
               <TableRow key={rule.id}>
-                <TableCell className="font-medium capitalize">{rule.normalizedVendor}</TableCell>
+                <TableCell><div className="font-medium capitalize">{rule.normalizedVendor}</div><div className="mt-0.5 text-xs text-muted-foreground">{rule.matchType === "contains" ? "Description contains" : "Exact vendor"}</div></TableCell>
                 <TableCell className="w-[360px]">
                   <select className="h-9 w-full rounded-md border bg-background px-2 text-sm" value={rule.bookkeepingAccountId} disabled={isPending || busyId === rule.id} onChange={(event) => changeAccount(rule.id, event.target.value)} aria-label={`Account for ${rule.normalizedVendor}`}>
                     {grouped.map(([type, entries]) => <optgroup key={type} label={type}>{entries.map((account) => <option key={account.id} value={account.id}>{account.accountNumber ? `${account.accountNumber} ` : ""}{account.name}</option>)}</optgroup>)}

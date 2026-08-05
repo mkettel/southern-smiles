@@ -1,6 +1,7 @@
 import type { Transaction } from "plaid";
 
 export type FinancialTransactionReviewStatus = "pending" | "reviewed" | "excluded";
+export type FinancialRuleMatchType = "exact" | "contains";
 
 export interface BookkeepingAccount {
   id: string;
@@ -164,6 +165,28 @@ export function normalizeVendorName(value: string) {
     .replace(/[^a-z0-9]+/g, " ")
     .trim()
     .slice(0, 300);
+}
+
+export function findMatchingBookkeepingAccountId(
+  normalizedVendor: string,
+  rules: Array<{
+    normalizedVendor: string;
+    bookkeepingAccountId: string;
+    matchType: FinancialRuleMatchType;
+  }>,
+) {
+  const exact = rules.find(
+    (rule) => rule.matchType === "exact" && rule.normalizedVendor === normalizedVendor,
+  );
+  if (exact) return exact.bookkeepingAccountId;
+
+  return rules
+    .filter(
+      (rule) =>
+        rule.matchType === "contains" && normalizedVendor.includes(rule.normalizedVendor),
+    )
+    .sort((left, right) => right.normalizedVendor.length - left.normalizedVendor.length)[0]
+    ?.bookkeepingAccountId;
 }
 
 export function calculateTransactionTotals(

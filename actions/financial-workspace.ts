@@ -44,7 +44,7 @@ export async function getFinancialWorkspaceData(): Promise<FinancialWorkspaceDat
       .eq("practice_id", practiceId).eq("is_active", true)
       .order("account_type").order("account_number", { nullsFirst: false }).order("name"),
     supabase.from("bookkeeping_vendor_rules")
-      .select("id, normalized_vendor, bookkeeping_account_id, source, sample_count, confidence, updated_at")
+      .select("id, normalized_vendor, match_type, bookkeeping_account_id, source, sample_count, confidence, updated_at")
       .eq("practice_id", practiceId).order("updated_at", { ascending: false }),
     supabase.from("financial_connections")
       .select("id, transactions_last_synced_at")
@@ -78,6 +78,7 @@ export async function getFinancialWorkspaceData(): Promise<FinancialWorkspaceDat
   const rules: FinancialWorkspaceRule[] = (ruleResult.data ?? []).map((rule) => ({
     id: rule.id as string,
     normalizedVendor: rule.normalized_vendor as string,
+    matchType: rule.match_type as FinancialWorkspaceRule["matchType"],
     bookkeepingAccountId: rule.bookkeeping_account_id as string,
     source: rule.source as FinancialWorkspaceRule["source"],
     sampleCount: rule.sample_count as number,

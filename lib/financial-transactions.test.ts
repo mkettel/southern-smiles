@@ -3,6 +3,7 @@ import test from "node:test";
 import type { Transaction } from "plaid";
 import {
   calculateTransactionTotals,
+  findMatchingBookkeepingAccountId,
   mapPlaidTransaction,
   normalizeVendorName,
   transactionDisplayName,
@@ -77,4 +78,40 @@ test("transactionDisplayName prefers the recognized merchant", () => {
 test("normalizeVendorName creates a stable rule key", () => {
   assert.equal(normalizeVendorName(" NET32* PA Dental "), "net32 pa dental");
   assert.equal(normalizeVendorName("Google Ads / Southern Smiles"), "google ads southern smiles");
+});
+
+test("contains rules match changing mobile deposit reference numbers", () => {
+  const rules = [
+    {
+      normalizedVendor: "mobile deposit",
+      bookkeepingAccountId: "fee-for-service",
+      matchType: "contains" as const,
+    },
+  ];
+
+  assert.equal(
+    findMatchingBookkeepingAccountId(
+      normalizeVendorName("MOBILE DEPOSIT : REF NUMBER :117040706195"),
+      rules,
+    ),
+    "fee-for-service",
+  );
+});
+
+test("exact rules take priority over broader contains rules", () => {
+  assert.equal(
+    findMatchingBookkeepingAccountId("mobile deposit special", [
+      {
+        normalizedVendor: "mobile deposit",
+        bookkeepingAccountId: "broad",
+        matchType: "contains",
+      },
+      {
+        normalizedVendor: "mobile deposit special",
+        bookkeepingAccountId: "exact",
+        matchType: "exact",
+      },
+    ]),
+    "exact",
+  );
 });

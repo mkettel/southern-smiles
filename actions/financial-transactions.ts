@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
   calculateTransactionTotals,
+  findMatchingBookkeepingAccountId,
   normalizeVendorName,
   transactionDisplayName,
   type FinancialTransaction,
@@ -107,7 +108,7 @@ export async function getFinancialTransactionDashboardData(): Promise<
 
   const { data: vendorRules, error: vendorRuleError } = await supabase
     .from("bookkeeping_vendor_rules")
-    .select("normalized_vendor, bookkeeping_account_id")
+    .select("normalized_vendor, bookkeeping_account_id, match_type")
     .eq("practice_id", practiceId);
   if (isSetupMissing(vendorRuleError)) return null;
   if (vendorRuleError) throw new Error(vendorRuleError.message);
@@ -152,16 +153,15 @@ export async function getFinancialTransactionDashboardData(): Promise<
   const activeBookkeepingAccountIds = new Set(
     (bookkeepingAccounts ?? []).map((account) => account.id as string),
   );
-  const ruleByVendor = new Map(
-    (vendorRules ?? [])
-      .filter((rule) =>
-        activeBookkeepingAccountIds.has(rule.bookkeeping_account_id as string),
-      )
-      .map((rule) => [
-        rule.normalized_vendor as string,
-        rule.bookkeeping_account_id as string,
-      ]),
-  );
+  const activeRules = (vendorRules ?? [])
+    .filter((rule) =>
+      activeBookkeepingAccountIds.has(rule.bookkeeping_account_id as string),
+    )
+    .map((rule) => ({
+      normalizedVendor: rule.normalized_vendor as string,
+      bookkeepingAccountId: rule.bookkeeping_account_id as string,
+      matchType: rule.match_type as "exact" | "contains",
+    }));
   const currentMonthTotals = calculateTransactionTotals(
     currentMonthRows as Pick<
       FinancialTransaction,
@@ -198,8 +198,16 @@ export async function getFinancialTransactionDashboardData(): Promise<
     suggestedBookkeepingAccountByTransaction: Object.fromEntries(
       typedTransactions.flatMap((transaction) => {
         if (transaction.bookkeeping_account_id) return [];
-        const normalizedVendor = normalizeVendorName(transactionDisplayName(transaction));
-        const suggestedAccountId = ruleByVendor.get(normalizedVendor);
+        const normalizedCandidates = [
+          transactionDisplayName(transaction),
+          transaction.name,
+          transaction.original_description,
+        ]
+          .filter((value): value is string => Boolean(value))
+          .map(normalizeVendorName);
+        const suggestedAccountId = normalizedCandidates
+          .map((candidate) => findMatchingBookkeepingAccountId(candidate, activeRules))
+          .find((accountId): accountId is string => Boolean(accountId));
         return suggestedAccountId ? [[transaction.id, suggestedAccountId]] : [];
       }),
     ),

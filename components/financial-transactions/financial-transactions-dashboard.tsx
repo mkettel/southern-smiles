@@ -43,8 +43,10 @@ type StatusFilter = "all" | "pending" | "reviewed" | "excluded";
 
 export function FinancialTransactionsDashboard({
   initialData,
+  previewMode = false,
 }: {
   initialData: FinancialTransactionDashboardData;
+  previewMode?: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -52,9 +54,10 @@ export function FinancialTransactionsDashboard({
   const [status, setStatus] = useState<StatusFilter>("pending");
   const [accountId, setAccountId] = useState("all");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [transactions, setTransactions] = useState(initialData.transactions);
   const [categories, setCategories] = useState<Record<string, BookkeepingCategory | "">>(
     () => Object.fromEntries(
-      initialData.transactions.map((transaction) => [
+      transactions.map((transaction) => [
         transaction.id,
         transaction.bookkeeping_category ?? suggestBookkeepingCategory(transaction) ?? "",
       ]),
@@ -67,7 +70,7 @@ export function FinancialTransactionsDashboard({
   );
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    return initialData.transactions.filter((transaction) => {
+    return transactions.filter((transaction) => {
       if (status !== "all" && transaction.review_status !== status) return false;
       if (accountId !== "all" && transaction.account_id !== accountId) return false;
       if (!normalizedQuery) return true;
@@ -82,9 +85,13 @@ export function FinancialTransactionsDashboard({
         account?.institutionName,
       ].some((value) => value?.toLowerCase().includes(normalizedQuery));
     });
-  }, [accountById, accountId, initialData.transactions, query, status]);
+  }, [accountById, accountId, query, status, transactions]);
 
   async function refresh() {
+    if (previewMode) {
+      toast.success("Sample transactions are current");
+      return;
+    }
     setBusyId("refresh");
     const result = await refreshFinancialTransactions();
     setBusyId(null);
@@ -110,6 +117,22 @@ export function FinancialTransactionsDashboard({
       toast.error("Choose a category before approving");
       return;
     }
+    if (previewMode) {
+      setTransactions((current) =>
+        current.map((item) =>
+          item.id === transaction.id
+            ? {
+                ...item,
+                bookkeeping_category: excluded ? null : category,
+                review_status: excluded ? "excluded" : "reviewed",
+              }
+            : item,
+        ),
+      );
+      toast.success(excluded ? "Sample transaction excluded" : "Sample transaction reviewed");
+      return;
+    }
+
     setBusyId(transaction.id);
     const result = await reviewFinancialTransaction({
       transactionId: transaction.id,

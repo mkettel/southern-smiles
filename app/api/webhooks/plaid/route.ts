@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { syncFinancialConnection } from "@/lib/financial-sync";
+import {
+  syncFinancialConnection,
+  syncFinancialTransactions,
+} from "@/lib/financial-sync";
 import { verifyPlaidWebhook } from "@/lib/plaid-webhooks";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -94,6 +97,22 @@ export async function POST(request: Request) {
     (webhookType === "ITEM" &&
       (webhookCode === "LOGIN_REPAIRED" ||
         webhookCode === "NEW_ACCOUNTS_AVAILABLE"));
+  if (
+    webhookType === "TRANSACTIONS" &&
+    webhookCode === "SYNC_UPDATES_AVAILABLE"
+  ) {
+    try {
+      await syncFinancialTransactions({
+        supabase,
+        connectionId: connection.id as string,
+        practiceId: connection.practice_id as string,
+      });
+    } catch {
+      // The transaction status records the error. The daily sync retries it.
+    }
+    return NextResponse.json({ received: true });
+  }
+
   if (shouldSync) {
     try {
       await syncFinancialConnection({

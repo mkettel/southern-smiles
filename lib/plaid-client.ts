@@ -2,6 +2,7 @@ import {
   Configuration,
   CountryCode,
   CreditAccountSubtype,
+  DepositoryAccountSubtype,
   PlaidApi,
   PlaidEnvironments,
   Products,
@@ -61,10 +62,21 @@ export async function createPlaidLinkToken({
 
   if (accessToken) {
     request.access_token = accessToken;
+    request.additional_consented_products = [Products.Transactions];
+    request.transactions = { days_requested: 730 };
   } else {
-    request.products = [Products.Liabilities];
+    request.products = [Products.Transactions];
+    request.optional_products = [Products.Liabilities];
+    request.transactions = { days_requested: 730 };
     request.account_filters = {
       credit: { account_subtypes: [CreditAccountSubtype.CreditCard] },
+      depository: {
+        account_subtypes: [
+          DepositoryAccountSubtype.Checking,
+          DepositoryAccountSubtype.Savings,
+          DepositoryAccountSubtype.MoneyMarket,
+        ],
+      },
     };
   }
 
@@ -111,4 +123,3 @@ export function getPlaidApiErrorDetails(error: unknown): PlaidApiErrorDetails {
     reconnectRequired: code === "ITEM_LOGIN_REQUIRED" || code === "ITEM_LOCKED",
   };
 }
-

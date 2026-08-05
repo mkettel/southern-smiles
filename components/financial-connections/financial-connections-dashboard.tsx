@@ -80,8 +80,8 @@ export function FinancialConnectionsDashboard({
         }
         toast.success(
           session.mode === "reconnect"
-            ? "Connection restored"
-            : "Credit cards connected",
+            ? "Connection access updated"
+            : "Institution connected",
         );
         startTransition(() => router.refresh());
       },
@@ -187,7 +187,7 @@ export function FinancialConnectionsDashboard({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <ShieldCheck className="h-4 w-4 text-emerald-600" />
-            Read-only balance access
+            Read-only balances and transaction activity
           </div>
           <Button onClick={beginConnect} disabled={disabled}>
             {busyId === "connect" ? (
@@ -235,6 +235,8 @@ export function FinancialConnectionsDashboard({
             const institutionName = connection.institution_name ?? "Financial institution";
             const needsReconnect = connection.status === "reconnect_required";
             const hasError = connection.status === "error";
+            const needsTransactionConsent =
+              connection.transactions_status === "not_enabled";
 
             return (
               <Card key={connection.id} className="overflow-hidden">
@@ -252,6 +254,21 @@ export function FinancialConnectionsDashboard({
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
+                      {needsTransactionConsent && !needsReconnect && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => beginReconnect(connection.id)}
+                          disabled={disabled}
+                        >
+                          {busyId === connection.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Link2 className="h-4 w-4" />
+                          )}
+                          Enable transactions
+                        </Button>
+                      )}
                       {needsReconnect ? (
                         <Button
                           size="sm"
@@ -299,6 +316,12 @@ export function FinancialConnectionsDashboard({
                       {connection.last_error}
                     </p>
                   )}
+                  {connection.transactions_status === "error" &&
+                    connection.transactions_last_error && (
+                      <p className="mt-2 text-sm text-destructive">
+                        Transaction import: {connection.transactions_last_error}
+                      </p>
+                    )}
                 </CardHeader>
                 <CardContent className="p-0">
                   {connection.accounts.length === 0 ? (
@@ -481,4 +504,3 @@ function formatDateOnly(value: string) {
     day: "numeric",
   }).format(new Date(`${value}T12:00:00`));
 }
-

@@ -1,0 +1,268 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import {
+  BOOKKEEPING_CATEGORIES,
+  calculateTransactionTotals,
+  type FinancialTransaction,
+  type FinancialTransactionDashboardData,
+} from "@/lib/financial-transactions";
+import { syncFinancialTransactions } from "@/lib/financial-sync";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+
+const categoryValues = BOOKKEEPING_CATEGORIES.map((category) => category.value) as [
+  string,
+  ...string[],
+];
+const reviewSchema = z.object({
+  transactionId: z.string().uuid(),
+  category: z.enum(categoryValues).nullable(),
+  status: z.enum(["reviewed", "excluded"]),
+  note: z.string().trim().max(1000).nullable().optional(),
+}).refine((value) => value.status === "excluded" || value.category !== null, {
+  message: "Choose a category before approving",
+});
+const connectionIdSchema = z.string().uuid().optional();
+
+async function requireAdmin() {
+  const client = await createClient();
+  const {
+    data: { user },
+  } = await client.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const { data: profile } = await client
+    .from("profiles")
+    .select("practice_id, role")
+    .eq("id", user.id)
+    .single();
+  if (!profile || profile.role !== "admin") throw new Error("Admin access required");
+
+  return {
+    supabase: createAdminClient(),
+    userId: user.id,
+    practiceId: profile.practice_id as string,
+  };
+}
+
+function isSetupMissing(error: { code?: string; message?: string } | null) {
+  const message = error?.message?.toLowerCase() ?? "";
+  return Boolean(
+    error &&
+      (message.includes("financial_transactions") ||
+        message.includes("transactions_status") ||
+        error.code === "PGRST204" ||
+        error.code === "PGRST205"),
+  );
+}
+
+export async function getFinancialTransactionDashboardData(): Promise<
+  FinancialTransactionDashboardData | null
+> {
+  const { supabase, practiceId } = await requireAdmin();
+  const { data: connections, error: connectionError } = await supabase
+    .from("financial_connections")
+    .select(
+      "id, institution_name, transactions_status, transactions_last_synced_at",
+    )
+    .eq("practice_id", practiceId)
+    .neq("status", "disconnected")
+    .order("created_at", { ascending: true });
+  if (isSetupMissing(connectionError)) return null;
+  if (connectionError) throw new Error(connectionError.message);
+
+  const { data: accounts, error: accountError } = await supabase
+    .from("financial_accounts")
+    .select("id, connection_id, name, mask")
+    .eq("practice_id", practiceId)
+    .eq("is_active", true)
+    .order("name", { ascending: true });
+  if (accountError) throw new Error(accountError.message);
+
+  const { data: transactions, error: transactionError } = await supabase
+    .from("financial_transactions")
+    .select("*")
+    .eq("practice_id", practiceId)
+    .eq("is_removed", false)
+    .order("transaction_date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (isSetupMissing(transactionError)) return null;
+  if (transactionError) throw new Error(transactionError.message);
+
+  const { monthStart, monthEnd } = getPhoenixMonthBounds();
+
+  const [
+    { count: pendingCount, error: pendingError },
+    { count: reviewedCount, error: reviewedError },
+    currentMonthRows,
+  ] =
+    await Promise.all([
+      supabase
+        .from("financial_transactions")
+        .select("id", { count: "exact", head: true })
+        .eq("practice_id", practiceId)
+        .eq("is_removed", false)
+        .eq("review_status", "pending"),
+      supabase
+        .from("financial_transactions")
+        .select("id", { count: "exact", head: true })
+        .eq("practice_id", practiceId)
+        .eq("is_removed", false)
+        .eq("review_status", "reviewed"),
+      getMonthTransactionRows(supabase, practiceId, monthStart, monthEnd),
+    ]);
+  if (pendingError) throw new Error(pendingError.message);
+  if (reviewedError) throw new Error(reviewedError.message);
+
+  const typedTransactions = (transactions ?? []) as FinancialTransaction[];
+  const currentMonthTotals = calculateTransactionTotals(
+    currentMonthRows as Pick<
+      FinancialTransaction,
+      "amount_cents" | "pending" | "is_removed"
+    >[],
+  );
+  const institutionByConnection = new Map(
+    (connections ?? []).map((connection) => [
+      connection.id as string,
+      (connection.institution_name as string | null) ?? "Financial institution",
+    ]),
+  );
+
+  return {
+    transactions: typedTransactions,
+    accounts: (accounts ?? []).map((account) => ({
+      id: account.id as string,
+      connectionId: account.connection_id as string,
+      name: account.name as string,
+      mask: account.mask as string | null,
+      institutionName:
+        institutionByConnection.get(account.connection_id as string) ??
+        "Financial institution",
+    })),
+    pendingCount: pendingCount ?? 0,
+    reviewedCount: reviewedCount ?? 0,
+    currentMonthOutflowCents: currentMonthTotals.outflowCents,
+    currentMonthInflowCents: currentMonthTotals.inflowCents,
+    lastSyncedAt:
+      (connections ?? [])
+        .map((connection) => connection.transactions_last_synced_at as string | null)
+        .filter((value): value is string => Boolean(value))
+        .sort()
+        .at(-1) ?? null,
+    connectionCount: connections?.length ?? 0,
+    connectionsNeedingConsent: (connections ?? []).filter(
+      (connection) => connection.transactions_status === "not_enabled",
+    ).length,
+  };
+}
+
+export async function reviewFinancialTransaction(input: unknown) {
+  const parsed = reviewSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid review" };
+  }
+  const { supabase, userId, practiceId } = await requireAdmin();
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("financial_transactions")
+    .update({
+      bookkeeping_category:
+        parsed.data.status === "excluded" ? null : parsed.data.category,
+      review_status: parsed.data.status,
+      review_note: parsed.data.note || null,
+      reviewed_by: userId,
+      reviewed_at: now,
+      updated_at: now,
+    })
+    .eq("id", parsed.data.transactionId)
+    .eq("practice_id", practiceId)
+    .eq("is_removed", false);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/financial-transactions");
+  return { success: true };
+}
+
+export async function refreshFinancialTransactions(connectionId?: string) {
+  const parsedId = connectionIdSchema.safeParse(connectionId);
+  if (!parsedId.success) return { error: "Invalid financial connection" };
+  const { supabase, practiceId } = await requireAdmin();
+
+  const query = supabase
+    .from("financial_connections")
+    .select("id")
+    .eq("practice_id", practiceId)
+    .neq("status", "disconnected");
+  const { data: connections, error } = parsedId.data
+    ? await query.eq("id", parsedId.data)
+    : await query;
+  if (error) return { error: error.message };
+
+  let imported = 0;
+  let needsConsent = 0;
+  let failed = 0;
+  for (const connection of connections ?? []) {
+    try {
+      const result = await syncFinancialTransactions({
+        supabase,
+        connectionId: connection.id as string,
+        practiceId,
+      });
+      imported += result.changeCount;
+      if (result.status === "not_enabled") needsConsent += 1;
+    } catch {
+      // Each connection stores its own error so the remaining institutions can sync.
+      failed += 1;
+    }
+  }
+
+  revalidatePath("/admin/financial-transactions");
+  revalidatePath("/admin/financial-connections");
+  return { success: true, imported, needsConsent, failed };
+}
+
+function getPhoenixMonthBounds() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Phoenix",
+    year: "numeric",
+    month: "numeric",
+  }).formatToParts(new Date());
+  const year = Number(parts.find((part) => part.type === "year")?.value);
+  const month = Number(parts.find((part) => part.type === "month")?.value);
+  const nextYear = month === 12 ? year + 1 : year;
+  const nextMonth = month === 12 ? 1 : month + 1;
+  return {
+    monthStart: `${year}-${String(month).padStart(2, "0")}-01`,
+    monthEnd: `${nextYear}-${String(nextMonth).padStart(2, "0")}-01`,
+  };
+}
+
+async function getMonthTransactionRows(
+  supabase: ReturnType<typeof createAdminClient>,
+  practiceId: string,
+  monthStart: string,
+  monthEnd: string,
+) {
+  const rows: Array<{
+    amount_cents: number;
+    pending: boolean;
+    is_removed: boolean;
+  }> = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from("financial_transactions")
+      .select("amount_cents, pending, is_removed")
+      .eq("practice_id", practiceId)
+      .eq("is_removed", false)
+      .gte("transaction_date", monthStart)
+      .lt("transaction_date", monthEnd)
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    rows.push(...((data ?? []) as typeof rows));
+    if ((data?.length ?? 0) < pageSize) return rows;
+  }
+}

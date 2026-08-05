@@ -49,6 +49,7 @@ export interface FinancialAccount {
   minimum_payment_cents: number | null;
   next_payment_due_date: string | null;
   included_in_total: boolean;
+  included_in_bookkeeping: boolean;
   is_active: boolean;
   balance_updated_at: string | null;
   last_synced_at: string | null;
@@ -66,6 +67,7 @@ export interface FinancialConnectionsDashboardData {
   connections: FinancialConnectionWithAccounts[];
   totalDebtCents: number;
   includedAccountCount: number;
+  includedBookkeepingAccountCount: number;
   lastSyncedAt: string | null;
 }
 

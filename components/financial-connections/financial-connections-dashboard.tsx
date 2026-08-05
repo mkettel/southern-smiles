@@ -595,6 +595,7 @@ function formatShortDate(value: string) {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: "America/Phoenix",
   }).format(new Date(value));
 }
 
@@ -605,6 +606,7 @@ function formatLongDate(value: string) {
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: "America/Phoenix",
   }).format(new Date(value));
 }
 

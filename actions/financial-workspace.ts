@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { transactionDisplayName, type BookkeepingAccount, type FinancialTransaction } from "@/lib/financial-transactions";
+import { buildFinancialReportsData, type FinancialReportsData } from "@/lib/financial-reports";
 import type { FinancialWorkspaceData, FinancialWorkspaceRule } from "@/lib/financial-workspace";
 
 const updateRuleSchema = z.object({
@@ -141,6 +142,35 @@ export async function getFinancialWorkspaceData(): Promise<FinancialWorkspaceDat
   };
 }
 
+export async function getFinancialReportsData(): Promise<FinancialReportsData> {
+  const { supabase, practiceId } = await requireAdmin();
+  const [accountResult, financialAccountResult] = await Promise.all([
+    supabase.from("bookkeeping_accounts")
+      .select("id, account_number, name, account_type, detail_type, external_source")
+      .eq("practice_id", practiceId).eq("is_active", true)
+      .order("account_type").order("account_number", { nullsFirst: false }).order("name"),
+    supabase.from("financial_accounts")
+      .select("id").eq("practice_id", practiceId).eq("is_active", true).eq("included_in_bookkeeping", true),
+  ]);
+  if (accountResult.error) throw new Error(accountResult.error.message);
+  if (financialAccountResult.error) throw new Error(financialAccountResult.error.message);
+
+  const accounts: BookkeepingAccount[] = (accountResult.data ?? []).map((account) => ({
+    id: account.id as string,
+    accountNumber: account.account_number as string | null,
+    name: account.name as string,
+    accountType: account.account_type as string,
+    detailType: account.detail_type as string | null,
+    externalSource: account.external_source as "quickbooks" | "manual",
+  }));
+  const includedAccountIds = (financialAccountResult.data ?? []).map((account) => account.id as string);
+  const transactions = includedAccountIds.length
+    ? await getReportTransactions(supabase, practiceId, includedAccountIds)
+    : [];
+
+  return buildFinancialReportsData({ accounts, transactions, now: new Date() });
+}
+
 type WorkspaceTransaction = Pick<FinancialTransaction,
   "id" | "transaction_date" | "merchant_name" | "counterparty_name" | "name" | "amount_cents" |
   "review_status" | "category_source" | "bookkeeping_account_id" | "is_removed" | "pending"
@@ -182,6 +212,27 @@ async function getWorkspaceTransactionCount(
   const { count, error } = await query;
   if (error) throw new Error(error.message);
   return count ?? 0;
+}
+
+async function getReportTransactions(
+  supabase: ReturnType<typeof createAdminClient>,
+  practiceId: string,
+  accountIds: string[],
+) {
+  const rows: Array<Pick<FinancialTransaction, "transaction_date" | "amount_cents" | "bookkeeping_account_id">> = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase.from("financial_transactions")
+      .select("transaction_date, amount_cents, bookkeeping_account_id")
+      .eq("practice_id", practiceId).eq("is_removed", false).eq("pending", false)
+      .eq("review_status", "reviewed").not("bookkeeping_account_id", "is", null)
+      .in("account_id", accountIds)
+      .order("transaction_date", { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    rows.push(...((data ?? []) as typeof rows));
+    if ((data?.length ?? 0) < pageSize) return rows;
+  }
 }
 
 export async function updateFinancialRule(input: unknown) {

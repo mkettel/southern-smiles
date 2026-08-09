@@ -7,10 +7,12 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   ArrowRight,
+  ArrowRightLeft,
   Building2,
   Check,
   ChevronDown,
   ChevronRight,
+  CreditCard,
   EyeOff,
   FileText,
   Loader2,
@@ -18,10 +20,12 @@ import {
   Search,
   SlidersHorizontal,
   Sparkles,
+  Tags,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
   refreshFinancialTransactions,
+  reviewFinancialTransfer,
   reviewFinancialTransaction,
 } from "@/actions/financial-transactions";
 import { Button } from "@/components/ui/button";
@@ -38,6 +42,8 @@ import {
 import { cn } from "@/lib/utils";
 
 type StatusFilter = "all" | "pending" | "reviewed" | "excluded";
+type ReviewMode = "category" | "transfer";
+type TransferKind = "internal" | "credit_card_payment" | "line_of_credit_draw" | "loan_payment";
 
 export function FinancialTransactionsDashboard({
   initialData,
@@ -76,6 +82,9 @@ export function FinancialTransactionsDashboard({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  const [reviewModes, setReviewModes] = useState<Record<string, ReviewMode>>({});
+  const [transferKinds, setTransferKinds] = useState<Record<string, TransferKind>>({});
+  const [transferAccountIds, setTransferAccountIds] = useState<Record<string, string>>({});
   const [bookkeepingAccountIds, setBookkeepingAccountIds] = useState<Record<string, string>>(
     () => Object.fromEntries(
       initialData.transactions.map((transaction) => [
@@ -122,6 +131,27 @@ export function FinancialTransactionsDashboard({
   const selectedIndex = filtered.findIndex((transaction) => transaction.id === resolvedSelectedId);
   const selected = selectedIndex >= 0 ? filtered[selectedIndex] : null;
   const selectedAccount = selected?.account_id ? accountById.get(selected.account_id) : null;
+  const selectedReviewMode = selected
+    ? reviewModes[selected.id] ?? inferReviewMode(selected)
+    : "category";
+  const transferCandidates = useMemo(
+    () => selected ? findTransferCandidates(selected, transactions) : [],
+    [selected, transactions],
+  );
+  const suggestedTransfer = transferCandidates[0] ?? null;
+  const transferAccountId = selected
+    ? transferAccountIds[selected.id] ?? suggestedTransfer?.account_id ?? ""
+    : "";
+  const transferAccount = transferAccountId ? accountById.get(transferAccountId) : null;
+  const transferKind = selected
+    ? transferKinds[selected.id] ?? inferTransferKind(selected, selectedAccount, transferAccount)
+    : "internal";
+  const transferMovement = transferMovementAccounts(
+    transferKind,
+    selectedAccount,
+    transferAccount,
+    selected?.amount_cents ?? 0,
+  );
   const activeAccount = accountId === "all" ? null : accountById.get(accountId);
   const activeStats = accountStats.find((account) => account.id === accountId);
   const disabled = isPending || busyId !== null;
@@ -201,18 +231,74 @@ export function FinancialTransactionsDashboard({
     startTransition(() => router.refresh());
   }, [bookkeepingAccountIds, note, previewMode, router]);
 
+  const confirmTransfer = useCallback(async (transaction: FinancialTransaction) => {
+    const otherAccountId = transferAccountIds[transaction.id] ??
+      findTransferCandidates(transaction, transactions)[0]?.account_id ??
+      "";
+    if (!otherAccountId) {
+      toast.error("Choose the other account first");
+      return;
+    }
+    const matchedTransaction = findTransferCandidates(transaction, transactions)
+      .find((candidate) => candidate.account_id === otherAccountId);
+    const kind = transferKinds[transaction.id] ?? inferTransferKind(
+      transaction,
+      transaction.account_id ? accountById.get(transaction.account_id) : null,
+      accountById.get(otherAccountId),
+    );
+    const reviewedIds = new Set(
+      [transaction.id, matchedTransaction?.id].filter((id): id is string => Boolean(id)),
+    );
+    const applyLocalReview = () => setTransactions((current) => current.map((item) =>
+      reviewedIds.has(item.id)
+        ? {
+            ...item,
+            bookkeeping_account_id: null,
+            category_source: null,
+            review_status: "reviewed",
+            review_note: note || null,
+          }
+        : item,
+    ));
+
+    if (previewMode) {
+      applyLocalReview();
+      setNote("");
+      toast.success(matchedTransaction ? "Transfer pair matched" : "Transfer confirmed");
+      return;
+    }
+
+    setBusyId(transaction.id);
+    const result = await reviewFinancialTransfer({
+      transactionId: transaction.id,
+      otherFinancialAccountId: otherAccountId,
+      matchedTransactionId: matchedTransaction?.id ?? null,
+      transferKind: kind,
+      note: note || null,
+    });
+    setBusyId(null);
+    if (result.error) return toast.error(result.error);
+    applyLocalReview();
+    setNote("");
+    toast.success(matchedTransaction ? "Transfer pair matched and posted" : "Transfer posted");
+    startTransition(() => router.refresh());
+  }, [accountById, note, previewMode, router, transactions, transferAccountIds, transferKinds]);
+
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       if (target?.matches("input, textarea, select, [contenteditable='true']")) return;
       if (event.key.toLowerCase() === "j") moveSelection(1);
       if (event.key.toLowerCase() === "k") moveSelection(-1);
-      if (event.key.toLowerCase() === "a" && selected && !disabled) void review(selected);
+      if (event.key.toLowerCase() === "a" && selected && !disabled) {
+        if (selectedReviewMode === "transfer") void confirmTransfer(selected);
+        else void review(selected);
+      }
       if (event.key.toLowerCase() === "x" && selected && !disabled) void review(selected, true);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [disabled, moveSelection, review, selected]);
+  }, [confirmTransfer, disabled, moveSelection, review, selected, selectedReviewMode]);
 
   function changeMonth(direction: -1 | 1) {
     const index = availableMonths.indexOf(month);
@@ -313,11 +399,11 @@ export function FinancialTransactionsDashboard({
             <Button size="icon-sm" variant="ghost" title="More filters" aria-label="More filters"><SlidersHorizontal /></Button>
           </section>
 
-          <div className="grid grid-cols-[28px_48px_minmax(110px,1.2fr)_minmax(90px,1fr)_80px_16px] items-center border-b bg-muted/30 px-3 py-2 text-[11px] font-medium text-muted-foreground">
+          <div className="grid grid-cols-[28px_48px_minmax(100px,1fr)_80px_16px] items-center border-b bg-muted/30 px-3 py-2 text-[11px] font-medium text-muted-foreground md:grid-cols-[28px_48px_minmax(110px,1.2fr)_minmax(90px,1fr)_80px_16px]">
             <span />
             <span>Date</span>
             <span>Merchant</span>
-            <span>Imported description</span>
+            <span className="hidden md:block">Imported description</span>
             <span className="text-right">Amount</span>
             <span />
           </div>
@@ -370,22 +456,97 @@ export function FinancialTransactionsDashboard({
                 <InspectorField label="Imported category">
                   <div className="flex h-9 items-center rounded-md border bg-background px-3 text-sm">{formatPlaidCategory(selected.plaid_category_detailed) ?? "Uncategorized bank activity"}</div>
                 </InspectorField>
-                <InspectorField label="Chart of account">
-                  <BookkeepingAccountCombobox
-                    accountsByType={bookkeepingAccountsByType}
-                    value={bookkeepingAccountIds[selected.id] ?? ""}
-                    onValueChange={(value) => setBookkeepingAccountIds((current) => ({
-                      ...current,
-                      [selected.id]: value,
-                    }))}
-                  />
+                <InspectorField label="Transaction type">
+                  <div className="grid grid-cols-2 rounded-md border bg-muted/30 p-1" role="group" aria-label="Transaction type">
+                    <button
+                      type="button"
+                      className={cn("flex h-8 items-center justify-center gap-2 rounded-sm text-xs font-medium transition-colors", selectedReviewMode === "category" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}
+                      onClick={() => setReviewModes((current) => ({ ...current, [selected.id]: "category" }))}
+                    >
+                      <Tags className="h-3.5 w-3.5" />Category
+                    </button>
+                    <button
+                      type="button"
+                      className={cn("flex h-8 items-center justify-center gap-2 rounded-sm text-xs font-medium transition-colors", selectedReviewMode === "transfer" ? "bg-background text-sky-800 shadow-sm" : "text-muted-foreground hover:text-foreground")}
+                      onClick={() => setReviewModes((current) => ({ ...current, [selected.id]: "transfer" }))}
+                    >
+                      <ArrowRightLeft className="h-3.5 w-3.5" />Transfer
+                    </button>
+                  </div>
                 </InspectorField>
 
-                {initialData.suggestedBookkeepingAccountByTransaction[selected.id] && !selected.bookkeeping_account_id && (
-                  <div className="border-y py-4">
-                    <p className="flex items-center gap-2 text-sm font-medium"><Sparkles className="h-4 w-4 text-emerald-700" />Rule match</p>
-                    <p className="mt-2 text-sm">{transactionDisplayName(selected)} → {bookkeepingAccountName(initialData.bookkeepingAccounts, bookkeepingAccountIds[selected.id])}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">Suggested from prior vendor history</p>
+                {selectedReviewMode === "category" ? (
+                  <>
+                    <InspectorField label="Chart of account">
+                      <BookkeepingAccountCombobox
+                        accountsByType={bookkeepingAccountsByType}
+                        value={bookkeepingAccountIds[selected.id] ?? ""}
+                        onValueChange={(value) => setBookkeepingAccountIds((current) => ({
+                          ...current,
+                          [selected.id]: value,
+                        }))}
+                      />
+                    </InspectorField>
+
+                    {initialData.suggestedBookkeepingAccountByTransaction[selected.id] && !selected.bookkeeping_account_id && (
+                      <div className="border-y py-4">
+                        <p className="flex items-center gap-2 text-sm font-medium"><Sparkles className="h-4 w-4 text-emerald-700" />Rule match</p>
+                        <p className="mt-2 text-sm">{transactionDisplayName(selected)} → {bookkeepingAccountName(initialData.bookkeepingAccounts, bookkeepingAccountIds[selected.id])}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Suggested from prior vendor history</p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="space-y-4">
+                    <InspectorField label="Transfer type">
+                      <select
+                        className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                        value={transferKind}
+                        onChange={(event) => setTransferKinds((current) => ({ ...current, [selected.id]: event.target.value as TransferKind }))}
+                      >
+                        <option value="internal">Between accounts</option>
+                        <option value="credit_card_payment">Credit-card payment</option>
+                        <option value="line_of_credit_draw">Line-of-credit draw</option>
+                        <option value="loan_payment">Loan payment</option>
+                      </select>
+                    </InspectorField>
+
+                    <InspectorField label="Other connected account">
+                      <select
+                        className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                        value={transferAccountId}
+                        onChange={(event) => setTransferAccountIds((current) => ({ ...current, [selected.id]: event.target.value }))}
+                      >
+                        <option value="">Choose account</option>
+                        {initialData.accounts.filter((account) => account.id !== selected.account_id).map((account) => (
+                          <option key={account.id} value={account.id}>{account.institutionName} · {accountDisplayName(account)}{accountMaskText(account)}</option>
+                        ))}
+                      </select>
+                    </InspectorField>
+
+                    <div className="rounded-md border border-sky-200 bg-sky-50/70 p-3">
+                      {suggestedTransfer && transferAccount ? (
+                        <>
+                          <div className="flex items-start justify-between gap-3">
+                            <p className="flex items-center gap-2 text-sm font-medium text-sky-950"><Check className="h-4 w-4 text-sky-700" />Possible match found</p>
+                            <span className="text-xs font-medium tabular-nums text-sky-900">{formatSignedAmount(suggestedTransfer.amount_cents)}</span>
+                          </div>
+                          <p className="mt-2 text-sm font-medium">{transferAccount.institutionName} · {accountDisplayName(transferAccount)}{accountMaskText(transferAccount)}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{formatFullDate(suggestedTransfer.transaction_date)} · Same amount, opposite direction</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="flex items-center gap-2 text-sm font-medium"><Search className="h-4 w-4 text-sky-700" />No exact match yet</p>
+                          <p className="mt-1 text-xs text-muted-foreground">You can post one side now. The imported match can be linked when it arrives.</p>
+                        </>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-xs">
+                      <AccountMovementLabel label="From" account={transferMovement.from} />
+                      <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                      <AccountMovementLabel label="To" account={transferMovement.to} />
+                    </div>
                   </div>
                 )}
 
@@ -406,7 +567,11 @@ export function FinancialTransactionsDashboard({
                 </InspectorField>
 
                 <div className="sticky bottom-0 -mx-4 -mb-4 space-y-2 border-t bg-background/95 p-4 backdrop-blur-sm">
-                  <Button size="sm" className="w-full bg-emerald-700 text-white hover:bg-emerald-800" onClick={() => review(selected)} disabled={disabled || !bookkeepingAccountIds[selected.id]}>{busyId === selected.id ? <Loader2 className="animate-spin" /> : <Check />}Approve</Button>
+                  {selectedReviewMode === "transfer" ? (
+                    <Button size="sm" className="w-full bg-sky-700 text-white hover:bg-sky-800" onClick={() => confirmTransfer(selected)} disabled={disabled || !transferAccountId}>{busyId === selected.id ? <Loader2 className="animate-spin" /> : <ArrowRightLeft />}Post transfer</Button>
+                  ) : (
+                    <Button size="sm" className="w-full bg-emerald-700 text-white hover:bg-emerald-800" onClick={() => review(selected)} disabled={disabled || !bookkeepingAccountIds[selected.id]}>{busyId === selected.id ? <Loader2 className="animate-spin" /> : <Check />}Approve</Button>
+                  )}
                   <Button size="sm" className="w-full" variant="outline" onClick={() => review(selected, true)} disabled={disabled}><EyeOff />Exclude</Button>
                   <Button size="sm" className="w-full text-emerald-700" variant="ghost" onClick={() => moveSelection(1)} disabled={selectedIndex >= filtered.length - 1}>Next transaction <ChevronRight /></Button>
                 </div>
@@ -437,11 +602,11 @@ function AccountRailItem({ label, mask, detail, progress, accent, selected, onCl
 
 function TransactionRow({ transaction, account, selected, bookkeepingAccountId, bookkeepingAccounts, onSelect }: { transaction: FinancialTransaction; account?: FinancialTransactionAccountSummary; selected: boolean; bookkeepingAccountId?: string; bookkeepingAccounts: BookkeepingAccount[]; onSelect: () => void }) {
   const accountName = bookkeepingAccountName(bookkeepingAccounts, bookkeepingAccountId);
-  return <button type="button" onClick={onSelect} className={cn("grid w-full grid-cols-[28px_48px_minmax(110px,1.2fr)_minmax(90px,1fr)_80px_16px] items-center border-b px-3 py-3 text-left text-xs transition-colors hover:bg-muted/30", selected && "bg-emerald-50/70 hover:bg-emerald-50/70")}>
+  return <button type="button" onClick={onSelect} className={cn("grid w-full grid-cols-[28px_48px_minmax(100px,1fr)_80px_16px] items-center border-b px-3 py-3 text-left text-xs transition-colors hover:bg-muted/30 md:grid-cols-[28px_48px_minmax(110px,1.2fr)_minmax(90px,1fr)_80px_16px]", selected && "bg-emerald-50/70 hover:bg-emerald-50/70")}>
     <span className={cn("flex h-4 w-4 items-center justify-center rounded border", selected && "border-emerald-700 bg-emerald-700 text-white")}>{selected && <Check className="h-3 w-3" />}</span>
     <span className="text-muted-foreground">{formatDateOnly(transaction.transaction_date)}</span>
     <span className="min-w-0 pr-3"><span className="block truncate font-medium">{transactionDisplayName(transaction)}</span><span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{account ? `${account.institutionName} · ${accountDisplayName(account)}${accountMaskText(account)}` : "Account unavailable"}</span></span>
-    <span className="min-w-0 pr-3"><span className="block truncate text-muted-foreground">{transaction.original_description ?? formatPlaidCategory(transaction.plaid_category_detailed) ?? "Bank activity"}</span>{accountName && <span className="mt-0.5 block truncate text-[11px] text-emerald-700">{accountName}</span>}</span>
+    <span className="hidden min-w-0 pr-3 md:block"><span className="block truncate text-muted-foreground">{transaction.original_description ?? formatPlaidCategory(transaction.plaid_category_detailed) ?? "Bank activity"}</span>{accountName && <span className="mt-0.5 block truncate text-[11px] text-emerald-700">{accountName}</span>}</span>
     <span className={cn("text-right font-semibold tabular-nums", transaction.amount_cents < 0 && "text-emerald-700")}>{formatSignedAmount(transaction.amount_cents)}</span>
     <ChevronRight className="h-4 w-4 text-muted-foreground" />
   </button>;
@@ -538,6 +703,112 @@ function BookkeepingAccountCombobox({
 
 function bookkeepingAccountSearchLabel(account: BookkeepingAccount) {
   return [account.accountNumber, account.name].filter(Boolean).join(" ");
+}
+
+function inferReviewMode(transaction: FinancialTransaction): ReviewMode {
+  const text = [
+    transaction.plaid_category_detailed,
+    transaction.name,
+    transaction.original_description,
+  ].filter(Boolean).join(" ").toLowerCase();
+  return /account_transfer|credit_card_payment|online transfer|payment thank you|web pymt|card payment/.test(text)
+    ? "transfer"
+    : "category";
+}
+
+function inferTransferKind(
+  transaction: FinancialTransaction,
+  sourceAccount?: FinancialTransactionAccountSummary | null,
+  otherAccount?: FinancialTransactionAccountSummary | null,
+): TransferKind {
+  const text = [
+    transaction.plaid_category_detailed,
+    transaction.name,
+    transaction.original_description,
+    sourceAccount?.name,
+    sourceAccount?.nickname,
+    sourceAccount?.accountType,
+    sourceAccount?.accountSubtype,
+    otherAccount?.name,
+    otherAccount?.nickname,
+    otherAccount?.accountType,
+    otherAccount?.accountSubtype,
+  ].filter(Boolean).join(" ").toLowerCase();
+  if (/line of credit|line_of_credit|loc\b/.test(text)) return "line_of_credit_draw";
+  if (/loan/.test(text)) return "loan_payment";
+  if (/credit_card|credit card|mastercard|visa|amex|capital one|payment thank you/.test(text)) {
+    return "credit_card_payment";
+  }
+  return "internal";
+}
+
+function findTransferCandidates(
+  transaction: FinancialTransaction,
+  transactions: FinancialTransaction[],
+) {
+  return transactions
+    .filter((candidate) =>
+      candidate.id !== transaction.id &&
+      candidate.account_id &&
+      candidate.account_id !== transaction.account_id &&
+      candidate.review_status === "pending" &&
+      candidate.amount_cents === -transaction.amount_cents &&
+      dayDistance(candidate.transaction_date, transaction.transaction_date) <= 7,
+    )
+    .sort((left, right) =>
+      dayDistance(left.transaction_date, transaction.transaction_date) -
+      dayDistance(right.transaction_date, transaction.transaction_date),
+    );
+}
+
+function dayDistance(first: string, second: string) {
+  return Math.abs(parseDate(first).getTime() - parseDate(second).getTime()) / 86_400_000;
+}
+
+function transferMovementAccounts(
+  kind: TransferKind,
+  selectedAccount: FinancialTransactionAccountSummary | null | undefined,
+  otherAccount: FinancialTransactionAccountSummary | null | undefined,
+  amountCents: number,
+) {
+  if (kind === "credit_card_payment" || kind === "loan_payment") {
+    const selectedIsLiability = isLiabilityAccount(selectedAccount);
+    return selectedIsLiability
+      ? { from: otherAccount, to: selectedAccount }
+      : { from: selectedAccount, to: otherAccount };
+  }
+  if (kind === "line_of_credit_draw") {
+    const selectedIsLiability = isLiabilityAccount(selectedAccount);
+    return selectedIsLiability
+      ? { from: selectedAccount, to: otherAccount }
+      : { from: otherAccount, to: selectedAccount };
+  }
+  return amountCents >= 0
+    ? { from: selectedAccount, to: otherAccount }
+    : { from: otherAccount, to: selectedAccount };
+}
+
+function isLiabilityAccount(account?: FinancialTransactionAccountSummary | null) {
+  return Boolean(account && /credit|loan/i.test(`${account.accountType} ${account.accountSubtype ?? ""}`));
+}
+
+function AccountMovementLabel({
+  label,
+  account,
+}: {
+  label: string;
+  account?: FinancialTransactionAccountSummary | null;
+}) {
+  const Icon = isLiabilityAccount(account)
+    ? CreditCard
+    : Building2;
+  return (
+    <div className="min-w-0 rounded-md border bg-background p-2.5">
+      <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase text-muted-foreground"><Icon className="h-3.5 w-3.5" />{label}</p>
+      <p className="mt-1 truncate font-medium">{account ? accountDisplayName(account) : "Choose account"}</p>
+      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{account ? `${account.institutionName}${accountMaskText(account)}` : "Not selected"}</p>
+    </div>
+  );
 }
 
 function SummaryStat({ label, value }: { label: string; value: string }) { return <div className="px-4 first:pl-0"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 font-semibold tabular-nums">{value}</p></div>; }

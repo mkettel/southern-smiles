@@ -164,11 +164,50 @@ export async function getFinancialReportsData(): Promise<FinancialReportsData> {
     externalSource: account.external_source as "quickbooks" | "manual",
   }));
   const includedAccountIds = (financialAccountResult.data ?? []).map((account) => account.id as string);
-  const transactions = includedAccountIds.length
+  const ledgerTransactions = await getLedgerReportTransactions(supabase, practiceId);
+  const transactions = ledgerTransactions ?? (includedAccountIds.length
     ? await getReportTransactions(supabase, practiceId, includedAccountIds)
-    : [];
+    : []);
 
   return buildFinancialReportsData({ accounts, transactions, now: new Date() });
+}
+
+async function getLedgerReportTransactions(
+  supabase: ReturnType<typeof createAdminClient>,
+  practiceId: string,
+) {
+  const rows: Array<{
+    transaction_date: string;
+    amount_cents: number;
+    bookkeeping_account_id: string;
+  }> = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase.from("accounting_journal_lines")
+      .select("debit_cents, credit_cents, bookkeeping_account_id, accounting_journal_entries!inner(entry_date, status)")
+      .eq("practice_id", practiceId)
+      .not("bookkeeping_account_id", "is", null)
+      .eq("accounting_journal_entries.status", "posted")
+      .order("created_at", { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) {
+      if (error.code === "PGRST204" || error.code === "PGRST205" ||
+        error.message.toLowerCase().includes("accounting_journal_lines")) return null;
+      throw new Error(error.message);
+    }
+    for (const row of data ?? []) {
+      const entry = Array.isArray(row.accounting_journal_entries)
+        ? row.accounting_journal_entries[0]
+        : row.accounting_journal_entries;
+      if (!entry || !row.bookkeeping_account_id) continue;
+      rows.push({
+        transaction_date: entry.entry_date as string,
+        amount_cents: Number(row.debit_cents) - Number(row.credit_cents),
+        bookkeeping_account_id: row.bookkeeping_account_id as string,
+      });
+    }
+    if ((data?.length ?? 0) < pageSize) return rows;
+  }
 }
 
 type WorkspaceTransaction = Pick<FinancialTransaction,

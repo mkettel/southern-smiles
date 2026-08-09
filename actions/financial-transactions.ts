@@ -23,6 +23,18 @@ const reviewSchema = z.object({
   message: "Choose an account before approving",
 });
 const connectionIdSchema = z.string().uuid().optional();
+const transferSchema = z.object({
+  transactionId: z.string().uuid(),
+  otherFinancialAccountId: z.string().uuid(),
+  matchedTransactionId: z.string().uuid().nullable().optional(),
+  transferKind: z.enum([
+    "internal",
+    "credit_card_payment",
+    "line_of_credit_draw",
+    "loan_payment",
+  ]),
+  note: z.string().trim().max(1000).nullable().optional(),
+});
 
 async function requireAdmin() {
   const client = await createClient();
@@ -75,14 +87,14 @@ export async function getFinancialTransactionDashboardData(): Promise<
 
   let { data: accounts, error: accountError } = await supabase
     .from("financial_accounts")
-    .select("id, connection_id, name, nickname, mask, included_in_bookkeeping")
+    .select("id, connection_id, name, nickname, mask, account_type, account_subtype, included_in_bookkeeping")
     .eq("practice_id", practiceId)
     .eq("is_active", true)
     .order("name", { ascending: true });
   if (accountError?.code === "PGRST204") {
     const fallback = await supabase
       .from("financial_accounts")
-      .select("id, connection_id, name, mask, included_in_bookkeeping")
+      .select("id, connection_id, name, mask, account_type, account_subtype, included_in_bookkeeping")
       .eq("practice_id", practiceId)
       .eq("is_active", true)
       .order("name", { ascending: true });
@@ -183,6 +195,8 @@ export async function getFinancialTransactionDashboardData(): Promise<
       name: account.name as string,
       nickname: account.nickname as string | null,
       mask: account.mask as string | null,
+      accountType: account.account_type as string,
+      accountSubtype: account.account_subtype as string | null,
       institutionName:
         institutionByConnection.get(account.connection_id as string) ??
         "Financial institution",
@@ -274,22 +288,20 @@ export async function reviewFinancialTransaction(input: unknown) {
     }
   }
 
-  const { error } = await supabase
-    .from("financial_transactions")
-    .update({
-      bookkeeping_category: null,
-      bookkeeping_account_id:
-        parsed.data.status === "excluded" ? null : parsed.data.accountId,
-      category_source: parsed.data.status === "excluded" ? null : "manual",
-      review_status: parsed.data.status,
-      review_note: parsed.data.note || null,
-      reviewed_by: userId,
-      reviewed_at: now,
-      updated_at: now,
-    })
-    .eq("id", parsed.data.transactionId)
-    .eq("practice_id", practiceId)
-    .eq("is_removed", false);
+  const { error } = parsed.data.status === "excluded"
+    ? await supabase.rpc("exclude_financial_transaction", {
+        p_practice_id: practiceId,
+        p_transaction_id: parsed.data.transactionId,
+        p_review_note: parsed.data.note || null,
+        p_reviewed_by: userId,
+      })
+    : await supabase.rpc("post_categorized_financial_transaction", {
+        p_practice_id: practiceId,
+        p_transaction_id: parsed.data.transactionId,
+        p_bookkeeping_account_id: parsed.data.accountId,
+        p_review_note: parsed.data.note || null,
+        p_reviewed_by: userId,
+      });
   if (error) return { error: error.message };
 
   const normalizedVendor = normalizeVendorName(
@@ -322,6 +334,32 @@ export async function reviewFinancialTransaction(input: unknown) {
   }
 
   revalidatePath("/admin/financial-transactions");
+  return { success: true };
+}
+
+export async function reviewFinancialTransfer(input: unknown) {
+  const parsed = transferSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid transfer" };
+  }
+  if (parsed.data.transactionId === parsed.data.matchedTransactionId) {
+    return { error: "A transaction cannot match itself" };
+  }
+
+  const { supabase, userId, practiceId } = await requireAdmin();
+  const { error } = await supabase.rpc("post_financial_transfer", {
+    p_practice_id: practiceId,
+    p_transaction_id: parsed.data.transactionId,
+    p_other_financial_account_id: parsed.data.otherFinancialAccountId,
+    p_matched_transaction_id: parsed.data.matchedTransactionId ?? null,
+    p_transfer_kind: parsed.data.transferKind,
+    p_review_note: parsed.data.note || null,
+    p_reviewed_by: userId,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin/financial-transactions");
+  revalidatePath("/admin/financial/reports");
   return { success: true };
 }
 

@@ -129,10 +129,10 @@ export function buildFinancialReportsData({
       ) continue;
       const account = accountById.get(transaction.bookkeeping_account_id);
       if (!account) continue;
-      if (isIncomeType(account.accountType) && transaction.amount_cents < 0) {
-        revenueCents += Math.abs(transaction.amount_cents);
+      if (isIncomeType(account.accountType)) {
+        revenueCents -= transaction.amount_cents;
       }
-      if (isExpenseType(account.accountType) && transaction.amount_cents > 0) {
+      if (isExpenseType(account.accountType)) {
         expenseCents += transaction.amount_cents;
         const category = categoryById.get(account.id);
         if (category) {

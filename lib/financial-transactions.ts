@@ -57,6 +57,8 @@ export interface FinancialTransactionAccountSummary {
   name: string;
   nickname: string | null;
   mask: string | null;
+  accountType: string;
+  accountSubtype: string | null;
   institutionName: string;
 }
 

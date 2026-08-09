@@ -70,6 +70,24 @@ test("the six-month chart runs from March through August", () => {
   assert.equal(data.months.find((month) => month.label === "Aug")?.expenseCents, 15901);
 });
 
+test("ledger reversals reduce income and expense totals", () => {
+  const data = buildFinancialReportsData({
+    accounts,
+    transactions: [
+      transaction("2026-08-01", 10000, "groceries"),
+      transaction("2026-08-02", -2500, "groceries"),
+      transaction("2026-08-03", -200000, "salary"),
+      transaction("2026-08-04", 10000, "salary"),
+    ],
+    now: new Date("2026-08-06T18:00:00Z"),
+  });
+  const month = data.periods.find((period) => period.key === "month")!;
+
+  assert.equal(month.expenseCents, 7500);
+  assert.equal(month.revenueCents, 190000);
+  assert.equal(month.netIncomeCents, 182500);
+});
+
 function account(
   id: string,
   accountNumber: string,

@@ -114,6 +114,8 @@ const previewData: FinancialTransactionDashboardData = {
       name: "Business Card",
       nickname: "Practice Card",
       mask: "7672",
+      accountType: "credit",
+      accountSubtype: "credit card",
       institutionName: "Capital One",
     },
     {
@@ -122,6 +124,8 @@ const previewData: FinancialTransactionDashboardData = {
       name: "Business Checking",
       nickname: "Operating Checking",
       mask: "9777",
+      accountType: "depository",
+      accountSubtype: "checking",
       institutionName: "BMO",
     },
   ],

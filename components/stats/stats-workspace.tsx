@@ -13,6 +13,7 @@ import {
 } from "@/actions/stats-workspace";
 import { formatStatValue } from "@/lib/utils";
 import { isTotalCreditCardDebtStat } from "@/lib/financial-connections";
+import { buildStatsHref } from "@/lib/stats-navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +28,7 @@ interface Props {
   billsManagedHidden?: boolean;
   approvedFinancingManagedHidden?: boolean;
   financialDebtManagedHidden?: boolean;
+  initialDivisionFilter?: string;
 }
 
 const FORMULA_LABELS = {
@@ -147,11 +149,12 @@ export function StatsWorkspace({
   billsManagedHidden = false,
   approvedFinancingManagedHidden = false,
   financialDebtManagedHidden = false,
+  initialDivisionFilter = "all",
 }: Props) {
   const router = useRouter();
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [divisionFilter, setDivisionFilter] = useState("all");
+  const [divisionFilter, setDivisionFilter] = useState(initialDivisionFilter);
   const [missingTodayOnly, setMissingTodayOnly] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [dailyValues, setDailyValues] = useState<Record<string, string>>(() => {
@@ -204,6 +207,15 @@ export function StatsWorkspace({
     }
     return [...options.values()].sort((a, b) => a.number - b.number);
   }, [modeStats]);
+
+  function selectDivision(division: string) {
+    setDivisionFilter(division);
+    router.replace(
+      buildStatsHref({ mode, week: weekStart, division }),
+      { scroll: false },
+    );
+  }
+
   const visibleStats = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
     return modeStats.filter((item) => {
@@ -341,7 +353,7 @@ export function StatsWorkspace({
           variant={divisionFilter === "all" ? "default" : "outline"}
           size="sm"
           aria-pressed={divisionFilter === "all"}
-          onClick={() => setDivisionFilter("all")}
+          onClick={() => selectDivision("all")}
         >
           All
         </Button>
@@ -352,7 +364,7 @@ export function StatsWorkspace({
             variant={divisionFilter === division.key ? "default" : "outline"}
             size="sm"
             aria-pressed={divisionFilter === division.key}
-            onClick={() => setDivisionFilter(division.key)}
+            onClick={() => selectDivision(division.key)}
             className="gap-1.5"
           >
             <span

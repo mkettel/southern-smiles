@@ -9,6 +9,7 @@ import { WeekSelector } from "@/components/dashboard/week-selector";
 import { StatsWorkspace } from "@/components/stats/stats-workspace";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { buildStatsHref } from "@/lib/stats-navigation";
 
 function getWorkspaceDates(weekStart: string) {
   const monday = new Date(`${weekStart}T00:00:00`);
@@ -20,7 +21,7 @@ function getWorkspaceDates(weekStart: string) {
 export default async function StatsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ week?: string; mode?: string }>;
+  searchParams: Promise<{ week?: string; mode?: string; division?: string }>;
 }) {
   const profile = await getProfile();
   if (!profile) redirect("/login");
@@ -41,6 +42,15 @@ export default async function StatsPage({
       (item.stat.weekly_formula !== "ratio_of_sums" ||
         item.dailyInputStatId !== item.stat.id),
   );
+  const modeStats = mode === "daily" ? dailyStats : data.stats;
+  const requestedDivision = params.division ?? "all";
+  const divisionFilter =
+    requestedDivision === "all" ||
+    modeStats.some(
+      (item) => (item.post.division?.id ?? "unassigned") === requestedDivision,
+    )
+      ? requestedDivision
+      : "all";
   const enteredToday = dailyStats.filter((item) =>
     item.dailyEntries.some(
       (entry) =>
@@ -57,7 +67,11 @@ export default async function StatsPage({
           <h1 className="text-2xl font-bold">Stats</h1>
           <p className="text-sm text-muted-foreground">{formatWeekLabel(weekStart)}</p>
         </div>
-        <WeekSelector currentWeek={weekStart} />
+        <WeekSelector
+          currentWeek={weekStart}
+          mode={mode}
+          division={divisionFilter}
+        />
       </div>
 
       <div className="inline-flex h-9 items-center rounded-md bg-muted p-1">
@@ -69,7 +83,11 @@ export default async function StatsPage({
           return (
             <Link
               key={item.value}
-              href={`/stats?mode=${item.value}&week=${weekStart}`}
+              href={buildStatsHref({
+                mode: item.value as "daily" | "weekly",
+                week: weekStart,
+                division: divisionFilter,
+              })}
               className={cn(
                 "inline-flex h-7 items-center gap-1.5 rounded px-3 text-sm font-medium transition-colors",
                 mode === item.value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
@@ -116,7 +134,7 @@ export default async function StatsPage({
         </Card>
       ) : (
         <StatsWorkspace
-          key={`${mode}:${weekStart}`}
+          key={`${mode}:${weekStart}:${divisionFilter}`}
           mode={mode}
           weekStart={weekStart}
           dates={dates}
@@ -125,6 +143,7 @@ export default async function StatsPage({
           billsManagedHidden={data.billsManagedHidden ?? false}
           approvedFinancingManagedHidden={data.approvedFinancingManagedHidden ?? false}
           financialDebtManagedHidden={data.financialDebtManagedHidden ?? false}
+          initialDivisionFilter={divisionFilter}
         />
       )}
     </div>

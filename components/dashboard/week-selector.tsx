@@ -8,12 +8,19 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { getCurrentWeekStart, getLastNWeeks, formatWeekLabel } from "@/lib/constants";
+import { buildStatsHref, type StatsMode } from "@/lib/stats-navigation";
 
 interface WeekSelectorProps {
   currentWeek: string;
+  mode?: StatsMode;
+  division?: string;
 }
 
-export function WeekSelector({ currentWeek }: WeekSelectorProps) {
+export function WeekSelector({
+  currentWeek,
+  mode = "daily",
+  division = "all",
+}: WeekSelectorProps) {
   const router = useRouter();
 
   // Always build the list relative to TODAY's week, so the current week
@@ -30,7 +37,9 @@ export function WeekSelector({ currentWeek }: WeekSelectorProps) {
     <Select
       value={currentWeek}
       onValueChange={(value) => {
-        if (value) router.push(`?week=${value}`);
+        if (value) {
+          router.push(buildStatsHref({ mode, week: value, division }));
+        }
       }}
     >
       <SelectTrigger className="w-[250px]">

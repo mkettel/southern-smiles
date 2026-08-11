@@ -15,6 +15,7 @@ import { logout } from "@/actions/auth";
 import { getAssignableMembers } from "@/actions/tasks";
 import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
 import type { Profile } from "@/lib/types";
+import type { WorkspaceAccess } from "@/lib/workspace-access";
 import { CommandPalette } from "./command-palette";
 import { buildCommands, type CommandActionId } from "./commands";
 
@@ -39,10 +40,11 @@ interface CommandPaletteProviderProps {
   profile: Profile;
   canAccessBills?: boolean;
   canAccessSupplies?: boolean;
+  workspaceAccess: WorkspaceAccess;
   children: ReactNode;
 }
 
-export function CommandPaletteProvider({ profile, canAccessBills = false, canAccessSupplies = false, children }: CommandPaletteProviderProps) {
+export function CommandPaletteProvider({ profile, canAccessBills = false, canAccessSupplies = false, workspaceAccess, children }: CommandPaletteProviderProps) {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const isAdmin = profile.role === "admin";
@@ -67,8 +69,8 @@ export function CommandPaletteProvider({ profile, canAccessBills = false, canAcc
   }, [members, loadingMembers]);
 
   const commands = useMemo(
-    () => buildCommands({ role: profile.role, canAccessBills, canAccessSupplies }),
-    [profile.role, canAccessBills, canAccessSupplies],
+    () => buildCommands({ role: profile.role, canAccessBills, canAccessSupplies, workspaceAccess }),
+    [profile.role, canAccessBills, canAccessSupplies, workspaceAccess],
   );
 
   const openPalette = useCallback(() => setPaletteOpen(true), []);

@@ -26,6 +26,7 @@ import {
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "@/lib/types";
+import { requireWorkspaceModule } from "@/actions/workspace-access";
 
 const connectionIdSchema = z.string().uuid();
 const exchangeSchema = z.object({
@@ -54,6 +55,7 @@ function isSetupMissing(error: { code?: string; message?: string } | null) {
 }
 
 async function requireAdmin() {
+  await requireWorkspaceModule("financial");
   const supabase = await createClient();
   const {
     data: { user },

@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import type { Profile } from "@/lib/types";
+import type { WorkspaceAccess } from "@/lib/workspace-access";
 import { MobileNav } from "./mobile-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ChangelogBell } from "@/components/changelog/changelog-bell";
@@ -27,6 +28,7 @@ interface HeaderProps {
   activeTaskCount?: number;
   canAccessBills?: boolean;
   canAccessSupplies?: boolean;
+  workspaceAccess: WorkspaceAccess;
 }
 
 export function Header({
@@ -38,6 +40,7 @@ export function Header({
   activeTaskCount = 0,
   canAccessBills = false,
   canAccessSupplies = false,
+  workspaceAccess,
 }: HeaderProps) {
   const router = useRouter();
   const [imgError, setImgError] = useState(false);
@@ -52,7 +55,7 @@ export function Header({
 
   return (
     <header className="flex h-14 items-center justify-between border-b px-4 md:justify-end gap-2">
-      <MobileNav role={profile.role} openRequestCount={openRequestCount} newRequestCount={newRequestCount} practiceName={practiceName} canAccessBills={canAccessBills} canAccessSupplies={canAccessSupplies} />
+      <MobileNav role={profile.role} openRequestCount={openRequestCount} newRequestCount={newRequestCount} practiceName={practiceName} canAccessBills={canAccessBills} canAccessSupplies={canAccessSupplies} workspaceAccess={workspaceAccess} />
       <div className="flex items-center gap-1">
         <CommandPaletteButton />
         <ThemeToggle />

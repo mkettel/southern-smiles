@@ -21,6 +21,7 @@ import {
 } from "@/lib/supply-invoice-review";
 import type { SavedSupplyWorkspace } from "@/lib/supply-ordering";
 import { supplyWorkspaceSchema } from "@/lib/validators";
+import { requireWorkspaceModule } from "@/actions/workspace-access";
 
 const MAX_INVOICE_PDF_BYTES = 15 * 1024 * 1024;
 
@@ -70,6 +71,7 @@ function isMissingSupplyInvoiceSchema(
 }
 
 async function getAdminContext() {
+  await requireWorkspaceModule("supply_management");
   const supabase = await createClient();
   const {
     data: { user },

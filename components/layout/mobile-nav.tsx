@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/types";
+import { resolveWorkspaceAccess, type WorkspaceAccess } from "@/lib/workspace-access";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import {
   Menu,
@@ -15,6 +16,7 @@ import {
   billsOfficerLinks,
   sharedLinks,
   supplyOfficerLinks,
+  resolveNavigationLinks,
   type NavLink,
 } from "./navigation-links";
 
@@ -25,18 +27,20 @@ interface MobileNavProps {
   practiceName?: string;
   canAccessBills?: boolean;
   canAccessSupplies?: boolean;
+  workspaceAccess?: WorkspaceAccess;
 }
 
-export function MobileNav({ role, openRequestCount = 0, newRequestCount = 0, practiceName = "Stats & Conditions", canAccessBills = false, canAccessSupplies = false }: MobileNavProps) {
+export function MobileNav({ role, openRequestCount = 0, newRequestCount = 0, practiceName = "Stats & Conditions", canAccessBills = false, canAccessSupplies = false, workspaceAccess = resolveWorkspaceAccess() }: MobileNavProps) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const isAdmin = role === "admin";
-  const accessLinks = isAdmin
+  const visibleSharedLinks = resolveNavigationLinks(sharedLinks, workspaceAccess);
+  const accessLinks = resolveNavigationLinks(isAdmin
     ? adminOnlyLinks
     : [
         ...(canAccessBills ? billsOfficerLinks : []),
         ...(canAccessSupplies ? supplyOfficerLinks : []),
-      ];
+      ], workspaceAccess);
 
   function renderLink(link: NavLink, badge?: number) {
     const Icon = link.icon;
@@ -79,7 +83,7 @@ export function MobileNav({ role, openRequestCount = 0, newRequestCount = 0, pra
           {practiceName}
         </SheetTitle>
         <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
-          {sharedLinks.map((link) => renderLink(link))}
+          {visibleSharedLinks.map((link) => renderLink(link))}
 
           {accessLinks.length > 0 && (
             <>

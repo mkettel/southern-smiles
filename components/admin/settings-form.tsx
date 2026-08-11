@@ -14,9 +14,10 @@ import { FONT_OPTIONS, getGoogleFontUrl } from "@/lib/fonts";
 
 interface SettingsFormProps {
   settings: PracticeSettings;
+  organizationLabel?: "Practice" | "Household" | "Business";
 }
 
-export function SettingsForm({ settings }: SettingsFormProps) {
+export function SettingsForm({ settings, organizationLabel = "Practice" }: SettingsFormProps) {
   const [isPending, startTransition] = useTransition();
   const [name, setName] = useState(settings.name);
   const [shortName, setShortName] = useState(settings.short_name ?? "");
@@ -113,11 +114,11 @@ export function SettingsForm({ settings }: SettingsFormProps) {
       {/* Practice Identity */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Practice Identity</CardTitle>
+          <CardTitle className="text-base">{organizationLabel} Identity</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label>Practice Name</Label>
+            <Label>{organizationLabel} Name</Label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -159,7 +160,7 @@ export function SettingsForm({ settings }: SettingsFormProps) {
               <div className="h-24 w-24 rounded-lg border overflow-hidden bg-muted flex items-center justify-center shrink-0">
                 <img
                   src={logoUrl}
-                  alt="Practice logo"
+                  alt={`${organizationLabel} logo`}
                   className="h-full w-full object-contain p-1"
                 />
               </div>
@@ -191,7 +192,7 @@ export function SettingsForm({ settings }: SettingsFormProps) {
                     onChange={(e) => setShowNameWithLogo(e.target.checked)}
                     className="h-4 w-4 rounded border-border"
                   />
-                  <span className="text-sm">Show practice name next to logo</span>
+                  <span className="text-sm">Show {organizationLabel.toLowerCase()} name next to logo</span>
                 </label>
               )}
             </div>
@@ -346,7 +347,7 @@ export function SettingsForm({ settings }: SettingsFormProps) {
                     <p className="text-lg font-bold">$23,974</p>
                     <p className="text-sm">Production — Div 4</p>
                     <p className="text-xs text-muted-foreground">
-                      Weekly performance tracking for your practice
+                      Weekly performance tracking for your {organizationLabel.toLowerCase()}
                     </p>
                   </div>
                 </div>

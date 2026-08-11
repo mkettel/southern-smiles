@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { transactionDisplayName, type BookkeepingAccount, type FinancialTransaction } from "@/lib/financial-transactions";
 import { buildFinancialReportsData, type FinancialReportsData } from "@/lib/financial-reports";
 import type { FinancialWorkspaceData, FinancialWorkspaceRule } from "@/lib/financial-workspace";
+import { requireWorkspaceModule } from "@/actions/workspace-access";
 
 const updateRuleSchema = z.object({
   ruleId: z.string().uuid(),
@@ -15,6 +16,7 @@ const updateRuleSchema = z.object({
 const ruleIdSchema = z.string().uuid();
 
 async function requireAdmin() {
+  await requireWorkspaceModule("financial");
   const client = await createClient();
   const { data: { user } } = await client.auth.getUser();
   if (!user) throw new Error("Unauthorized");

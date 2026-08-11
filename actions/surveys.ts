@@ -29,6 +29,7 @@ import type {
   SurveyRecipient,
   SurveyResponse,
 } from "@/lib/types";
+import { requireWorkspaceModule } from "@/actions/workspace-access";
 
 /** Subtract N whole months from today, return YYYY-MM-DD. */
 function monthsAgoISO(months: number): string {
@@ -38,6 +39,7 @@ function monthsAgoISO(months: number): string {
 }
 
 async function requireAdmin() {
+  await requireWorkspaceModule("patient_surveys");
   const supabase = await createClient();
   const {
     data: { user },

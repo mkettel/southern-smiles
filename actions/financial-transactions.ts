@@ -13,6 +13,7 @@ import {
 import { syncFinancialTransactions } from "@/lib/financial-sync";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { requireWorkspaceModule } from "@/actions/workspace-access";
 
 const reviewSchema = z.object({
   transactionId: z.string().uuid(),
@@ -37,6 +38,7 @@ const transferSchema = z.object({
 });
 
 async function requireAdmin() {
+  await requireWorkspaceModule("financial");
   const client = await createClient();
   const {
     data: { user },

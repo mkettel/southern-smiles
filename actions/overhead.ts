@@ -23,6 +23,7 @@ import type {
   OverheadItem,
   OverheadSettings,
 } from "@/lib/types";
+import { requireAnyWorkspaceModule } from "@/actions/workspace-access";
 
 function normalizeOverheadSettings(row: OverheadSettings): OverheadSettings {
   return {
@@ -139,6 +140,7 @@ function buildPreviewDashboardDataFromImport(
 }
 
 async function requireOverheadAccess() {
+  await requireAnyWorkspaceModule(["budgeting", "procedure_costs"]);
   const supabase = await createClient();
   const {
     data: { user },

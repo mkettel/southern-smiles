@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/types";
+import { resolveWorkspaceAccess, type WorkspaceAccess } from "@/lib/workspace-access";
 import {
   Tooltip,
   TooltipContent,
@@ -21,6 +22,7 @@ import {
   billsOfficerLinks,
   sharedLinks,
   supplyOfficerLinks,
+  resolveNavigationLinks,
   type NavLink,
 } from "./navigation-links";
 
@@ -33,6 +35,7 @@ interface SidebarProps {
   showNameWithLogo?: boolean;
   canAccessBills?: boolean;
   canAccessSupplies?: boolean;
+  workspaceAccess?: WorkspaceAccess;
 }
 
 const STORAGE_KEY = "sidebar-collapsed";
@@ -128,15 +131,17 @@ export function Sidebar({
   showNameWithLogo = true,
   canAccessBills = false,
   canAccessSupplies = false,
+  workspaceAccess = resolveWorkspaceAccess(),
 }: SidebarProps) {
   const pathname = usePathname();
   const isAdmin = role === "admin";
-  const accessLinks = isAdmin
+  const visibleSharedLinks = resolveNavigationLinks(sharedLinks, workspaceAccess);
+  const accessLinks = resolveNavigationLinks(isAdmin
     ? adminOnlyLinks
     : [
         ...(canAccessBills ? billsOfficerLinks : []),
         ...(canAccessSupplies ? supplyOfficerLinks : []),
-      ];
+      ], workspaceAccess);
   const [collapsed, setCollapsed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
@@ -276,7 +281,7 @@ export function Sidebar({
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto p-2 space-y-1">
-          {sharedLinks.map((link) => (
+          {visibleSharedLinks.map((link) => (
             <NavItem
               key={link.href}
               link={link}

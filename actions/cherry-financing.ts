@@ -11,6 +11,7 @@ import {
   syncNextCherryApprovedFinancingWeek,
 } from "@/lib/cherry-financing-sync";
 import type { CherryFinancingApproval, Profile } from "@/lib/types";
+import { requireWorkspaceModule } from "@/actions/workspace-access";
 
 export interface CherryFinancingDashboardData {
   approvals: CherryFinancingApproval[];
@@ -29,6 +30,7 @@ function isSetupMissing(error: { code?: string; message?: string } | null) {
 }
 
 async function requireAdmin() {
+  await requireWorkspaceModule("approved_financing");
   const supabase = await createClient();
   const {
     data: { user },

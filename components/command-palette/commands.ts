@@ -23,6 +23,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { UserRole } from "@/lib/types";
+import {
+  getWorkspaceLabel,
+  resolveWorkspaceAccess,
+  type ModuleKey,
+  type WorkspaceAccess,
+} from "@/lib/workspace-access";
 
 export type CommandActionId =
   | "create-task"
@@ -52,13 +58,34 @@ interface BuildOpts {
   role: UserRole;
   canAccessBills?: boolean;
   canAccessSupplies?: boolean;
+  workspaceAccess?: WorkspaceAccess;
 }
+
+const COMMAND_MODULES: Partial<Record<string, ModuleKey>> = {
+  "nav-dashboard": "operations",
+  "nav-enter": "stats",
+  "nav-tasks": "tasks",
+  "nav-oic": "oic_log",
+  "nav-org": "org_board",
+  "nav-admin-overhead": "budgeting",
+  "nav-admin-procedures": "procedure_costs",
+  "nav-admin-supplies": "supply_management",
+  "nav-admin-bills": "bills",
+  "nav-admin-cherry-financing": "approved_financing",
+  "nav-admin-financial-connections": "financial",
+  "nav-admin-financial-transactions": "financial",
+  "nav-admin-tasks": "command_center",
+  "nav-admin-stats": "stats",
+  "nav-admin-employees": "team_access",
+  "act-create-task": "tasks",
+  "act-new-oic": "oic_log",
+};
 
 /**
  * Build the full command list for the current user. Admin-only commands are
  * filtered out for non-admins so they never show up in search results.
  */
-export function buildCommands({ role, canAccessBills = false, canAccessSupplies = false }: BuildOpts): CommandItem[] {
+export function buildCommands({ role, canAccessBills = false, canAccessSupplies = false, workspaceAccess = resolveWorkspaceAccess() }: BuildOpts): CommandItem[] {
   const isAdmin = role === "admin";
 
   const navShared: CommandItem[] = [
@@ -295,7 +322,19 @@ export function buildCommands({ role, canAccessBills = false, canAccessSupplies 
             (canAccessSupplies && item.id === "nav-admin-supplies"),
         )),
     ...actions,
-  ];
+  ]
+    .filter((item) => {
+      const moduleKey = COMMAND_MODULES[item.id];
+      return !moduleKey || workspaceAccess.modules[moduleKey];
+    })
+    .map((item) => {
+      const moduleKey = COMMAND_MODULES[item.id];
+      if (!moduleKey) return item;
+      return {
+        ...item,
+        label: getWorkspaceLabel(workspaceAccess, moduleKey, item.label),
+      };
+    });
 }
 
 /** Filter commands by the user's query — case-insensitive substring match. */

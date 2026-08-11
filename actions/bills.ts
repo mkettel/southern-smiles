@@ -20,6 +20,7 @@ import type {
   BillStatus,
   BillVendor,
 } from "@/lib/types";
+import { getWorkspaceAccess, requireWorkspaceModule } from "@/actions/workspace-access";
 
 async function canAccessBillsByAssignment(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -49,6 +50,8 @@ async function canAccessBillsByAssignment(
 }
 
 export async function getCanAccessBills() {
+  const access = await getWorkspaceAccess();
+  if (!access.modules.bills) return false;
   const supabase = await createClient();
   const {
     data: { user },
@@ -65,6 +68,7 @@ export async function getCanAccessBills() {
 }
 
 async function requireBillsAccess() {
+  await requireWorkspaceModule("bills");
   const supabase = await createClient();
   const {
     data: { user },

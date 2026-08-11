@@ -12,8 +12,11 @@ import {
 } from "@/lib/supply-budget-stats";
 import { DEFAULT_SUPPLY_BUDGET_SETTINGS, type SavedSupplyWorkspace } from "@/lib/supply-ordering";
 import { supplyWorkspaceSchema } from "@/lib/validators";
+import { getWorkspaceAccess, requireAnyWorkspaceModule } from "@/actions/workspace-access";
 
 async function getSupplyAccessContext() {
+  const access = await getWorkspaceAccess();
+  if (!access.modules.supply_management && !access.modules.procedure_costs) return null;
   const supabase = await createClient();
   const {
     data: { user },
@@ -52,6 +55,8 @@ async function getSupplyAccessContext() {
 }
 
 export async function getCanAccessSupplies() {
+  const access = await getWorkspaceAccess();
+  if (!access.modules.supply_management) return false;
   return Boolean(await getSupplyAccessContext());
 }
 
@@ -175,6 +180,7 @@ async function syncSupplyBudgetStats(
 }
 
 export async function saveSupplyWorkspace(workspace: unknown) {
+  await requireAnyWorkspaceModule(["supply_management", "procedure_costs"]);
   const parsed = supplyWorkspaceSchema.safeParse(workspace);
   if (!parsed.success) return { error: "The supply workspace contains invalid data." };
 
@@ -226,6 +232,7 @@ export async function saveSupplyWorkspace(workspace: unknown) {
 }
 
 export async function deleteSupplyPurchase(purchaseId: string) {
+  await requireAnyWorkspaceModule(["supply_management", "procedure_costs"]);
   const safePurchaseId = purchaseId.trim();
   if (!safePurchaseId || safePurchaseId.length > 200) {
     return { error: "That purchase could not be identified." };

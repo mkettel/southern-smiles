@@ -66,11 +66,12 @@ import { Textarea } from "@/components/ui/textarea";
 
 interface OverheadDashboardProps {
   initialData: OverheadDashboardData;
+  featureLabel?: string;
 }
 
 type CostTypeFilter = "all" | "fixed" | "variable";
 
-export function OverheadDashboard({ initialData }: OverheadDashboardProps) {
+export function OverheadDashboard({ initialData, featureLabel = "Overhead" }: OverheadDashboardProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [data, setData] = useState(initialData);
   const [importPreview, setImportPreview] = useState<OverheadImportPreview | null>(null);
@@ -253,7 +254,7 @@ export function OverheadDashboard({ initialData }: OverheadDashboardProps) {
       }
 
       await refreshData();
-      toast.success("Overhead settings saved");
+      toast.success(`${featureLabel} settings saved`);
     });
   }
 
@@ -285,7 +286,7 @@ export function OverheadDashboard({ initialData }: OverheadDashboardProps) {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Overhead</h1>
+          <h1 className="text-2xl font-bold">{featureLabel}</h1>
           <p className="text-muted-foreground">
             Build a clean monthly overhead model and translate it into cost per operatory hour.
           </p>
@@ -388,9 +389,9 @@ export function OverheadDashboard({ initialData }: OverheadDashboardProps) {
       {!hasImportedData && data.setupRequired && (
         <Card className="border-dashed">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Import Overhead Sheet</CardTitle>
+            <CardTitle className="text-base">Import {featureLabel} Sheet</CardTitle>
             <CardDescription>
-              Upload your CSV export and map your existing overhead sheet into this workspace instead of rebuilding it by hand.
+              Upload your CSV export and map your existing {featureLabel.toLowerCase()} sheet into this workspace instead of rebuilding it by hand.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
@@ -417,6 +418,7 @@ export function OverheadDashboard({ initialData }: OverheadDashboardProps) {
 
           <div className="flex flex-wrap gap-2">
             <CategoryDialog
+              featureLabel={featureLabel}
               disabled={Boolean(data.setupRequired)}
               trigger={
                 <>
@@ -517,6 +519,7 @@ export function OverheadDashboard({ initialData }: OverheadDashboardProps) {
               onToggle={() => toggleCategory(category.id)}
               onSaved={refreshData}
               categories={data.categories}
+              featureLabel={featureLabel}
             />
           ))}
 
@@ -726,6 +729,7 @@ function CategoryAccordion({
   onToggle,
   onSaved,
   categories,
+  featureLabel,
 }: {
   category: OverheadCategorySummary;
   items: OverheadItem[];
@@ -736,6 +740,7 @@ function CategoryAccordion({
   onToggle: () => void;
   onSaved: () => Promise<void>;
   categories: OverheadCategorySummary[];
+  featureLabel: string;
 }) {
   const activeItems = items.filter((item) => item.is_active);
   const categoryMonthlyCents = activeItems.reduce(
@@ -781,7 +786,7 @@ function CategoryAccordion({
                     <Badge variant="outline">Top cost</Badge>
                   ) : null}
                   {sharePercent > 0 ? (
-                    <Badge variant="secondary">{sharePercent}% of overhead</Badge>
+                    <Badge variant="secondary">{sharePercent}% of {featureLabel.toLowerCase()}</Badge>
                   ) : null}
                 </div>
                 <div className="text-sm text-muted-foreground">
@@ -816,6 +821,7 @@ function CategoryAccordion({
         </button>
 
         <CategoryDialog
+          featureLabel={featureLabel}
           editCategory={category}
           disabled={disabled}
           trigger={<Pencil className="h-3.5 w-3.5" />}
@@ -830,6 +836,7 @@ function CategoryAccordion({
               Review the line items inside this category and decide what belongs in the monthly model.
             </div>
             <ItemDialog
+              featureLabel={featureLabel}
               categories={categories}
               defaultCategoryId={category.id}
               disabled={disabled}
@@ -879,6 +886,7 @@ function CategoryAccordion({
                     </Badge>
 
                     <ItemDialog
+                      featureLabel={featureLabel}
                       categories={categories}
                       editItem={item}
                       disabled={disabled}
@@ -901,11 +909,13 @@ function CategoryAccordion({
 }
 
 function CategoryDialog({
+  featureLabel,
   trigger,
   editCategory,
   onSaved,
   disabled = false,
 }: {
+  featureLabel: string;
   trigger: ReactNode;
   editCategory?: OverheadCategorySummary;
   onSaved: () => Promise<void>;
@@ -968,7 +978,7 @@ function CategoryDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            {editCategory ? "Edit Overhead Category" : "Add Overhead Category"}
+            {editCategory ? `Edit ${featureLabel} Category` : `Add ${featureLabel} Category`}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
@@ -1016,6 +1026,7 @@ function CategoryDialog({
 }
 
 function ItemDialog({
+  featureLabel,
   categories,
   trigger,
   defaultCategoryId,
@@ -1023,6 +1034,7 @@ function ItemDialog({
   onSaved,
   disabled = false,
 }: {
+  featureLabel: string;
   categories: OverheadCategorySummary[];
   trigger: ReactNode;
   defaultCategoryId?: string;
@@ -1123,7 +1135,7 @@ function ItemDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            {editItem ? "Edit Overhead Line Item" : "Add Overhead Line Item"}
+            {editItem ? `Edit ${featureLabel} Line Item` : `Add ${featureLabel} Line Item`}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">

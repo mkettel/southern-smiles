@@ -8,20 +8,15 @@ import type { UserRole } from "@/lib/types";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import {
   Menu,
-  LayoutDashboard,
-  Settings,
-  FileText,
-  BarChart3,
-  MessageSquarePlus,
   Shield,
-  Network,
-  Wrench,
-  CheckSquare,
-  Download,
-  ReceiptText,
-  BadgeDollarSign,
-  ShoppingCart,
 } from "lucide-react";
+import {
+  adminOnlyLinks,
+  billsOfficerLinks,
+  sharedLinks,
+  supplyOfficerLinks,
+  type NavLink,
+} from "./navigation-links";
 
 interface MobileNavProps {
   role: UserRole;
@@ -31,40 +26,6 @@ interface MobileNavProps {
   canAccessBills?: boolean;
   canAccessSupplies?: boolean;
 }
-
-interface NavLink {
-  href: string;
-  label: string;
-  icon: typeof LayoutDashboard;
-}
-
-const sharedLinks: NavLink[] = [
-  { href: "/dashboard", label: "OIC", icon: LayoutDashboard },
-  { href: "/stats", label: "Stats", icon: BarChart3 },
-  { href: "/tasks", label: "My Tasks", icon: CheckSquare },
-  { href: "/oic-log", label: "Action Log", icon: FileText },
-  { href: "/org-board", label: "Org Board", icon: Network },
-];
-
-const adminOnlyLinks: NavLink[] = [
-  { href: "/admin/tasks", label: "Command Center", icon: CheckSquare },
-  { href: "/admin/supplies", label: "Supply Ordering", icon: ShoppingCart },
-  { href: "/admin/bills", label: "Bills", icon: ReceiptText },
-  { href: "/admin/cherry-financing", label: "Approved Financing", icon: BadgeDollarSign },
-  { href: "/admin/export", label: "Export & Analyze", icon: Download },
-  { href: "/admin/stats", label: "Stats Setup", icon: BarChart3 },
-  { href: "/admin/employees", label: "Team & Access", icon: Settings },
-  { href: "/requests", label: "Requests", icon: MessageSquarePlus },
-  { href: "/admin/settings", label: "Settings", icon: Wrench },
-];
-
-const billsOfficerLinks: NavLink[] = [
-  { href: "/admin/bills", label: "Bills", icon: ReceiptText },
-];
-
-const supplyOfficerLinks: NavLink[] = [
-  { href: "/admin/supplies", label: "Supply Ordering", icon: ShoppingCart },
-];
 
 export function MobileNav({ role, openRequestCount = 0, newRequestCount = 0, practiceName = "Stats & Conditions", canAccessBills = false, canAccessSupplies = false }: MobileNavProps) {
   const [open, setOpen] = useState(false);
@@ -117,7 +78,7 @@ export function MobileNav({ role, openRequestCount = 0, newRequestCount = 0, pra
         <SheetTitle className="flex h-14 items-center border-b px-4 font-semibold text-lg">
           {practiceName}
         </SheetTitle>
-        <nav className="p-3 space-y-1">
+        <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
           {sharedLinks.map((link) => renderLink(link))}
 
           {accessLinks.length > 0 && (

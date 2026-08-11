@@ -12,27 +12,17 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  LayoutDashboard,
-  Settings,
-  FileText,
-  BarChart3,
-  MessageSquarePlus,
   Shield,
-  Network,
-  Wrench,
-  CheckSquare,
-  Download,
-  Mailbox,
-  ReceiptText,
-  BadgeDollarSign,
-  Calculator,
-  ClipboardList,
-  ShoppingCart,
-  PackageSearch,
-  Landmark,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import {
+  adminOnlyLinks,
+  billsOfficerLinks,
+  sharedLinks,
+  supplyOfficerLinks,
+  type NavLink,
+} from "./navigation-links";
 
 interface SidebarProps {
   role: UserRole;
@@ -44,45 +34,6 @@ interface SidebarProps {
   canAccessBills?: boolean;
   canAccessSupplies?: boolean;
 }
-
-interface NavLink {
-  href: string;
-  label: string;
-  icon: typeof LayoutDashboard;
-}
-
-const sharedLinks: NavLink[] = [
-  { href: "/dashboard", label: "OIC", icon: LayoutDashboard },
-  { href: "/stats", label: "Stats", icon: BarChart3 },
-  { href: "/tasks", label: "My Tasks", icon: CheckSquare },
-  { href: "/oic-log", label: "Action Log", icon: FileText },
-  { href: "/org-board", label: "Org Board", icon: Network },
-];
-
-const adminOnlyLinks: NavLink[] = [
-  { href: "/admin/tasks", label: "Command Center", icon: CheckSquare },
-  { href: "/admin/overhead", label: "Overhead", icon: Calculator },
-  { href: "/admin/procedures", label: "Procedure Costs", icon: ClipboardList },
-  { href: "/admin/supplies", label: "Supply Ordering", icon: ShoppingCart },
-  { href: "/admin/supply-invoices", label: "Supply Invoice Inbox", icon: PackageSearch },
-  { href: "/admin/bills", label: "Bills", icon: ReceiptText },
-  { href: "/admin/financial", label: "Financial", icon: Landmark },
-  { href: "/admin/cherry-financing", label: "Approved Financing", icon: BadgeDollarSign },
-  { href: "/admin/surveys", label: "Patient Surveys", icon: Mailbox },
-  { href: "/admin/export", label: "Export & Analyze", icon: Download },
-  { href: "/admin/stats", label: "Stats Setup", icon: BarChart3 },
-  { href: "/admin/employees", label: "Team & Access", icon: Settings },
-  { href: "/requests", label: "Requests", icon: MessageSquarePlus },
-  { href: "/admin/settings", label: "Settings", icon: Wrench },
-];
-
-const billsOfficerLinks: NavLink[] = [
-  { href: "/admin/bills", label: "Bills", icon: ReceiptText },
-];
-
-const supplyOfficerLinks: NavLink[] = [
-  { href: "/admin/supplies", label: "Supply Ordering", icon: ShoppingCart },
-];
 
 const STORAGE_KEY = "sidebar-collapsed";
 const EXPANDED_W = 224; // sidebar visual width when expanded

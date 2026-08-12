@@ -40,11 +40,12 @@ interface CommandPaletteProviderProps {
   profile: Profile;
   canAccessBills?: boolean;
   canAccessSupplies?: boolean;
+  canAccessFinancial?: boolean;
   workspaceAccess: WorkspaceAccess;
   children: ReactNode;
 }
 
-export function CommandPaletteProvider({ profile, canAccessBills = false, canAccessSupplies = false, workspaceAccess, children }: CommandPaletteProviderProps) {
+export function CommandPaletteProvider({ profile, canAccessBills = false, canAccessSupplies = false, canAccessFinancial = false, workspaceAccess, children }: CommandPaletteProviderProps) {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const isAdmin = profile.role === "admin";
@@ -69,8 +70,8 @@ export function CommandPaletteProvider({ profile, canAccessBills = false, canAcc
   }, [members, loadingMembers]);
 
   const commands = useMemo(
-    () => buildCommands({ role: profile.role, canAccessBills, canAccessSupplies, workspaceAccess }),
-    [profile.role, canAccessBills, canAccessSupplies, workspaceAccess],
+    () => buildCommands({ role: profile.role, canAccessBills, canAccessSupplies, canAccessFinancial, workspaceAccess }),
+    [profile.role, canAccessBills, canAccessSupplies, canAccessFinancial, workspaceAccess],
   );
 
   const openPalette = useCallback(() => setPaletteOpen(true), []);

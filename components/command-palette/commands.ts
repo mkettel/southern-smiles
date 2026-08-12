@@ -58,6 +58,7 @@ interface BuildOpts {
   role: UserRole;
   canAccessBills?: boolean;
   canAccessSupplies?: boolean;
+  canAccessFinancial?: boolean;
   workspaceAccess?: WorkspaceAccess;
 }
 
@@ -85,7 +86,7 @@ const COMMAND_MODULES: Partial<Record<string, ModuleKey>> = {
  * Build the full command list for the current user. Admin-only commands are
  * filtered out for non-admins so they never show up in search results.
  */
-export function buildCommands({ role, canAccessBills = false, canAccessSupplies = false, workspaceAccess = resolveWorkspaceAccess() }: BuildOpts): CommandItem[] {
+export function buildCommands({ role, canAccessBills = false, canAccessSupplies = false, canAccessFinancial = false, workspaceAccess = resolveWorkspaceAccess() }: BuildOpts): CommandItem[] {
   const isAdmin = role === "admin";
 
   const navShared: CommandItem[] = [
@@ -319,7 +320,10 @@ export function buildCommands({ role, canAccessBills = false, canAccessSupplies 
       : navAdmin.filter(
           (item) =>
             (canAccessBills && item.id === "nav-admin-bills") ||
-            (canAccessSupplies && item.id === "nav-admin-supplies"),
+            (canAccessSupplies && item.id === "nav-admin-supplies") ||
+            (canAccessFinancial &&
+              (item.id === "nav-admin-financial-connections" ||
+                item.id === "nav-admin-financial-transactions")),
         )),
     ...actions,
   ]

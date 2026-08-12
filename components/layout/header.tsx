@@ -28,6 +28,7 @@ interface HeaderProps {
   activeTaskCount?: number;
   canAccessBills?: boolean;
   canAccessSupplies?: boolean;
+  canAccessFinancial?: boolean;
   workspaceAccess: WorkspaceAccess;
 }
 
@@ -40,6 +41,7 @@ export function Header({
   activeTaskCount = 0,
   canAccessBills = false,
   canAccessSupplies = false,
+  canAccessFinancial = false,
   workspaceAccess,
 }: HeaderProps) {
   const router = useRouter();
@@ -55,7 +57,7 @@ export function Header({
 
   return (
     <header className="flex h-14 items-center justify-between border-b px-4 md:justify-end gap-2">
-      <MobileNav role={profile.role} openRequestCount={openRequestCount} newRequestCount={newRequestCount} practiceName={practiceName} canAccessBills={canAccessBills} canAccessSupplies={canAccessSupplies} workspaceAccess={workspaceAccess} />
+      <MobileNav role={profile.role} openRequestCount={openRequestCount} newRequestCount={newRequestCount} practiceName={practiceName} canAccessBills={canAccessBills} canAccessSupplies={canAccessSupplies} canAccessFinancial={canAccessFinancial} workspaceAccess={workspaceAccess} />
       <div className="flex items-center gap-1">
         <CommandPaletteButton />
         <ThemeToggle />

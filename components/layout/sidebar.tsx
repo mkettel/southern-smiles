@@ -20,6 +20,7 @@ import {
 import {
   adminOnlyLinks,
   billsOfficerLinks,
+  financialAccessLinks,
   sharedLinks,
   supplyOfficerLinks,
   resolveNavigationLinks,
@@ -35,6 +36,7 @@ interface SidebarProps {
   showNameWithLogo?: boolean;
   canAccessBills?: boolean;
   canAccessSupplies?: boolean;
+  canAccessFinancial?: boolean;
   workspaceAccess?: WorkspaceAccess;
 }
 
@@ -131,6 +133,7 @@ export function Sidebar({
   showNameWithLogo = true,
   canAccessBills = false,
   canAccessSupplies = false,
+  canAccessFinancial = false,
   workspaceAccess = resolveWorkspaceAccess(),
 }: SidebarProps) {
   const pathname = usePathname();
@@ -141,6 +144,7 @@ export function Sidebar({
     : [
         ...(canAccessBills ? billsOfficerLinks : []),
         ...(canAccessSupplies ? supplyOfficerLinks : []),
+        ...(canAccessFinancial ? financialAccessLinks : []),
       ], workspaceAccess);
   const [collapsed, setCollapsed] = useState(false);
   const [hydrated, setHydrated] = useState(false);

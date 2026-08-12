@@ -14,6 +14,7 @@ import {
 import {
   adminOnlyLinks,
   billsOfficerLinks,
+  financialAccessLinks,
   sharedLinks,
   supplyOfficerLinks,
   resolveNavigationLinks,
@@ -27,10 +28,11 @@ interface MobileNavProps {
   practiceName?: string;
   canAccessBills?: boolean;
   canAccessSupplies?: boolean;
+  canAccessFinancial?: boolean;
   workspaceAccess?: WorkspaceAccess;
 }
 
-export function MobileNav({ role, openRequestCount = 0, newRequestCount = 0, practiceName = "Stats & Conditions", canAccessBills = false, canAccessSupplies = false, workspaceAccess = resolveWorkspaceAccess() }: MobileNavProps) {
+export function MobileNav({ role, openRequestCount = 0, newRequestCount = 0, practiceName = "Stats & Conditions", canAccessBills = false, canAccessSupplies = false, canAccessFinancial = false, workspaceAccess = resolveWorkspaceAccess() }: MobileNavProps) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const isAdmin = role === "admin";
@@ -40,6 +42,7 @@ export function MobileNav({ role, openRequestCount = 0, newRequestCount = 0, pra
     : [
         ...(canAccessBills ? billsOfficerLinks : []),
         ...(canAccessSupplies ? supplyOfficerLinks : []),
+        ...(canAccessFinancial ? financialAccessLinks : []),
       ], workspaceAccess);
 
   function renderLink(link: NavLink, badge?: number) {

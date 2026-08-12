@@ -1,5 +1,5 @@
-import { ModuleAccessLayout } from "@/components/layout/module-access-layout";
+import { MemberModuleAccessLayout } from "@/components/layout/member-module-access-layout";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  return <ModuleAccessLayout moduleKey="financial">{children}</ModuleAccessLayout>;
+  return <MemberModuleAccessLayout moduleKey="financial">{children}</MemberModuleAccessLayout>;
 }

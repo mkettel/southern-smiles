@@ -23,10 +23,8 @@ import {
   getPlaidEnvironment,
   isPlaidConfigured,
 } from "@/lib/plaid-client";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "@/lib/types";
-import { requireWorkspaceModule } from "@/actions/workspace-access";
+import { requireMemberModuleAccess } from "@/actions/member-module-access";
 
 const connectionIdSchema = z.string().uuid();
 const exchangeSchema = z.object({
@@ -54,35 +52,19 @@ function isSetupMissing(error: { code?: string; message?: string } | null) {
   );
 }
 
-async function requireAdmin() {
-  await requireWorkspaceModule("financial");
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Unauthorized");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single();
-  if (!profile || profile.role !== "admin") {
-    throw new Error("Admin access required");
-  }
-
+async function requireFinancialAccess() {
+  const context = await requireMemberModuleAccess("financial");
   return {
-    supabase: createAdminClient(),
-    user,
-    profile: profile as Profile,
-    practiceId: profile.practice_id as string,
+    ...context,
+    user: { id: context.userId },
+    profile: { id: context.userId, practice_id: context.practiceId } as Profile,
   };
 }
 
 export async function getFinancialConnectionsDashboardData(): Promise<
   FinancialConnectionsDashboardData | null
 > {
-  const { supabase, practiceId } = await requireAdmin();
+  const { supabase, practiceId } = await requireFinancialAccess();
   const { data: connections, error: connectionError } = await supabase
     .from("financial_connections")
     .select(
@@ -136,7 +118,7 @@ export async function getFinancialConnectionsDashboardData(): Promise<
 }
 
 export async function createFinancialLinkToken() {
-  const { user, practiceId } = await requireAdmin();
+  const { user, practiceId } = await requireFinancialAccess();
   if (!isPlaidConfigured()) return { error: "Plaid is not configured" };
 
   try {
@@ -153,7 +135,7 @@ export async function createFinancialUpdateLinkToken(connectionId: string) {
   const parsedId = connectionIdSchema.safeParse(connectionId);
   if (!parsedId.success) return { error: "Invalid financial connection" };
 
-  const { supabase, user, practiceId } = await requireAdmin();
+  const { supabase, user, practiceId } = await requireFinancialAccess();
   const { data: connection } = await supabase
     .from("financial_connections")
     .select("access_token_ciphertext")
@@ -180,7 +162,7 @@ export async function exchangeFinancialPublicToken(input: unknown) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid Plaid response" };
   }
 
-  const { supabase, user, practiceId } = await requireAdmin();
+  const { supabase, user, practiceId } = await requireFinancialAccess();
   if (!isPlaidConfigured()) return { error: "Plaid is not configured" };
 
   try {
@@ -227,7 +209,7 @@ export async function exchangeFinancialPublicToken(input: unknown) {
 export async function refreshFinancialConnection(connectionId: string) {
   const parsedId = connectionIdSchema.safeParse(connectionId);
   if (!parsedId.success) return { error: "Invalid financial connection" };
-  const { supabase, user, practiceId } = await requireAdmin();
+  const { supabase, user, practiceId } = await requireFinancialAccess();
 
   try {
     const sync = await syncFinancialConnection({
@@ -253,7 +235,7 @@ export async function setFinancialAccountIncluded(input: unknown) {
   const parsed = accountToggleSchema.safeParse(input);
   if (!parsed.success) return { error: "Invalid credit card selection" };
 
-  const { supabase, user, practiceId } = await requireAdmin();
+  const { supabase, user, practiceId } = await requireFinancialAccess();
   const { error } = await supabase
     .from("financial_accounts")
     .update({
@@ -278,7 +260,7 @@ export async function setFinancialAccountBookkeepingIncluded(input: unknown) {
   const parsed = accountToggleSchema.safeParse(input);
   if (!parsed.success) return { error: "Invalid bookkeeping account selection" };
 
-  const { supabase, practiceId } = await requireAdmin();
+  const { supabase, practiceId } = await requireFinancialAccess();
   const { error } = await supabase
     .from("financial_accounts")
     .update({
@@ -298,7 +280,7 @@ export async function setFinancialAccountNickname(input: unknown) {
   const parsed = accountNicknameSchema.safeParse(input);
   if (!parsed.success) return { error: "Use a name up to 80 characters" };
 
-  const { supabase, practiceId } = await requireAdmin();
+  const { supabase, practiceId } = await requireFinancialAccess();
   const nickname = parsed.data.nickname || null;
   const { error } = await supabase
     .from("financial_accounts")
@@ -316,7 +298,7 @@ export async function disconnectFinancialConnection(connectionId: string) {
   const parsedId = connectionIdSchema.safeParse(connectionId);
   if (!parsedId.success) return { error: "Invalid financial connection" };
 
-  const { supabase, user, practiceId } = await requireAdmin();
+  const { supabase, user, practiceId } = await requireFinancialAccess();
   const { data: connection } = await supabase
     .from("financial_connections")
     .select("access_token_ciphertext")

@@ -3,11 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 import { transactionDisplayName, type BookkeepingAccount, type FinancialTransaction } from "@/lib/financial-transactions";
 import { buildFinancialReportsData, type FinancialReportsData } from "@/lib/financial-reports";
 import type { FinancialWorkspaceData, FinancialWorkspaceRule } from "@/lib/financial-workspace";
-import { requireWorkspaceModule } from "@/actions/workspace-access";
+import { requireMemberModuleAccess } from "@/actions/member-module-access";
 
 const updateRuleSchema = z.object({
   ruleId: z.string().uuid(),
@@ -15,26 +14,10 @@ const updateRuleSchema = z.object({
 });
 const ruleIdSchema = z.string().uuid();
 
-async function requireAdmin() {
-  await requireWorkspaceModule("financial");
-  const client = await createClient();
-  const { data: { user } } = await client.auth.getUser();
-  if (!user) throw new Error("Unauthorized");
-  const { data: profile } = await client
-    .from("profiles")
-    .select("practice_id, role")
-    .eq("id", user.id)
-    .single();
-  if (!profile || profile.role !== "admin") throw new Error("Admin access required");
-  return {
-    supabase: createAdminClient(),
-    userId: user.id,
-    practiceId: profile.practice_id as string,
-  };
-}
+const requireFinancialAccess = () => requireMemberModuleAccess("financial");
 
 export async function getFinancialWorkspaceData(): Promise<FinancialWorkspaceData> {
-  const { supabase, practiceId } = await requireAdmin();
+  const { supabase, practiceId } = await requireFinancialAccess();
   const today = new Date();
   const monthFrames = getMonthFrames(today, 6);
   const periodStart = monthFrames[0].start;
@@ -145,7 +128,7 @@ export async function getFinancialWorkspaceData(): Promise<FinancialWorkspaceDat
 }
 
 export async function getFinancialReportsData(): Promise<FinancialReportsData> {
-  const { supabase, practiceId } = await requireAdmin();
+  const { supabase, practiceId } = await requireFinancialAccess();
   const [accountResult, financialAccountResult] = await Promise.all([
     supabase.from("bookkeeping_accounts")
       .select("id, account_number, name, account_type, detail_type, external_source")
@@ -279,7 +262,7 @@ async function getReportTransactions(
 export async function updateFinancialRule(input: unknown) {
   const parsed = updateRuleSchema.safeParse(input);
   if (!parsed.success) return { error: "Invalid rule update" };
-  const { supabase, practiceId, userId } = await requireAdmin();
+  const { supabase, practiceId, userId } = await requireFinancialAccess();
   const { data: account } = await supabase.from("bookkeeping_accounts").select("id")
     .eq("id", parsed.data.bookkeepingAccountId).eq("practice_id", practiceId).eq("is_active", true).maybeSingle();
   if (!account) return { error: "Chart of accounts entry not found" };
@@ -297,7 +280,7 @@ export async function updateFinancialRule(input: unknown) {
 export async function deleteFinancialRule(ruleId: string) {
   const parsed = ruleIdSchema.safeParse(ruleId);
   if (!parsed.success) return { error: "Invalid rule" };
-  const { supabase, practiceId } = await requireAdmin();
+  const { supabase, practiceId } = await requireFinancialAccess();
   const { error } = await supabase.from("bookkeeping_vendor_rules").delete()
     .eq("id", parsed.data).eq("practice_id", practiceId);
   if (error) return { error: error.message };

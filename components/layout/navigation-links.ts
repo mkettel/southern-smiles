@@ -64,6 +64,10 @@ export const supplyOfficerLinks: NavLink[] = [
   { href: "/admin/supplies", label: "Supply Ordering", icon: ShoppingCart, moduleKey: "supply_management" },
 ];
 
+export const financialAccessLinks: NavLink[] = [
+  { href: "/admin/financial", label: "Financial", icon: Landmark, moduleKey: "financial" },
+];
+
 export function resolveNavigationLinks(
   links: NavLink[],
   access: WorkspaceAccess,

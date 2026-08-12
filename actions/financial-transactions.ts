@@ -12,8 +12,7 @@ import {
 } from "@/lib/financial-transactions";
 import { syncFinancialTransactions } from "@/lib/financial-sync";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
-import { requireWorkspaceModule } from "@/actions/workspace-access";
+import { requireMemberModuleAccess } from "@/actions/member-module-access";
 
 const reviewSchema = z.object({
   transactionId: z.string().uuid(),
@@ -37,27 +36,7 @@ const transferSchema = z.object({
   note: z.string().trim().max(1000).nullable().optional(),
 });
 
-async function requireAdmin() {
-  await requireWorkspaceModule("financial");
-  const client = await createClient();
-  const {
-    data: { user },
-  } = await client.auth.getUser();
-  if (!user) throw new Error("Unauthorized");
-
-  const { data: profile } = await client
-    .from("profiles")
-    .select("practice_id, role")
-    .eq("id", user.id)
-    .single();
-  if (!profile || profile.role !== "admin") throw new Error("Admin access required");
-
-  return {
-    supabase: createAdminClient(),
-    userId: user.id,
-    practiceId: profile.practice_id as string,
-  };
-}
+const requireFinancialAccess = () => requireMemberModuleAccess("financial");
 
 function isSetupMissing(error: { code?: string; message?: string } | null) {
   const message = error?.message?.toLowerCase() ?? "";
@@ -75,7 +54,7 @@ function isSetupMissing(error: { code?: string; message?: string } | null) {
 export async function getFinancialTransactionDashboardData(): Promise<
   FinancialTransactionDashboardData | null
 > {
-  const { supabase, practiceId } = await requireAdmin();
+  const { supabase, practiceId } = await requireFinancialAccess();
   const { data: connections, error: connectionError } = await supabase
     .from("financial_connections")
     .select(
@@ -249,7 +228,7 @@ export async function reviewFinancialTransaction(input: unknown) {
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid review" };
   }
-  const { supabase, userId, practiceId } = await requireAdmin();
+  const { supabase, userId, practiceId } = await requireFinancialAccess();
   const now = new Date().toISOString();
   const { data: transaction, error: transactionError } = await supabase
     .from("financial_transactions")
@@ -348,7 +327,7 @@ export async function reviewFinancialTransfer(input: unknown) {
     return { error: "A transaction cannot match itself" };
   }
 
-  const { supabase, userId, practiceId } = await requireAdmin();
+  const { supabase, userId, practiceId } = await requireFinancialAccess();
   const { error } = await supabase.rpc("post_financial_transfer", {
     p_practice_id: practiceId,
     p_transaction_id: parsed.data.transactionId,
@@ -368,7 +347,7 @@ export async function reviewFinancialTransfer(input: unknown) {
 export async function refreshFinancialTransactions(connectionId?: string) {
   const parsedId = connectionIdSchema.safeParse(connectionId);
   if (!parsedId.success) return { error: "Invalid financial connection" };
-  const { supabase, practiceId } = await requireAdmin();
+  const { supabase, practiceId } = await requireFinancialAccess();
 
   const query = supabase
     .from("financial_connections")

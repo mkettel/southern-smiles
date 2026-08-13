@@ -221,3 +221,13 @@ export function calculateTransactionTotals(
     { outflowCents: 0, inflowCents: 0 },
   );
 }
+
+export function calculateCashMovement(
+  transactions: Pick<FinancialTransaction, "amount_cents" | "is_removed" | "pending">[],
+) {
+  const totals = calculateTransactionTotals(transactions);
+  return {
+    ...totals,
+    netCents: totals.inflowCents - totals.outflowCents,
+  };
+}

@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  calculateCashMovement,
   normalizeVendorName,
   transactionDisplayName,
   type BookkeepingAccount,
@@ -178,6 +179,18 @@ export function FinancialTransactionsDashboard({
   const defaultFeeAccountId = initialData.bookkeepingAccounts.find((account) => /bank service charge|finance fee/i.test(account.name))?.id ?? "";
   const activeAccount = accountId === "all" ? null : accountById.get(accountId);
   const activeStats = accountStats.find((account) => account.id === accountId);
+  const monthTransactions = transactions.filter((transaction) => transaction.transaction_date.startsWith(month));
+  const cashAccountIds = new Set(initialData.accounts.filter(isCashAccount).map((account) => account.id));
+  const cashMovement = calculateCashMovement(monthTransactions.filter((transaction) => transaction.account_id && cashAccountIds.has(transaction.account_id)));
+  const activeMovement = activeStats
+    ? { inflowCents: activeStats.inflowCents, outflowCents: activeStats.outflowCents, netCents: activeStats.inflowCents - activeStats.outflowCents }
+    : cashMovement;
+  const summaryLabel = activeAccount
+    ? isLiabilityAccount(activeAccount) ? "Net balance activity" : "Net account movement"
+    : "Net cash flow";
+  const summaryValueCents = activeAccount && isLiabilityAccount(activeAccount)
+    ? activeMovement.outflowCents - activeMovement.inflowCents
+    : activeMovement.netCents;
   const disabled = isPending || busyId !== null;
   const groupedTransactions = useMemo(() => groupTransactionsByWeek(filtered), [filtered]);
   const bulkEligible = useMemo(() => filtered.filter((transaction) =>
@@ -507,9 +520,9 @@ export function FinancialTransactionsDashboard({
               </select>
             </div>
             <div className="mt-4 grid grid-cols-3 divide-x text-sm">
-              <SummaryStat label="Month outflow" value={formatCurrency(activeStats?.outflowCents ?? monthlyOutflow(transactions, month, accountId))} />
-              <SummaryStat label="Imported" value={String(activeStats?.totalCount ?? transactions.filter((transaction) => transaction.transaction_date.startsWith(month)).length)} />
-              <SummaryStat label="Needs review" value={String(activeStats?.pendingCount ?? initialData.pendingCount)} />
+              <SummaryStat label={summaryLabel} value={formatSignedCurrency(summaryValueCents)} tone={summaryValueCents > 0 && !activeAccount ? "positive" : "default"} />
+              <SummaryStat label="Imported" value={String(activeStats?.totalCount ?? monthTransactions.length)} />
+              <SummaryStat label="Needs review" value={String(activeStats?.pendingCount ?? monthTransactions.filter((transaction) => transaction.review_status === "pending").length)} />
             </div>
           </section>
 
@@ -1014,7 +1027,7 @@ function AccountMovementLabel({
   );
 }
 
-function SummaryStat({ label, value }: { label: string; value: string }) { return <div className="px-4 first:pl-0"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 font-semibold tabular-nums">{value}</p></div>; }
+function SummaryStat({ label, value, tone = "default" }: { label: string; value: string; tone?: "default" | "positive" }) { return <div className="px-4 first:pl-0"><p className="text-xs text-muted-foreground">{label}</p><p className={cn("mt-1 font-semibold tabular-nums", tone === "positive" && "text-emerald-700")}>{value}</p></div>; }
 function InspectorField({ label, children }: { label: string; children: React.ReactNode }) { return <label className="block"><span className="mb-2 block text-xs font-medium">{label}</span>{children}</label>; }
 function AmountField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label className="block"><span className="mb-2 block text-[11px] font-medium">{label}</span><Input className="h-8 px-2 text-xs tabular-nums" inputMode="decimal" value={value} onChange={(event) => onChange(event.target.value)} /></label>; }
 function HistoryRow({ label, value }: { label: string; value: string }) { return <div className="flex justify-between gap-3"><dt className="text-muted-foreground">{label}</dt><dd className="text-right font-medium tabular-nums">{value}</dd></div>; }
@@ -1025,16 +1038,18 @@ function buildAccountStats(account: FinancialTransactionAccountSummary, transact
   const pendingCount = items.filter((transaction) => transaction.review_status === "pending").length;
   const reviewedCount = items.filter((transaction) => transaction.review_status === "reviewed").length;
   const denominator = pendingCount + reviewedCount;
-  return { ...account, pendingCount, totalCount: items.length, outflowCents: items.filter((item) => !item.pending && item.amount_cents >= 0).reduce((sum, item) => sum + item.amount_cents, 0), progress: denominator ? Math.round((reviewedCount / denominator) * 100) : 100 };
+  const movement = calculateCashMovement(items);
+  return { ...account, pendingCount, totalCount: items.length, ...movement, progress: denominator ? Math.round((reviewedCount / denominator) * 100) : 100 };
 }
 function overallProgress(transactions: FinancialTransaction[], month: string) { const items = transactions.filter((transaction) => transaction.transaction_date.startsWith(month)); const pending = items.filter((item) => item.review_status === "pending").length; const reviewed = items.filter((item) => item.review_status === "reviewed").length; return pending + reviewed ? Math.round((reviewed / (pending + reviewed)) * 100) : 100; }
-function monthlyOutflow(transactions: FinancialTransaction[], month: string, accountId: string) { return transactions.filter((item) => item.transaction_date.startsWith(month) && (accountId === "all" || item.account_id === accountId) && !item.pending && item.amount_cents >= 0).reduce((sum, item) => sum + item.amount_cents, 0); }
+function isCashAccount(account: FinancialTransactionAccountSummary) { return /depository/i.test(account.accountType); }
 function groupTransactionsByWeek(transactions: FinancialTransaction[]) { const groups = new Map<string, FinancialTransaction[]>(); for (const transaction of transactions) { const date = parseDate(transaction.transaction_date); const day = date.getDay(); const monday = new Date(date); monday.setDate(date.getDate() - ((day + 6) % 7)); const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6); const label = `Week of ${formatDateOnly(toDateKey(monday))} – ${formatDateOnly(toDateKey(sunday))}`; const items = groups.get(label) ?? []; items.push(transaction); groups.set(label, items); } return [...groups.entries()].map(([label, items]) => ({ label, items })); }
 function parseDate(value: string) { return new Date(`${value}T12:00:00`); }
 function toDateKey(date: Date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; }
 function currentMonthKey() { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`; }
 function formatMonth(value: string) { const [year, month] = value.split("-").map(Number); return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(new Date(year, month - 1, 1)); }
 function formatCurrency(cents: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100); }
+function formatSignedCurrency(cents: number) { return `${cents > 0 ? "+" : cents < 0 ? "−" : ""}${formatCurrency(Math.abs(cents))}`; }
 function dollarsFromCents(cents: number) { return (cents / 100).toFixed(2); }
 function inputCents(value: string | undefined, fallback: number) { if (value === undefined) return fallback; const amount = Number(value); return Number.isFinite(amount) ? Math.round(amount * 100) : 0; }
 function loanSplitDefaults(loan: FinancialTransactionDashboardData["loans"][number] | null, totalCents: number) { const lastTotal = (loan?.lastPrincipalCents ?? 0) + (loan?.lastInterestCents ?? 0) + (loan?.lastFeeCents ?? 0); return loan && lastTotal === totalCents ? { principal: loan.lastPrincipalCents ?? totalCents, interest: loan.lastInterestCents ?? 0, fee: loan.lastFeeCents ?? 0 } : { principal: totalCents, interest: 0, fee: 0 }; }

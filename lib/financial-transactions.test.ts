@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Transaction } from "plaid";
 import {
+  calculateCashMovement,
   calculateTransactionTotals,
   findMatchingBookkeepingAccountId,
   mapPlaidTransaction,
@@ -63,6 +64,20 @@ test("calculateTransactionTotals treats positive Plaid amounts as outflow", () =
   ]);
 
   assert.deepEqual(totals, { outflowCents: 12000, inflowCents: 5000 });
+});
+
+test("calculateCashMovement reports inflow minus outflow", () => {
+  const movement = calculateCashMovement([
+    { amount_cents: -10118276, is_removed: false, pending: false },
+    { amount_cents: 9377744, is_removed: false, pending: false },
+    { amount_cents: 50000, is_removed: false, pending: true },
+  ]);
+
+  assert.deepEqual(movement, {
+    outflowCents: 9377744,
+    inflowCents: 10118276,
+    netCents: 740532,
+  });
 });
 
 test("transactionDisplayName prefers the recognized merchant", () => {

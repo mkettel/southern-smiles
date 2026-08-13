@@ -103,7 +103,7 @@ export function FinancialReportsDashboard({ data }: { data: FinancialReportsData
                 <TableHead>Group</TableHead>
                 <TableHead className="text-right">Purchases</TableHead>
                 <TableHead className="text-right">Spent</TableHead>
-                <TableHead className="text-right">Share</TableHead>
+                <TableHead className="text-right">Spending share</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -119,16 +119,28 @@ export function FinancialReportsDashboard({ data }: { data: FinancialReportsData
                     {formatCurrency(category.amountCents)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {period.expenseCents && category.amountCents
-                      ? `${Math.round((category.amountCents / period.expenseCents) * 100)}%`
-                      : "0%"}
+                    {formatSpendingShare(category.amountCents, category.spendingShareTenths)}
                   </TableCell>
                 </TableRow>
               ))}
+              {period.expenseCreditsCents < 0 && (
+                <>
+                  <TableRow className="bg-muted/15 hover:bg-muted/15">
+                    <TableCell colSpan={3}>Spending before credits</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatCurrency(period.grossExpenseCents)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{period.grossExpenseCents ? "100.0%" : "0%"}</TableCell>
+                  </TableRow>
+                  <TableRow className="bg-muted/15 text-muted-foreground hover:bg-muted/15">
+                    <TableCell colSpan={3}>Credits and refunds</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatCurrency(period.expenseCreditsCents)}</TableCell>
+                    <TableCell className="text-right">Excluded</TableCell>
+                  </TableRow>
+                </>
+              )}
               <TableRow className="bg-muted/25 font-semibold hover:bg-muted/25">
-                <TableCell colSpan={3}>Total reviewed spending</TableCell>
+                <TableCell colSpan={3}>Net reviewed spending</TableCell>
                 <TableCell className="text-right tabular-nums">{formatCurrency(period.expenseCents)}</TableCell>
-                <TableCell className="text-right tabular-nums">{period.expenseCents ? "100%" : "0%"}</TableCell>
+                <TableCell className="text-right text-muted-foreground">—</TableCell>
               </TableRow>
             </TableBody>
           </Table>
@@ -170,6 +182,12 @@ function Metric({ label, value, accent }: { label: string; value: string; accent
 
 function formatCurrency(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+}
+
+function formatSpendingShare(amountCents: number, spendingShareTenths: number) {
+  if (amountCents < 0) return "Credit";
+  if (!amountCents) return "0%";
+  return `${(spendingShareTenths / 10).toFixed(1)}%`;
 }
 
 function compactCurrency(cents: number) {

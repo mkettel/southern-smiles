@@ -9,6 +9,7 @@ export interface FinancialReportCategory {
   detailType: string | null;
   amountCents: number;
   transactionCount: number;
+  spendingShareTenths: number;
 }
 
 export interface FinancialReportPeriod {
@@ -17,6 +18,8 @@ export interface FinancialReportPeriod {
   dateRange: string;
   revenueCents: number;
   expenseCents: number;
+  grossExpenseCents: number;
+  expenseCreditsCents: number;
   netIncomeCents: number;
   categories: FinancialReportCategory[];
 }
@@ -98,6 +101,8 @@ export function buildFinancialReportsData({
       dateRange: formatDateRange(start, shiftDate(end, -1)),
       revenueCents: summary.revenueCents,
       expenseCents: summary.expenseCents,
+      grossExpenseCents: summary.grossExpenseCents,
+      expenseCreditsCents: summary.expenseCreditsCents,
       netIncomeCents: summary.revenueCents - summary.expenseCents,
       categories: summary.categories,
     };
@@ -115,6 +120,7 @@ export function buildFinancialReportsData({
           detailType: account.detailType,
           amountCents: 0,
           transactionCount: 0,
+          spendingShareTenths: 0,
         } satisfies FinancialReportCategory,
       ]),
     );
@@ -142,17 +148,60 @@ export function buildFinancialReportsData({
       }
     }
 
+    const sortedCategories = [...categoryById.values()].sort(
+      (left, right) =>
+        right.amountCents - left.amountCents ||
+        compareAccountNumbers(left.accountNumber, right.accountNumber) ||
+        left.name.localeCompare(right.name),
+    );
+    const grossExpenseCents = sortedCategories.reduce(
+      (total, category) => total + Math.max(category.amountCents, 0),
+      0,
+    );
+    const expenseCreditsCents = sortedCategories.reduce(
+      (total, category) => total + Math.min(category.amountCents, 0),
+      0,
+    );
+    const categories = assignSpendingShares(sortedCategories, grossExpenseCents);
+
     return {
       revenueCents,
       expenseCents,
-      categories: [...categoryById.values()].sort(
-        (left, right) =>
-          right.amountCents - left.amountCents ||
-          compareAccountNumbers(left.accountNumber, right.accountNumber) ||
-          left.name.localeCompare(right.name),
-      ),
+      grossExpenseCents,
+      expenseCreditsCents,
+      categories,
     };
   }
+}
+
+function assignSpendingShares(
+  categories: FinancialReportCategory[],
+  grossExpenseCents: number,
+) {
+  if (!grossExpenseCents) return categories;
+
+  const allocations = categories
+    .filter((category) => category.amountCents > 0)
+    .map((category) => {
+      const exactTenths = (category.amountCents / grossExpenseCents) * 1000;
+      return {
+        id: category.id,
+        tenths: Math.floor(exactTenths),
+        remainder: exactTenths - Math.floor(exactTenths),
+      };
+    });
+  let tenthsRemaining = 1000 - allocations.reduce((total, allocation) => total + allocation.tenths, 0);
+  allocations.sort((left, right) => right.remainder - left.remainder || left.id.localeCompare(right.id));
+  for (const allocation of allocations) {
+    if (!tenthsRemaining) break;
+    allocation.tenths += 1;
+    tenthsRemaining -= 1;
+  }
+  const shareById = new Map(allocations.map((allocation) => [allocation.id, allocation.tenths]));
+  return categories.map((category) => ({
+    ...category,
+    spendingShareTenths: shareById.get(category.id) ?? 0,
+  }));
 }
 
 function isIncomeType(value: string) {

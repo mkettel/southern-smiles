@@ -84,8 +84,32 @@ test("ledger reversals reduce income and expense totals", () => {
   const month = data.periods.find((period) => period.key === "month")!;
 
   assert.equal(month.expenseCents, 7500);
+  assert.equal(month.grossExpenseCents, 7500);
+  assert.equal(month.expenseCreditsCents, 0);
   assert.equal(month.revenueCents, 190000);
   assert.equal(month.netIncomeCents, 182500);
+});
+
+test("expense category credits do not distort the spending-share denominator", () => {
+  const data = buildFinancialReportsData({
+    accounts,
+    transactions: [
+      transaction("2026-08-01", 44876, "groceries"),
+      transaction("2026-08-02", 5381, "gas"),
+      transaction("2026-08-03", -7900, "animal"),
+    ],
+    now: new Date("2026-08-06T18:00:00Z"),
+  });
+  const month = data.periods.find((period) => period.key === "month")!;
+
+  assert.equal(month.grossExpenseCents, 50257);
+  assert.equal(month.expenseCreditsCents, -7900);
+  assert.equal(month.expenseCents, 42357);
+  assert.equal(
+    month.categories.reduce((total, category) => total + category.spendingShareTenths, 0),
+    1000,
+  );
+  assert.equal(month.categories.find((category) => category.id === "animal")?.spendingShareTenths, 0);
 });
 
 function account(

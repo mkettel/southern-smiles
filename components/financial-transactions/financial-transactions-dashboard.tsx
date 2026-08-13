@@ -27,6 +27,7 @@ import {
   refreshFinancialTransactions,
   reviewFinancialTransfer,
   reviewFinancialTransaction,
+  reviewFinancialTransactions,
 } from "@/actions/financial-transactions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -80,6 +81,7 @@ export function FinancialTransactionsDashboard({
   const [status, setStatus] = useState<StatusFilter>("pending");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(() => new Set());
   const [busyId, setBusyId] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [reviewModes, setReviewModes] = useState<Record<string, ReviewMode>>({});
@@ -156,6 +158,18 @@ export function FinancialTransactionsDashboard({
   const activeStats = accountStats.find((account) => account.id === accountId);
   const disabled = isPending || busyId !== null;
   const groupedTransactions = useMemo(() => groupTransactionsByWeek(filtered), [filtered]);
+  const bulkEligible = useMemo(() => filtered.filter((transaction) =>
+    transaction.review_status === "pending" &&
+    Boolean(bookkeepingAccountIds[transaction.id]) &&
+    (reviewModes[transaction.id] ?? inferReviewMode(transaction)) === "category"
+  ).slice(0, 100), [bookkeepingAccountIds, filtered, reviewModes]);
+  const bulkEligibleIds = useMemo(() => new Set(bulkEligible.map((transaction) => transaction.id)), [bulkEligible]);
+  const checkedTransactions = useMemo(
+    () => filtered.filter((transaction) => checkedIds.has(transaction.id) && bulkEligibleIds.has(transaction.id)),
+    [bulkEligibleIds, checkedIds, filtered],
+  );
+  const allEligibleChecked = bulkEligible.length > 0 && bulkEligible.every((transaction) => checkedIds.has(transaction.id));
+  const checkedTotalCents = checkedTransactions.reduce((total, transaction) => total + Math.abs(transaction.amount_cents), 0);
   const vendorHistory = useMemo(() => {
     if (!selected) return null;
     const vendor = normalizeVendorName(transactionDisplayName(selected));
@@ -284,6 +298,66 @@ export function FinancialTransactionsDashboard({
     startTransition(() => router.refresh());
   }, [accountById, note, previewMode, router, transactions, transferAccountIds, transferKinds]);
 
+  const approveChecked = useCallback(async () => {
+    const selectedTransactions = transactions.filter(
+      (transaction) => checkedIds.has(transaction.id) &&
+        transaction.review_status === "pending" &&
+        Boolean(bookkeepingAccountIds[transaction.id]) &&
+        (reviewModes[transaction.id] ?? inferReviewMode(transaction)) === "category",
+    );
+    if (!selectedTransactions.length) {
+      toast.error("Select categorized transactions to approve");
+      return;
+    }
+    const selectedTransactionIds = new Set(selectedTransactions.map((transaction) => transaction.id));
+    const applyLocalReview = (reviewedIds: Set<string>) => setTransactions((current) => current.map((transaction) =>
+      reviewedIds.has(transaction.id)
+        ? {
+            ...transaction,
+            bookkeeping_account_id: bookkeepingAccountIds[transaction.id],
+            category_source: "manual",
+            review_status: "reviewed",
+            review_note: null,
+          }
+        : transaction,
+    ));
+
+    if (previewMode) {
+      applyLocalReview(selectedTransactionIds);
+      setCheckedIds(new Set());
+      toast.success(`${selectedTransactions.length} sample transactions approved`);
+      return;
+    }
+
+    setBusyId("bulk");
+    const result = await reviewFinancialTransactions({
+      transactions: selectedTransactions.map((transaction) => ({
+        transactionId: transaction.id,
+        accountId: bookkeepingAccountIds[transaction.id],
+      })),
+    });
+    setBusyId(null);
+    const reviewedIds = new Set(result.reviewedIds);
+    if (reviewedIds.size) {
+      applyLocalReview(reviewedIds);
+      setCheckedIds((current) => new Set([...current].filter((id) => !reviewedIds.has(id))));
+    }
+    if (result.errors.length) {
+      const failedTransactions = result.errors.filter((error) => error.transactionId).length;
+      const message = result.errors[0]?.message ?? "Some transactions could not be approved";
+      toast.error(reviewedIds.size
+        ? `${reviewedIds.size} approved; ${failedTransactions || "rule update"} failed: ${message}`
+        : message);
+    } else {
+      toast.success(`${reviewedIds.size} transactions approved`);
+    }
+    startTransition(() => router.refresh());
+  }, [bookkeepingAccountIds, checkedIds, previewMode, reviewModes, router, transactions]);
+
+  useEffect(() => {
+    setCheckedIds(new Set());
+  }, [accountId, month, query, status]);
+
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
@@ -399,8 +473,37 @@ export function FinancialTransactionsDashboard({
             <Button size="icon-sm" variant="ghost" title="More filters" aria-label="More filters"><SlidersHorizontal /></Button>
           </section>
 
+          {checkedTransactions.length > 0 && (
+            <section className="flex flex-wrap items-center justify-between gap-3 border-b border-emerald-200 bg-emerald-50/70 px-3 py-2.5">
+              <div className="text-sm">
+                <span className="font-semibold">{checkedTransactions.length} selected</span>
+                <span className="ml-2 text-xs text-muted-foreground">{formatCurrency(checkedTotalCents)} total activity</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="ghost" onClick={() => setCheckedIds(new Set())} disabled={disabled}>Clear</Button>
+                <Button size="sm" className="bg-emerald-700 text-white hover:bg-emerald-800" onClick={approveChecked} disabled={disabled}>
+                  {busyId === "bulk" ? <Loader2 className="animate-spin" /> : <Check />}
+                  Approve selected
+                </Button>
+              </div>
+            </section>
+          )}
+
           <div className="grid grid-cols-[28px_48px_minmax(100px,1fr)_80px_16px] items-center border-b bg-muted/30 px-3 py-2 text-[11px] font-medium text-muted-foreground md:grid-cols-[28px_48px_minmax(110px,1.2fr)_minmax(90px,1fr)_80px_16px]">
-            <span />
+            <input
+              type="checkbox"
+              aria-label="Select all categorized transactions in view"
+              title="Select up to 100 categorized transactions in this view"
+              checked={allEligibleChecked}
+              disabled={disabled || bulkEligible.length === 0}
+              onChange={() => setCheckedIds((current) => {
+                const next = new Set(current);
+                if (allEligibleChecked) bulkEligible.forEach((transaction) => next.delete(transaction.id));
+                else bulkEligible.forEach((transaction) => next.add(transaction.id));
+                return next;
+              })}
+              className="h-4 w-4 rounded border-border accent-emerald-700"
+            />
             <span>Date</span>
             <span>Merchant</span>
             <span className="hidden md:block">Imported description</span>
@@ -420,10 +523,18 @@ export function FinancialTransactionsDashboard({
                     key={transaction.id}
                     transaction={transaction}
                     selected={transaction.id === resolvedSelectedId}
+                    checked={checkedIds.has(transaction.id)}
+                    checkDisabled={!bulkEligibleIds.has(transaction.id) || disabled}
                     account={transaction.account_id ? accountById.get(transaction.account_id) : undefined}
                     bookkeepingAccountId={bookkeepingAccountIds[transaction.id]}
                     bookkeepingAccounts={initialData.bookkeepingAccounts}
                     onSelect={() => { setSelectedId(transaction.id); setNote(transaction.review_note ?? ""); }}
+                    onCheck={() => setCheckedIds((current) => {
+                      const next = new Set(current);
+                      if (next.has(transaction.id)) next.delete(transaction.id);
+                      else next.add(transaction.id);
+                      return next;
+                    })}
                   />
                 ))}
               </div>
@@ -600,16 +711,25 @@ function AccountRailItem({ label, mask, detail, progress, accent, selected, onCl
   </button>;
 }
 
-function TransactionRow({ transaction, account, selected, bookkeepingAccountId, bookkeepingAccounts, onSelect }: { transaction: FinancialTransaction; account?: FinancialTransactionAccountSummary; selected: boolean; bookkeepingAccountId?: string; bookkeepingAccounts: BookkeepingAccount[]; onSelect: () => void }) {
+function TransactionRow({ transaction, account, selected, checked, checkDisabled, bookkeepingAccountId, bookkeepingAccounts, onSelect, onCheck }: { transaction: FinancialTransaction; account?: FinancialTransactionAccountSummary; selected: boolean; checked: boolean; checkDisabled: boolean; bookkeepingAccountId?: string; bookkeepingAccounts: BookkeepingAccount[]; onSelect: () => void; onCheck: () => void }) {
   const accountName = bookkeepingAccountName(bookkeepingAccounts, bookkeepingAccountId);
-  return <button type="button" onClick={onSelect} className={cn("grid w-full grid-cols-[28px_48px_minmax(100px,1fr)_80px_16px] items-center border-b px-3 py-3 text-left text-xs transition-colors hover:bg-muted/30 md:grid-cols-[28px_48px_minmax(110px,1.2fr)_minmax(90px,1fr)_80px_16px]", selected && "bg-emerald-50/70 hover:bg-emerald-50/70")}>
-    <span className={cn("flex h-4 w-4 items-center justify-center rounded border", selected && "border-emerald-700 bg-emerald-700 text-white")}>{selected && <Check className="h-3 w-3" />}</span>
-    <span className="text-muted-foreground">{formatDateOnly(transaction.transaction_date)}</span>
-    <span className="min-w-0 pr-3"><span className="block truncate font-medium">{transactionDisplayName(transaction)}</span><span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{account ? `${account.institutionName} · ${accountDisplayName(account)}${accountMaskText(account)}` : "Account unavailable"}</span></span>
-    <span className="hidden min-w-0 pr-3 md:block"><span className="block truncate text-muted-foreground">{transaction.original_description ?? formatPlaidCategory(transaction.plaid_category_detailed) ?? "Bank activity"}</span>{accountName && <span className="mt-0.5 block truncate text-[11px] text-emerald-700">{accountName}</span>}</span>
-    <span className={cn("text-right font-semibold tabular-nums", transaction.amount_cents < 0 && "text-emerald-700")}>{formatSignedAmount(transaction.amount_cents)}</span>
-    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-  </button>;
+  return <div className={cn("grid w-full grid-cols-[28px_48px_minmax(100px,1fr)_80px_16px] items-center border-b px-3 text-left text-xs transition-colors hover:bg-muted/30 md:grid-cols-[28px_48px_minmax(110px,1.2fr)_minmax(90px,1fr)_80px_16px]", selected && "bg-emerald-50/70 hover:bg-emerald-50/70", checked && !selected && "bg-emerald-50/35")}>
+    <input
+      type="checkbox"
+      aria-label={`Select ${transactionDisplayName(transaction)}`}
+      checked={checked}
+      disabled={checkDisabled}
+      onChange={onCheck}
+      className="h-4 w-4 rounded border-border accent-emerald-700"
+    />
+    <button type="button" onClick={onSelect} className="col-span-4 grid min-w-0 grid-cols-[48px_minmax(100px,1fr)_80px_16px] items-center py-3 text-left md:col-span-5 md:grid-cols-[48px_minmax(110px,1.2fr)_minmax(90px,1fr)_80px_16px]">
+      <span className="text-muted-foreground">{formatDateOnly(transaction.transaction_date)}</span>
+      <span className="min-w-0 pr-3"><span className="block truncate font-medium">{transactionDisplayName(transaction)}</span><span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{account ? `${account.institutionName} · ${accountDisplayName(account)}${accountMaskText(account)}` : "Account unavailable"}</span></span>
+      <span className="hidden min-w-0 pr-3 md:block"><span className="block truncate text-muted-foreground">{transaction.original_description ?? formatPlaidCategory(transaction.plaid_category_detailed) ?? "Bank activity"}</span>{accountName && <span className="mt-0.5 block truncate text-[11px] text-emerald-700">{accountName}</span>}</span>
+      <span className={cn("text-right font-semibold tabular-nums", transaction.amount_cents < 0 && "text-emerald-700")}>{formatSignedAmount(transaction.amount_cents)}</span>
+      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+    </button>
+  </div>;
 }
 
 function BookkeepingAccountCombobox({

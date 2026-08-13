@@ -22,6 +22,12 @@ const reviewSchema = z.object({
 }).refine((value) => value.status === "excluded" || value.accountId !== null, {
   message: "Choose an account before approving",
 });
+const bulkReviewSchema = z.object({
+  transactions: z.array(z.object({
+    transactionId: z.string().uuid(),
+    accountId: z.string().uuid(),
+  })).min(1, "Select at least one transaction").max(100, "Approve up to 100 transactions at a time"),
+});
 const connectionIdSchema = z.string().uuid().optional();
 const transferSchema = z.object({
   transactionId: z.string().uuid(),
@@ -316,6 +322,113 @@ export async function reviewFinancialTransaction(input: unknown) {
 
   revalidatePath("/admin/financial-transactions");
   return { success: true };
+}
+
+export async function reviewFinancialTransactions(input: unknown) {
+  const parsed = bulkReviewSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      reviewedIds: [] as string[],
+      errors: [{ transactionId: null, message: parsed.error.issues[0]?.message ?? "Invalid bulk review" }],
+    };
+  }
+
+  const { supabase, userId, practiceId } = await requireFinancialAccess();
+  const requestedById = new Map(
+    parsed.data.transactions.map((transaction) => [transaction.transactionId, transaction]),
+  );
+  if (requestedById.size !== parsed.data.transactions.length) {
+    return {
+      reviewedIds: [] as string[],
+      errors: [{ transactionId: null, message: "Each selected transaction must be unique" }],
+    };
+  }
+
+  const { data: transactions, error: transactionError } = await supabase
+    .from("financial_transactions")
+    .select("id, account_id, name, merchant_name, counterparty_name, review_status")
+    .eq("practice_id", practiceId)
+    .eq("is_removed", false)
+    .in("id", [...requestedById.keys()]);
+  if (transactionError) {
+    return {
+      reviewedIds: [] as string[],
+      errors: [{ transactionId: null, message: transactionError.message }],
+    };
+  }
+
+  const transactionById = new Map((transactions ?? []).map((transaction) => [transaction.id as string, transaction]));
+  const reviewedIds: string[] = [];
+  const errors: Array<{ transactionId: string | null; message: string }> = [];
+  for (const requested of requestedById.values()) {
+    const transaction = transactionById.get(requested.transactionId);
+    if (!transaction) {
+      errors.push({ transactionId: requested.transactionId, message: "Transaction not found" });
+      continue;
+    }
+    if (transaction.review_status !== "pending") {
+      errors.push({ transactionId: requested.transactionId, message: "Transaction is no longer pending review" });
+      continue;
+    }
+    const { error } = await supabase.rpc("post_categorized_financial_transaction", {
+      p_practice_id: practiceId,
+      p_transaction_id: requested.transactionId,
+      p_bookkeeping_account_id: requested.accountId,
+      p_review_note: null,
+      p_reviewed_by: userId,
+    });
+    if (error) {
+      errors.push({ transactionId: requested.transactionId, message: error.message });
+      continue;
+    }
+    reviewedIds.push(requested.transactionId);
+  }
+
+  const now = new Date().toISOString();
+  const proposedRules = reviewedIds.flatMap((transactionId) => {
+    const transaction = transactionById.get(transactionId);
+    const requested = requestedById.get(transactionId);
+    if (!transaction || !requested) return [];
+    const normalizedVendor = normalizeVendorName(
+      transactionDisplayName(transaction as Pick<
+        FinancialTransaction,
+        "merchant_name" | "counterparty_name" | "name"
+      >),
+    );
+    return normalizedVendor.length >= 2
+      ? [{
+          practice_id: practiceId,
+          normalized_vendor: normalizedVendor,
+          bookkeeping_account_id: requested.accountId,
+          source: "review",
+          sample_count: 1,
+          confidence: 1,
+          updated_by: userId,
+          updated_at: now,
+        }]
+      : [];
+  });
+  const accountIdsByVendor = new Map<string, Set<string>>();
+  for (const rule of proposedRules) {
+    const accountIds = accountIdsByVendor.get(rule.normalized_vendor) ?? new Set<string>();
+    accountIds.add(rule.bookkeeping_account_id);
+    accountIdsByVendor.set(rule.normalized_vendor, accountIds);
+  }
+  const rules = [...new Map(
+    proposedRules
+      .filter((rule) => accountIdsByVendor.get(rule.normalized_vendor)?.size === 1)
+      .map((rule) => [rule.normalized_vendor, rule]),
+  ).values()];
+  if (rules.length) {
+    const { error: ruleError } = await supabase
+      .from("bookkeeping_vendor_rules")
+      .upsert(rules, { onConflict: "practice_id,normalized_vendor" });
+    if (ruleError) errors.push({ transactionId: null, message: `Transactions posted, but vendor rules could not be updated: ${ruleError.message}` });
+  }
+
+  revalidatePath("/admin/financial-transactions");
+  revalidatePath("/admin/financial/reports");
+  return { reviewedIds, errors };
 }
 
 export async function reviewFinancialTransfer(input: unknown) {

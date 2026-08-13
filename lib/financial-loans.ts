@@ -36,6 +36,8 @@ export interface FinancialLoan {
   availableCreditCents: number | null;
   currentBalanceCents: number;
   balanceAsOfDate: string;
+  pastDueCents: number | null;
+  daysPastDue: number | null;
   scheduledPaymentCents: number | null;
   paymentFrequency: string | null;
   annualInterestRate: number | null;

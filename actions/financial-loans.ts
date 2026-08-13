@@ -92,6 +92,8 @@ export async function getFinancialLoansData(): Promise<FinancialLoansData> {
       availableCreditCents: row.available_credit_cents === null ? null : Number(row.available_credit_cents),
       currentBalanceCents: Number(row.current_balance_cents),
       balanceAsOfDate: row.balance_as_of_date as string,
+      pastDueCents: row.past_due_cents === null ? null : Number(row.past_due_cents),
+      daysPastDue: row.days_past_due === null ? null : Number(row.days_past_due),
       scheduledPaymentCents: row.scheduled_payment_cents === null ? null : Number(row.scheduled_payment_cents),
       paymentFrequency: row.payment_frequency as string | null,
       annualInterestRate: row.annual_interest_rate === null ? null : Number(row.annual_interest_rate),

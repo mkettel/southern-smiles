@@ -75,6 +75,13 @@ export interface FinancialLoanSummary {
   lastPrincipalCents: number | null;
   lastInterestCents: number | null;
   lastFeeCents: number | null;
+  schedule: Array<{
+    dueDate: string;
+    paymentCents: number;
+    principalCents: number;
+    interestCents: number;
+    feeCents: number;
+  }>;
 }
 
 export interface FinancialTransactionDashboardData {

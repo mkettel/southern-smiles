@@ -31,16 +31,19 @@ const loanSchema = z.object({
 
 export async function getFinancialLoansData(): Promise<FinancialLoansData> {
   const { supabase, practiceId } = await requireMemberModuleAccess("financial");
-  const [loanResult, paymentResult, accountResult] = await Promise.all([
+  const [loanResult, paymentResult, scheduleResult, accountResult] = await Promise.all([
     supabase.from("financial_loans").select("*").eq("practice_id", practiceId)
       .neq("status", "archived").order("status").order("lender_name").order("name"),
     supabase.from("financial_loan_payments").select("id, loan_id, payment_date, total_cents, principal_cents, interest_cents, fee_cents, balance_after_cents, activity_kind, source")
       .eq("practice_id", practiceId).order("payment_date", { ascending: false }).limit(250),
+    supabase.from("financial_loan_schedule_entries").select("id, loan_id, payment_number, due_date, payment_cents, principal_cents, interest_cents, fee_cents, balance_after_cents")
+      .eq("practice_id", practiceId).order("due_date", { ascending: true }),
     supabase.from("bookkeeping_accounts").select("id, account_number, name, account_type")
       .eq("practice_id", practiceId).eq("is_active", true).order("name"),
   ]);
   if (loanResult.error) throw new Error(loanResult.error.message);
   if (paymentResult.error) throw new Error(paymentResult.error.message);
+  if (scheduleResult.error) throw new Error(scheduleResult.error.message);
   if (accountResult.error) throw new Error(accountResult.error.message);
 
   const paymentsByLoan = new Map<string, FinancialLoan["payments"]>();
@@ -58,6 +61,22 @@ export async function getFinancialLoansData(): Promise<FinancialLoansData> {
       source: row.source as "bookkeeping" | "quickbooks_browser" | "manual",
     });
     paymentsByLoan.set(row.loan_id as string, payments);
+  }
+
+  const scheduleByLoan = new Map<string, FinancialLoan["schedule"]>();
+  for (const row of scheduleResult.data ?? []) {
+    const schedule = scheduleByLoan.get(row.loan_id as string) ?? [];
+    schedule.push({
+      id: row.id as string,
+      paymentNumber: Number(row.payment_number),
+      dueDate: row.due_date as string,
+      paymentCents: Number(row.payment_cents),
+      principalCents: Number(row.principal_cents),
+      interestCents: Number(row.interest_cents),
+      feeCents: Number(row.fee_cents),
+      balanceAfterCents: Number(row.balance_after_cents),
+    });
+    scheduleByLoan.set(row.loan_id as string, schedule);
   }
 
   return {
@@ -86,6 +105,7 @@ export async function getFinancialLoansData(): Promise<FinancialLoansData> {
       source: row.source as FinancialLoan["source"],
       notes: row.notes as string | null,
       payments: paymentsByLoan.get(row.id as string) ?? [],
+      schedule: scheduleByLoan.get(row.id as string) ?? [],
     })),
     liabilityAccounts: (accountResult.data ?? [])
       .filter((row) => /(liabil|credit card)/i.test(row.account_type as string))

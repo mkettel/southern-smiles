@@ -13,6 +13,17 @@ export interface FinancialLoanPayment {
   source: "bookkeeping" | "quickbooks_browser" | "manual";
 }
 
+export interface FinancialLoanScheduleEntry {
+  id: string;
+  paymentNumber: number;
+  dueDate: string;
+  paymentCents: number;
+  principalCents: number;
+  interestCents: number;
+  feeCents: number;
+  balanceAfterCents: number;
+}
+
 export interface FinancialLoan {
   id: string;
   bookkeepingAccountId: string;
@@ -38,6 +49,7 @@ export interface FinancialLoan {
   source: "manual" | "quickbooks_browser";
   notes: string | null;
   payments: FinancialLoanPayment[];
+  schedule: FinancialLoanScheduleEntry[];
 }
 
 export interface FinancialLoansData {

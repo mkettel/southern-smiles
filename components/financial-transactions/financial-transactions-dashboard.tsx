@@ -168,7 +168,7 @@ export function FinancialTransactionsDashboard({
     : "";
   const selectedLoan = initialData.loans.find((loan) => loan.id === selectedLoanId) ?? null;
   const selectedValueCents = Math.abs(selected?.amount_cents ?? 0);
-  const suggestedSplit = loanSplitDefaults(selectedLoan, selectedValueCents);
+  const suggestedSplit = loanSplitDefaults(selectedLoan, selectedValueCents, selected?.transaction_date);
   const principalCents = selected ? inputCents(principalAmounts[selected.id], suggestedSplit.principal) : 0;
   const interestCents = selected ? inputCents(interestAmounts[selected.id], suggestedSplit.interest) : 0;
   const feeCents = selected ? inputCents(feeAmounts[selected.id], suggestedSplit.fee) : 0;
@@ -338,7 +338,7 @@ export function FinancialTransactionsDashboard({
     if (!loanId) return toast.error("Choose the loan first");
     const valueCents = Math.abs(transaction.amount_cents);
     const loan = initialData.loans.find((item) => item.id === loanId) ?? null;
-    const defaults = loanSplitDefaults(loan, valueCents);
+    const defaults = loanSplitDefaults(loan, valueCents, transaction.transaction_date);
     const principal = inputCents(principalAmounts[transaction.id], defaults.principal);
     const interest = inputCents(interestAmounts[transaction.id], defaults.interest);
     const fees = inputCents(feeAmounts[transaction.id], defaults.fee);
@@ -1052,7 +1052,18 @@ function formatCurrency(cents: number) { return new Intl.NumberFormat("en-US", {
 function formatSignedCurrency(cents: number) { return `${cents > 0 ? "+" : cents < 0 ? "−" : ""}${formatCurrency(Math.abs(cents))}`; }
 function dollarsFromCents(cents: number) { return (cents / 100).toFixed(2); }
 function inputCents(value: string | undefined, fallback: number) { if (value === undefined) return fallback; const amount = Number(value); return Number.isFinite(amount) ? Math.round(amount * 100) : 0; }
-function loanSplitDefaults(loan: FinancialTransactionDashboardData["loans"][number] | null, totalCents: number) { const lastTotal = (loan?.lastPrincipalCents ?? 0) + (loan?.lastInterestCents ?? 0) + (loan?.lastFeeCents ?? 0); return loan && lastTotal === totalCents ? { principal: loan.lastPrincipalCents ?? totalCents, interest: loan.lastInterestCents ?? 0, fee: loan.lastFeeCents ?? 0 } : { principal: totalCents, interest: 0, fee: 0 }; }
+function loanSplitDefaults(loan: FinancialTransactionDashboardData["loans"][number] | null, totalCents: number, transactionDate?: string) {
+  const scheduled = loan?.schedule
+    .filter((entry) => entry.paymentCents === totalCents)
+    .map((entry) => ({ entry, distance: transactionDate ? Math.abs(parseDate(entry.dueDate).getTime() - parseDate(transactionDate).getTime()) : Number.POSITIVE_INFINITY }))
+    .filter(({ distance }) => distance <= 7 * 24 * 60 * 60 * 1000)
+    .sort((a, b) => a.distance - b.distance)[0]?.entry;
+  if (scheduled) return { principal: scheduled.principalCents, interest: scheduled.interestCents, fee: scheduled.feeCents };
+  const lastTotal = (loan?.lastPrincipalCents ?? 0) + (loan?.lastInterestCents ?? 0) + (loan?.lastFeeCents ?? 0);
+  return loan && lastTotal === totalCents
+    ? { principal: loan.lastPrincipalCents ?? totalCents, interest: loan.lastInterestCents ?? 0, fee: loan.lastFeeCents ?? 0 }
+    : { principal: totalCents, interest: 0, fee: 0 };
+}
 function formatSignedAmount(cents: number) { return `${cents < 0 ? "+" : "−"}${formatCurrency(Math.abs(cents))}`; }
 function formatSignedTotal(items: FinancialTransaction[]) { const total = items.reduce((sum, item) => sum + item.amount_cents, 0); return formatSignedAmount(total); }
 function formatDateOnly(value: string) { return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(parseDate(value)); }

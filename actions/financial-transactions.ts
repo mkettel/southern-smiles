@@ -138,6 +138,12 @@ export async function getFinancialTransactionDashboardData(): Promise<
     .eq("practice_id", practiceId)
     .order("payment_date", { ascending: false });
   if (loanPaymentError) throw new Error(loanPaymentError.message);
+  const { data: loanSchedule, error: loanScheduleError } = await supabase
+    .from("financial_loan_schedule_entries")
+    .select("loan_id, due_date, payment_cents, principal_cents, interest_cents, fee_cents")
+    .eq("practice_id", practiceId)
+    .order("due_date", { ascending: true });
+  if (loanScheduleError) throw new Error(loanScheduleError.message);
 
   const transactionResult = includedAccountIds.length
     ? await supabase
@@ -209,6 +215,18 @@ export async function getFinancialTransactionDashboardData(): Promise<
       fee: Number(payment.fee_cents),
     });
   }
+  const scheduleByLoan = new Map<string, FinancialTransactionDashboardData["loans"][number]["schedule"]>();
+  for (const entry of loanSchedule ?? []) {
+    const schedule = scheduleByLoan.get(entry.loan_id as string) ?? [];
+    schedule.push({
+      dueDate: entry.due_date as string,
+      paymentCents: Number(entry.payment_cents),
+      principalCents: Number(entry.principal_cents),
+      interestCents: Number(entry.interest_cents),
+      feeCents: Number(entry.fee_cents),
+    });
+    scheduleByLoan.set(entry.loan_id as string, schedule);
+  }
   const loanSummaries = (loans ?? []).map((loan) => ({
     id: loan.id as string,
     name: loan.name as string,
@@ -222,6 +240,7 @@ export async function getFinancialTransactionDashboardData(): Promise<
     lastPrincipalCents: latestPaymentByLoan.get(loan.id as string)?.principal ?? null,
     lastInterestCents: latestPaymentByLoan.get(loan.id as string)?.interest ?? null,
     lastFeeCents: latestPaymentByLoan.get(loan.id as string)?.fee ?? null,
+    schedule: scheduleByLoan.get(loan.id as string) ?? [],
   }));
 
   return {

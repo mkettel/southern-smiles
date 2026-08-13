@@ -21,6 +21,7 @@ export interface FinancialLoan {
   loanType: string;
   accountReference: string | null;
   originalPrincipalCents: number | null;
+  creditLimitCents: number | null;
   currentBalanceCents: number;
   balanceAsOfDate: string;
   scheduledPaymentCents: number | null;
@@ -62,3 +63,12 @@ export function loanProgress(loan: Pick<FinancialLoan, "originalPrincipalCents" 
   )));
 }
 
+export function creditUtilization(loan: Pick<FinancialLoan, "creditLimitCents" | "currentBalanceCents">) {
+  if (!loan.creditLimitCents || loan.creditLimitCents <= 0) return null;
+  return Math.max(0, Math.round((loan.currentBalanceCents / loan.creditLimitCents) * 100));
+}
+
+export function availableCredit(loan: Pick<FinancialLoan, "creditLimitCents" | "currentBalanceCents">) {
+  if (loan.creditLimitCents === null) return null;
+  return Math.max(0, loan.creditLimitCents - loan.currentBalanceCents);
+}

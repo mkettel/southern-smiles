@@ -13,6 +13,7 @@ const loanSchema = z.object({
   loanType: z.enum(["term_loan", "line_of_credit", "equipment", "vehicle", "related_party", "merchant_advance", "other"]),
   accountReference: z.string().trim().max(100).nullable().optional(),
   originalPrincipalCents: z.number().int().nonnegative().nullable().optional(),
+  creditLimitCents: z.number().int().positive().nullable().optional(),
   currentBalanceCents: z.number().int().nonnegative(),
   scheduledPaymentCents: z.number().int().positive().nullable().optional(),
   paymentFrequency: z.enum(["weekly", "biweekly", "semimonthly", "monthly", "irregular"]).nullable().optional(),
@@ -67,6 +68,7 @@ export async function getFinancialLoansData(): Promise<FinancialLoansData> {
       loanType: row.loan_type as string,
       accountReference: row.account_reference as string | null,
       originalPrincipalCents: row.original_principal_cents === null ? null : Number(row.original_principal_cents),
+      creditLimitCents: row.credit_limit_cents === null ? null : Number(row.credit_limit_cents),
       currentBalanceCents: Number(row.current_balance_cents),
       balanceAsOfDate: row.balance_as_of_date as string,
       scheduledPaymentCents: row.scheduled_payment_cents === null ? null : Number(row.scheduled_payment_cents),
@@ -106,7 +108,8 @@ export async function saveFinancialLoan(input: unknown) {
     lender_name: parsed.data.lenderName,
     loan_type: parsed.data.loanType,
     account_reference: parsed.data.accountReference || null,
-    original_principal_cents: parsed.data.originalPrincipalCents ?? null,
+    original_principal_cents: parsed.data.loanType === "line_of_credit" ? null : parsed.data.originalPrincipalCents ?? null,
+    credit_limit_cents: parsed.data.loanType === "line_of_credit" ? parsed.data.creditLimitCents ?? null : null,
     current_balance_cents: parsed.data.currentBalanceCents,
     balance_as_of_date: new Date().toISOString().slice(0, 10),
     scheduled_payment_cents: parsed.data.scheduledPaymentCents ?? null,
@@ -132,4 +135,3 @@ export async function saveFinancialLoan(input: unknown) {
   revalidatePath("/admin/financial-transactions");
   return { success: true };
 }
-

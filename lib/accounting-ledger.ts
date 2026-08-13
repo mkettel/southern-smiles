@@ -61,6 +61,41 @@ export function buildTransferLines({
       ];
 }
 
+export function buildLoanPaymentLines({
+  totalCents,
+  principalCents,
+  interestCents,
+  feeCents,
+  financialAccountId,
+  loanAccountId,
+  interestAccountId,
+  feeAccountId,
+}: {
+  totalCents: number;
+  principalCents: number;
+  interestCents: number;
+  feeCents: number;
+  financialAccountId: string;
+  loanAccountId: string;
+  interestAccountId?: string | null;
+  feeAccountId?: string | null;
+}): JournalLineDraft[] {
+  if (totalCents <= 0 || principalCents < 0 || interestCents < 0 || feeCents < 0) {
+    throw new Error("Loan payment amounts must be positive");
+  }
+  if (principalCents + interestCents + feeCents !== totalCents) {
+    throw new Error("Loan payment split must equal the total");
+  }
+  if (interestCents > 0 && !interestAccountId) throw new Error("Interest account is required");
+  if (feeCents > 0 && !feeAccountId) throw new Error("Fee account is required");
+  return [
+    line("financial", financialAccountId, 0, totalCents),
+    ...(principalCents ? [line("bookkeeping", loanAccountId, principalCents, 0)] : []),
+    ...(interestCents ? [line("bookkeeping", interestAccountId!, interestCents, 0)] : []),
+    ...(feeCents ? [line("bookkeeping", feeAccountId!, feeCents, 0)] : []),
+  ];
+}
+
 export function assertBalancedJournalLines(lines: JournalLineDraft[]) {
   const debitCents = lines.reduce((sum, item) => sum + item.debitCents, 0);
   const creditCents = lines.reduce((sum, item) => sum + item.creditCents, 0);

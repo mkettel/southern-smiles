@@ -15,6 +15,7 @@ import {
   CreditCard,
   EyeOff,
   FileText,
+  Landmark,
   Loader2,
   RefreshCw,
   Search,
@@ -26,6 +27,7 @@ import { toast } from "sonner";
 import {
   refreshFinancialTransactions,
   reviewFinancialTransfer,
+  reviewFinancialLoanTransaction,
   reviewFinancialTransaction,
   reviewFinancialTransactions,
 } from "@/actions/financial-transactions";
@@ -43,7 +45,7 @@ import {
 import { cn } from "@/lib/utils";
 
 type StatusFilter = "all" | "pending" | "reviewed" | "excluded";
-type ReviewMode = "category" | "transfer";
+type ReviewMode = "category" | "transfer" | "loan";
 type TransferKind = "internal" | "credit_card_payment" | "line_of_credit_draw" | "loan_payment";
 
 export function FinancialTransactionsDashboard({
@@ -87,6 +89,12 @@ export function FinancialTransactionsDashboard({
   const [reviewModes, setReviewModes] = useState<Record<string, ReviewMode>>({});
   const [transferKinds, setTransferKinds] = useState<Record<string, TransferKind>>({});
   const [transferAccountIds, setTransferAccountIds] = useState<Record<string, string>>({});
+  const [loanIds, setLoanIds] = useState<Record<string, string>>({});
+  const [principalAmounts, setPrincipalAmounts] = useState<Record<string, string>>({});
+  const [interestAmounts, setInterestAmounts] = useState<Record<string, string>>({});
+  const [feeAmounts, setFeeAmounts] = useState<Record<string, string>>({});
+  const [interestAccountIds, setInterestAccountIds] = useState<Record<string, string>>({});
+  const [feeAccountIds, setFeeAccountIds] = useState<Record<string, string>>({});
   const [bookkeepingAccountIds, setBookkeepingAccountIds] = useState<Record<string, string>>(
     () => Object.fromEntries(
       initialData.transactions.map((transaction) => [
@@ -154,6 +162,20 @@ export function FinancialTransactionsDashboard({
     transferAccount,
     selected?.amount_cents ?? 0,
   );
+  const selectedLoanId = selected
+    ? loanIds[selected.id] ?? initialData.suggestedLoanByTransaction[selected.id] ?? ""
+    : "";
+  const selectedLoan = initialData.loans.find((loan) => loan.id === selectedLoanId) ?? null;
+  const selectedValueCents = Math.abs(selected?.amount_cents ?? 0);
+  const suggestedSplit = loanSplitDefaults(selectedLoan, selectedValueCents);
+  const principalCents = selected ? inputCents(principalAmounts[selected.id], suggestedSplit.principal) : 0;
+  const interestCents = selected ? inputCents(interestAmounts[selected.id], suggestedSplit.interest) : 0;
+  const feeCents = selected ? inputCents(feeAmounts[selected.id], suggestedSplit.fee) : 0;
+  const splitRemainingCents = selectedValueCents - principalCents - interestCents - feeCents;
+  const expenseAccountsByType = useMemo(() => bookkeepingAccountsByType.map(([type, accounts]): [string, BookkeepingAccount[]] => [type, accounts])
+    .filter(([type]) => /expense/i.test(type)), [bookkeepingAccountsByType]);
+  const defaultInterestAccountId = initialData.bookkeepingAccounts.find((account) => /interest expense/i.test(account.name))?.id ?? "";
+  const defaultFeeAccountId = initialData.bookkeepingAccounts.find((account) => /bank service charge|finance fee/i.test(account.name))?.id ?? "";
   const activeAccount = accountId === "all" ? null : accountById.get(accountId);
   const activeStats = accountStats.find((account) => account.id === accountId);
   const disabled = isPending || busyId !== null;
@@ -298,6 +320,37 @@ export function FinancialTransactionsDashboard({
     startTransition(() => router.refresh());
   }, [accountById, note, previewMode, router, transactions, transferAccountIds, transferKinds]);
 
+  const confirmLoanTransaction = useCallback(async (transaction: FinancialTransaction) => {
+    const loanId = loanIds[transaction.id] ?? initialData.suggestedLoanByTransaction[transaction.id] ?? "";
+    if (!loanId) return toast.error("Choose the loan first");
+    const valueCents = Math.abs(transaction.amount_cents);
+    const loan = initialData.loans.find((item) => item.id === loanId) ?? null;
+    const defaults = loanSplitDefaults(loan, valueCents);
+    const principal = inputCents(principalAmounts[transaction.id], defaults.principal);
+    const interest = inputCents(interestAmounts[transaction.id], defaults.interest);
+    const fees = inputCents(feeAmounts[transaction.id], defaults.fee);
+    if (principal + interest + fees !== valueCents) return toast.error("Principal, interest, and fees must equal the transaction amount");
+    const interestAccountId = interestAccountIds[transaction.id] ?? defaultInterestAccountId;
+    const feeAccountId = feeAccountIds[transaction.id] ?? defaultFeeAccountId;
+    if (interest > 0 && !interestAccountId) return toast.error("Choose an interest expense account");
+    if (fees > 0 && !feeAccountId) return toast.error("Choose a fee expense account");
+    const applyLocalReview = () => setTransactions((current) => current.map((item) => item.id === transaction.id ? { ...item, review_status: "reviewed", review_note: note || null } : item));
+    if (previewMode) { applyLocalReview(); toast.success("Sample loan transaction posted"); return; }
+    setBusyId(transaction.id);
+    const result = await reviewFinancialLoanTransaction({
+      transactionId: transaction.id, loanId,
+      activityKind: transaction.amount_cents < 0 ? "draw" : "payment",
+      principalCents: principal, interestCents: interest, feeCents: fees,
+      interestAccountId: interestAccountId || null,
+      feeAccountId: feeAccountId || null,
+      note: note || null,
+    });
+    setBusyId(null);
+    if (result.error) return toast.error(result.error);
+    applyLocalReview(); setNote(""); toast.success(transaction.amount_cents < 0 ? "Loan draw posted" : "Loan payment posted");
+    startTransition(() => router.refresh());
+  }, [defaultFeeAccountId, defaultInterestAccountId, feeAccountIds, feeAmounts, initialData.loans, initialData.suggestedLoanByTransaction, interestAccountIds, interestAmounts, loanIds, note, previewMode, principalAmounts, router]);
+
   const approveChecked = useCallback(async () => {
     const selectedTransactions = transactions.filter(
       (transaction) => checkedIds.has(transaction.id) &&
@@ -366,13 +419,14 @@ export function FinancialTransactionsDashboard({
       if (event.key.toLowerCase() === "k") moveSelection(-1);
       if (event.key.toLowerCase() === "a" && selected && !disabled) {
         if (selectedReviewMode === "transfer") void confirmTransfer(selected);
+        else if (selectedReviewMode === "loan") void confirmLoanTransaction(selected);
         else void review(selected);
       }
       if (event.key.toLowerCase() === "x" && selected && !disabled) void review(selected, true);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [confirmTransfer, disabled, moveSelection, review, selected, selectedReviewMode]);
+  }, [confirmLoanTransaction, confirmTransfer, disabled, moveSelection, review, selected, selectedReviewMode]);
 
   function changeMonth(direction: -1 | 1) {
     const index = availableMonths.indexOf(month);
@@ -568,7 +622,7 @@ export function FinancialTransactionsDashboard({
                   <div className="flex h-9 items-center rounded-md border bg-background px-3 text-sm">{formatPlaidCategory(selected.plaid_category_detailed) ?? "Uncategorized bank activity"}</div>
                 </InspectorField>
                 <InspectorField label="Transaction type">
-                  <div className="grid grid-cols-2 rounded-md border bg-muted/30 p-1" role="group" aria-label="Transaction type">
+                  <div className="grid grid-cols-3 rounded-md border bg-muted/30 p-1" role="group" aria-label="Transaction type">
                     <button
                       type="button"
                       className={cn("flex h-8 items-center justify-center gap-2 rounded-sm text-xs font-medium transition-colors", selectedReviewMode === "category" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}
@@ -582,6 +636,13 @@ export function FinancialTransactionsDashboard({
                       onClick={() => setReviewModes((current) => ({ ...current, [selected.id]: "transfer" }))}
                     >
                       <ArrowRightLeft className="h-3.5 w-3.5" />Transfer
+                    </button>
+                    <button
+                      type="button"
+                      className={cn("flex h-8 items-center justify-center gap-2 rounded-sm text-xs font-medium transition-colors", selectedReviewMode === "loan" ? "bg-background text-amber-800 shadow-sm" : "text-muted-foreground hover:text-foreground")}
+                      onClick={() => setReviewModes((current) => ({ ...current, [selected.id]: "loan" }))}
+                    >
+                      <Landmark className="h-3.5 w-3.5" />Loan
                     </button>
                   </div>
                 </InspectorField>
@@ -607,7 +668,7 @@ export function FinancialTransactionsDashboard({
                       </div>
                     )}
                   </>
-                ) : (
+                ) : selectedReviewMode === "transfer" ? (
                   <div className="space-y-4">
                     <InspectorField label="Transfer type">
                       <select
@@ -659,6 +720,26 @@ export function FinancialTransactionsDashboard({
                       <AccountMovementLabel label="To" account={transferMovement.to} />
                     </div>
                   </div>
+                ) : (
+                  <div className="space-y-4">
+                    <InspectorField label={selected.amount_cents < 0 ? "Loan or credit line" : "Loan being paid"}>
+                      <select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={selectedLoanId} onChange={(event) => setLoanIds((current) => ({ ...current, [selected.id]: event.target.value }))}>
+                        <option value="">Choose loan</option>
+                        {initialData.loans.map((loan) => <option key={loan.id} value={loan.id}>{loan.lenderName} · {loan.name} · {formatCurrency(loan.currentBalanceCents)}</option>)}
+                      </select>
+                    </InspectorField>
+                    {selectedLoan && <div className="rounded-md border border-amber-200 bg-amber-50/70 p-3 text-xs"><div className="flex justify-between gap-3"><span className="font-medium text-amber-950">Current loan balance</span><span className="font-semibold tabular-nums text-amber-950">{formatCurrency(selectedLoan.currentBalanceCents)}</span></div>{selectedLoan.scheduledPaymentCents && <p className="mt-1 text-muted-foreground">Expected payment {formatCurrency(selectedLoan.scheduledPaymentCents)} · {selectedLoan.paymentFrequency}</p>}</div>}
+                    {selected.amount_cents < 0 ? <p className="text-xs text-muted-foreground">This inflow increases the loan balance by {formatCurrency(selectedValueCents)}. It does not count as income.</p> : <>
+                      <div className="grid grid-cols-3 gap-2">
+                        <AmountField label="Principal" value={principalAmounts[selected.id] ?? dollarsFromCents(suggestedSplit.principal)} onChange={(value) => setPrincipalAmounts((current) => ({ ...current, [selected.id]: value }))} />
+                        <AmountField label="Interest" value={interestAmounts[selected.id] ?? dollarsFromCents(suggestedSplit.interest)} onChange={(value) => setInterestAmounts((current) => ({ ...current, [selected.id]: value }))} />
+                        <AmountField label="Fees" value={feeAmounts[selected.id] ?? dollarsFromCents(suggestedSplit.fee)} onChange={(value) => setFeeAmounts((current) => ({ ...current, [selected.id]: value }))} />
+                      </div>
+                      <div className={cn("flex justify-between rounded-md border px-3 py-2 text-xs", splitRemainingCents === 0 ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900")}><span>{splitRemainingCents === 0 ? "Split matches payment" : "Amount left to assign"}</span><span className="font-semibold tabular-nums">{formatCurrency(Math.abs(splitRemainingCents))}</span></div>
+                      {interestCents > 0 && <InspectorField label="Interest expense account"><BookkeepingAccountCombobox accountsByType={expenseAccountsByType} value={interestAccountIds[selected.id] ?? defaultInterestAccountId} onValueChange={(value) => setInterestAccountIds((current) => ({ ...current, [selected.id]: value }))} /></InspectorField>}
+                      {feeCents > 0 && <InspectorField label="Fee expense account"><BookkeepingAccountCombobox accountsByType={expenseAccountsByType} value={feeAccountIds[selected.id] ?? defaultFeeAccountId} onValueChange={(value) => setFeeAccountIds((current) => ({ ...current, [selected.id]: value }))} /></InspectorField>}
+                    </>}
+                  </div>
                 )}
 
                 {vendorHistory && (
@@ -680,6 +761,8 @@ export function FinancialTransactionsDashboard({
                 <div className="sticky bottom-0 -mx-4 -mb-4 space-y-2 border-t bg-background/95 p-4 backdrop-blur-sm">
                   {selectedReviewMode === "transfer" ? (
                     <Button size="sm" className="w-full bg-sky-700 text-white hover:bg-sky-800" onClick={() => confirmTransfer(selected)} disabled={disabled || !transferAccountId}>{busyId === selected.id ? <Loader2 className="animate-spin" /> : <ArrowRightLeft />}Post transfer</Button>
+                  ) : selectedReviewMode === "loan" ? (
+                    <Button size="sm" className="w-full bg-amber-700 text-white hover:bg-amber-800" onClick={() => confirmLoanTransaction(selected)} disabled={disabled || !selectedLoanId || splitRemainingCents !== 0}>{busyId === selected.id ? <Loader2 className="animate-spin" /> : <Landmark />}{selected.amount_cents < 0 ? "Post loan draw" : "Post loan payment"}</Button>
                   ) : (
                     <Button size="sm" className="w-full bg-emerald-700 text-white hover:bg-emerald-800" onClick={() => review(selected)} disabled={disabled || !bookkeepingAccountIds[selected.id]}>{busyId === selected.id ? <Loader2 className="animate-spin" /> : <Check />}Approve</Button>
                   )}
@@ -933,6 +1016,7 @@ function AccountMovementLabel({
 
 function SummaryStat({ label, value }: { label: string; value: string }) { return <div className="px-4 first:pl-0"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 font-semibold tabular-nums">{value}</p></div>; }
 function InspectorField({ label, children }: { label: string; children: React.ReactNode }) { return <label className="block"><span className="mb-2 block text-xs font-medium">{label}</span>{children}</label>; }
+function AmountField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label className="block"><span className="mb-2 block text-[11px] font-medium">{label}</span><Input className="h-8 px-2 text-xs tabular-nums" inputMode="decimal" value={value} onChange={(event) => onChange(event.target.value)} /></label>; }
 function HistoryRow({ label, value }: { label: string; value: string }) { return <div className="flex justify-between gap-3"><dt className="text-muted-foreground">{label}</dt><dd className="text-right font-medium tabular-nums">{value}</dd></div>; }
 function Keycap({ children }: { children: React.ReactNode }) { return <span className="rounded border bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-foreground">{children}</span>; }
 
@@ -951,6 +1035,9 @@ function toDateKey(date: Date) { return `${date.getFullYear()}-${String(date.get
 function currentMonthKey() { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`; }
 function formatMonth(value: string) { const [year, month] = value.split("-").map(Number); return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(new Date(year, month - 1, 1)); }
 function formatCurrency(cents: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100); }
+function dollarsFromCents(cents: number) { return (cents / 100).toFixed(2); }
+function inputCents(value: string | undefined, fallback: number) { if (value === undefined) return fallback; const amount = Number(value); return Number.isFinite(amount) ? Math.round(amount * 100) : 0; }
+function loanSplitDefaults(loan: FinancialTransactionDashboardData["loans"][number] | null, totalCents: number) { const lastTotal = (loan?.lastPrincipalCents ?? 0) + (loan?.lastInterestCents ?? 0) + (loan?.lastFeeCents ?? 0); return loan && lastTotal === totalCents ? { principal: loan.lastPrincipalCents ?? totalCents, interest: loan.lastInterestCents ?? 0, fee: loan.lastFeeCents ?? 0 } : { principal: totalCents, interest: 0, fee: 0 }; }
 function formatSignedAmount(cents: number) { return `${cents < 0 ? "+" : "−"}${formatCurrency(Math.abs(cents))}`; }
 function formatSignedTotal(items: FinancialTransaction[]) { const total = items.reduce((sum, item) => sum + item.amount_cents, 0); return formatSignedAmount(total); }
 function formatDateOnly(value: string) { return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(parseDate(value)); }

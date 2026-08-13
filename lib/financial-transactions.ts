@@ -62,10 +62,27 @@ export interface FinancialTransactionAccountSummary {
   institutionName: string;
 }
 
+export interface FinancialLoanSummary {
+  id: string;
+  name: string;
+  lenderName: string;
+  loanType: string;
+  accountReference: string | null;
+  bookkeepingAccountId: string;
+  currentBalanceCents: number;
+  scheduledPaymentCents: number | null;
+  paymentFrequency: string | null;
+  lastPrincipalCents: number | null;
+  lastInterestCents: number | null;
+  lastFeeCents: number | null;
+}
+
 export interface FinancialTransactionDashboardData {
   transactions: FinancialTransaction[];
   accounts: FinancialTransactionAccountSummary[];
   bookkeepingAccounts: BookkeepingAccount[];
+  loans: FinancialLoanSummary[];
+  suggestedLoanByTransaction: Record<string, string>;
   suggestedBookkeepingAccountByTransaction: Record<string, string>;
   pendingCount: number;
   reviewedCount: number;

@@ -6,6 +6,7 @@ const tabs = [
   { id: "bookkeeping", label: "Bookkeeping", href: "/admin/financial-transactions" },
   { id: "rules", label: "Rules", href: "/admin/financial/rules" },
   { id: "accounts", label: "Chart of accounts", href: "/admin/financial/accounts" },
+  { id: "loans", label: "Loans", href: "/admin/financial/loans" },
   { id: "reports", label: "Reports", href: "/admin/financial/reports" },
   { id: "connections", label: "Connections", href: "/admin/financial-connections" },
 ] as const;

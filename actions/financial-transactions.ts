@@ -41,6 +41,17 @@ const transferSchema = z.object({
   ]),
   note: z.string().trim().max(1000).nullable().optional(),
 });
+const loanTransactionSchema = z.object({
+  transactionId: z.string().uuid(),
+  loanId: z.string().uuid(),
+  activityKind: z.enum(["payment", "draw"]),
+  principalCents: z.number().int().nonnegative(),
+  interestCents: z.number().int().nonnegative(),
+  feeCents: z.number().int().nonnegative(),
+  interestAccountId: z.string().uuid().nullable().optional(),
+  feeAccountId: z.string().uuid().nullable().optional(),
+  note: z.string().trim().max(1000).nullable().optional(),
+});
 
 const requireFinancialAccess = () => requireMemberModuleAccess("financial");
 
@@ -112,6 +123,22 @@ export async function getFinancialTransactionDashboardData(): Promise<
   if (isSetupMissing(vendorRuleError)) return null;
   if (vendorRuleError) throw new Error(vendorRuleError.message);
 
+  const { data: loans, error: loanError } = await supabase
+    .from("financial_loans")
+    .select("id, name, lender_name, loan_type, account_reference, bookkeeping_account_id, current_balance_cents, scheduled_payment_cents, payment_frequency")
+    .eq("practice_id", practiceId)
+    .eq("status", "active")
+    .order("lender_name")
+    .order("name");
+  if (isSetupMissing(loanError)) return null;
+  if (loanError) throw new Error(loanError.message);
+  const { data: loanPayments, error: loanPaymentError } = await supabase
+    .from("financial_loan_payments")
+    .select("loan_id, principal_cents, interest_cents, fee_cents, payment_date")
+    .eq("practice_id", practiceId)
+    .order("payment_date", { ascending: false });
+  if (loanPaymentError) throw new Error(loanPaymentError.message);
+
   const transactionResult = includedAccountIds.length
     ? await supabase
         .from("financial_transactions")
@@ -173,6 +200,29 @@ export async function getFinancialTransactionDashboardData(): Promise<
       (connection.institution_name as string | null) ?? "Financial institution",
     ]),
   );
+  const latestPaymentByLoan = new Map<string, { principal: number; interest: number; fee: number }>();
+  for (const payment of loanPayments ?? []) {
+    const loanId = payment.loan_id as string;
+    if (!latestPaymentByLoan.has(loanId)) latestPaymentByLoan.set(loanId, {
+      principal: Number(payment.principal_cents),
+      interest: Number(payment.interest_cents),
+      fee: Number(payment.fee_cents),
+    });
+  }
+  const loanSummaries = (loans ?? []).map((loan) => ({
+    id: loan.id as string,
+    name: loan.name as string,
+    lenderName: loan.lender_name as string,
+    loanType: loan.loan_type as string,
+    accountReference: loan.account_reference as string | null,
+    bookkeepingAccountId: loan.bookkeeping_account_id as string,
+    currentBalanceCents: Number(loan.current_balance_cents),
+    scheduledPaymentCents: loan.scheduled_payment_cents === null ? null : Number(loan.scheduled_payment_cents),
+    paymentFrequency: loan.payment_frequency as string | null,
+    lastPrincipalCents: latestPaymentByLoan.get(loan.id as string)?.principal ?? null,
+    lastInterestCents: latestPaymentByLoan.get(loan.id as string)?.interest ?? null,
+    lastFeeCents: latestPaymentByLoan.get(loan.id as string)?.fee ?? null,
+  }));
 
   return {
     transactions: typedTransactions,
@@ -196,6 +246,19 @@ export async function getFinancialTransactionDashboardData(): Promise<
       detailType: account.detail_type as string | null,
       externalSource: account.external_source as "quickbooks" | "manual",
     })),
+    loans: loanSummaries,
+    suggestedLoanByTransaction: Object.fromEntries(
+      typedTransactions.flatMap((transaction) => {
+        const haystack = [transaction.name, transaction.merchant_name, transaction.original_description]
+          .filter(Boolean).join(" ").toLowerCase();
+        const match = loanSummaries.find((loan) =>
+          (loan.accountReference && haystack.includes(loan.accountReference.toLowerCase())) ||
+          haystack.includes(loan.lenderName.toLowerCase()) ||
+          haystack.includes(loan.name.toLowerCase()),
+        );
+        return match ? [[transaction.id, match.id]] : [];
+      }),
+    ),
     suggestedBookkeepingAccountByTransaction: Object.fromEntries(
       typedTransactions.flatMap((transaction) => {
         if (transaction.bookkeeping_account_id) return [];
@@ -453,6 +516,38 @@ export async function reviewFinancialTransfer(input: unknown) {
   if (error) return { error: error.message };
 
   revalidatePath("/admin/financial-transactions");
+  revalidatePath("/admin/financial/reports");
+  return { success: true };
+}
+
+export async function reviewFinancialLoanTransaction(input: unknown) {
+  const parsed = loanTransactionSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid loan transaction" };
+  }
+  if (parsed.data.interestCents > 0 && !parsed.data.interestAccountId) {
+    return { error: "Choose an interest expense account" };
+  }
+  if (parsed.data.feeCents > 0 && !parsed.data.feeAccountId) {
+    return { error: "Choose a fee expense account" };
+  }
+  const { supabase, userId, practiceId } = await requireFinancialAccess();
+  const { error } = await supabase.rpc("post_financial_loan_transaction", {
+    p_practice_id: practiceId,
+    p_transaction_id: parsed.data.transactionId,
+    p_loan_id: parsed.data.loanId,
+    p_activity_kind: parsed.data.activityKind,
+    p_principal_cents: parsed.data.principalCents,
+    p_interest_cents: parsed.data.interestCents,
+    p_fee_cents: parsed.data.feeCents,
+    p_interest_account_id: parsed.data.interestAccountId ?? null,
+    p_fee_account_id: parsed.data.feeAccountId ?? null,
+    p_review_note: parsed.data.note || null,
+    p_reviewed_by: userId,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/admin/financial-transactions");
+  revalidatePath("/admin/financial/loans");
   revalidatePath("/admin/financial/reports");
   return { success: true };
 }

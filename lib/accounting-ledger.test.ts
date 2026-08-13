@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   assertBalancedJournalLines,
   buildCategorizedTransactionLines,
+  buildLoanPaymentLines,
   buildTransferLines,
 } from "./accounting-ledger";
 
@@ -50,4 +51,34 @@ test("a transfer cannot point back to the same account", () => {
     financialAccountId: "checking",
     otherFinancialAccountId: "checking",
   }), /different accounts/);
+});
+
+test("a loan payment separates principal from profit and loss costs", () => {
+  const lines = buildLoanPaymentLines({
+    totalCents: 37179,
+    principalCents: 34414,
+    interestCents: 2765,
+    feeCents: 0,
+    financialAccountId: "checking",
+    loanAccountId: "fundation-liability",
+    interestAccountId: "interest-expense",
+  });
+  assert.deepEqual(lines, [
+    { accountKind: "financial", accountId: "checking", debitCents: 0, creditCents: 37179 },
+    { accountKind: "bookkeeping", accountId: "fundation-liability", debitCents: 34414, creditCents: 0 },
+    { accountKind: "bookkeeping", accountId: "interest-expense", debitCents: 2765, creditCents: 0 },
+  ]);
+  assert.doesNotThrow(() => assertBalancedJournalLines(lines));
+});
+
+test("a loan payment rejects an incomplete split", () => {
+  assert.throws(() => buildLoanPaymentLines({
+    totalCents: 10000,
+    principalCents: 9000,
+    interestCents: 500,
+    feeCents: 0,
+    financialAccountId: "checking",
+    loanAccountId: "loan",
+    interestAccountId: "interest",
+  }), /must equal/);
 });

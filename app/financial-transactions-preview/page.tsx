@@ -106,6 +106,8 @@ const transactions: FinancialTransaction[] = [
 ];
 
 const previewData: FinancialTransactionDashboardData = {
+  loans: [],
+  suggestedLoanByTransaction: {},
   transactions,
   accounts: [
     {

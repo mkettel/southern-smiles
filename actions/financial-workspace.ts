@@ -13,6 +13,16 @@ const updateRuleSchema = z.object({
   bookkeepingAccountId: z.string().uuid(),
 });
 const ruleIdSchema = z.string().uuid();
+const bookkeepingAccountSchema = z.object({
+  accountNumber: z.string().trim().max(40, "Account number must be 40 characters or fewer"),
+  name: z.string().trim().min(1, "Account name is required").max(200, "Account name must be 200 characters or fewer"),
+  accountType: z.string().trim().min(1, "Account type is required").max(100, "Account type must be 100 characters or fewer"),
+  detailType: z.string().trim().max(200, "Detail type must be 200 characters or fewer"),
+});
+const updateBookkeepingAccountSchema = bookkeepingAccountSchema.extend({
+  accountId: z.string().uuid(),
+});
+const bookkeepingAccountIdSchema = z.string().uuid();
 
 const requireFinancialAccess = () => requireMemberModuleAccess("financial");
 
@@ -132,7 +142,7 @@ export async function getFinancialReportsData(): Promise<FinancialReportsData> {
   const [accountResult, financialAccountResult] = await Promise.all([
     supabase.from("bookkeeping_accounts")
       .select("id, account_number, name, account_type, detail_type, external_source")
-      .eq("practice_id", practiceId).eq("is_active", true)
+      .eq("practice_id", practiceId)
       .order("account_type").order("account_number", { nullsFirst: false }).order("name"),
     supabase.from("financial_accounts")
       .select("id").eq("practice_id", practiceId).eq("is_active", true).eq("included_in_bookkeeping", true),
@@ -288,10 +298,142 @@ export async function deleteFinancialRule(ruleId: string) {
   return { success: true };
 }
 
+export async function createBookkeepingAccount(input: unknown) {
+  const parsed = bookkeepingAccountSchema.safeParse(input);
+  if (!parsed.success) return { error: firstValidationError(parsed.error) };
+
+  const { supabase, practiceId } = await requireFinancialAccess();
+  const { data: existingAccounts, error: lookupError } = await supabase
+    .from("bookkeeping_accounts")
+    .select("id, name, is_active")
+    .eq("practice_id", practiceId);
+  if (lookupError) return { error: lookupError.message };
+
+  const existing = (existingAccounts ?? []).find(
+    (account) => String(account.name).trim().toLowerCase() === parsed.data.name.toLowerCase(),
+  );
+  if (existing?.is_active) return { error: "An active account with this name already exists" };
+
+  const values = {
+    account_number: parsed.data.accountNumber || null,
+    name: parsed.data.name,
+    account_type: parsed.data.accountType,
+    detail_type: parsed.data.detailType || null,
+    is_active: true,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (existing) {
+    const { error } = await supabase.from("bookkeeping_accounts").update(values)
+      .eq("id", existing.id).eq("practice_id", practiceId);
+    if (error) return { error: friendlyAccountError(error) };
+    revalidateFinancialWorkspace();
+    return { success: true, disposition: "restored" as const };
+  }
+
+  const { error } = await supabase.from("bookkeeping_accounts").insert({
+    practice_id: practiceId,
+    external_source: "manual",
+    ...values,
+  });
+  if (error) return { error: friendlyAccountError(error) };
+  revalidateFinancialWorkspace();
+  return { success: true, disposition: "created" as const };
+}
+
+export async function updateBookkeepingAccount(input: unknown) {
+  const parsed = updateBookkeepingAccountSchema.safeParse(input);
+  if (!parsed.success) return { error: firstValidationError(parsed.error) };
+
+  const { supabase, practiceId } = await requireFinancialAccess();
+  const { data: account, error: lookupError } = await supabase.from("bookkeeping_accounts")
+    .select("id").eq("id", parsed.data.accountId).eq("practice_id", practiceId).eq("is_active", true).maybeSingle();
+  if (lookupError) return { error: lookupError.message };
+  if (!account) return { error: "Chart of accounts entry not found" };
+
+  const { error } = await supabase.from("bookkeeping_accounts").update({
+    account_number: parsed.data.accountNumber || null,
+    name: parsed.data.name,
+    account_type: parsed.data.accountType,
+    detail_type: parsed.data.detailType || null,
+    updated_at: new Date().toISOString(),
+  }).eq("id", parsed.data.accountId).eq("practice_id", practiceId);
+  if (error) return { error: friendlyAccountError(error) };
+  revalidateFinancialWorkspace();
+  return { success: true };
+}
+
+export async function deleteBookkeepingAccount(accountId: string) {
+  const parsed = bookkeepingAccountIdSchema.safeParse(accountId);
+  if (!parsed.success) return { error: "Invalid chart of accounts entry" };
+
+  const { supabase, practiceId } = await requireFinancialAccess();
+  const { data: account, error: lookupError } = await supabase.from("bookkeeping_accounts")
+    .select("id").eq("id", parsed.data).eq("practice_id", practiceId).eq("is_active", true).maybeSingle();
+  if (lookupError) return { error: lookupError.message };
+  if (!account) return { error: "Chart of accounts entry not found" };
+
+  const references = await Promise.all([
+    supabase.from("financial_transactions").select("id", { count: "exact", head: true })
+      .eq("practice_id", practiceId).eq("bookkeeping_account_id", parsed.data),
+    supabase.from("accounting_journal_lines").select("id", { count: "exact", head: true })
+      .eq("practice_id", practiceId).eq("bookkeeping_account_id", parsed.data),
+    supabase.from("financial_loans").select("id", { count: "exact", head: true })
+      .eq("practice_id", practiceId).eq("bookkeeping_account_id", parsed.data),
+  ]);
+  const referenceError = references.find((result) => result.error)?.error;
+  if (referenceError) return { error: referenceError.message };
+
+  const isInUse = references.some((result) => (result.count ?? 0) > 0);
+  if (isInUse) {
+    const { error } = await supabase.from("bookkeeping_accounts").update({
+      is_active: false,
+      updated_at: new Date().toISOString(),
+    }).eq("id", parsed.data).eq("practice_id", practiceId);
+    if (error) return { error: error.message };
+
+    const { error: ruleError } = await supabase.from("bookkeeping_vendor_rules").delete()
+      .eq("practice_id", practiceId).eq("bookkeeping_account_id", parsed.data);
+    if (ruleError) return { error: ruleError.message };
+    revalidateFinancialWorkspace();
+    return { success: true, disposition: "archived" as const };
+  }
+
+  const { error } = await supabase.from("bookkeeping_accounts").delete()
+    .eq("id", parsed.data).eq("practice_id", practiceId);
+  if (error?.code === "23503") {
+    const { error: archiveError } = await supabase.from("bookkeeping_accounts").update({
+      is_active: false,
+      updated_at: new Date().toISOString(),
+    }).eq("id", parsed.data).eq("practice_id", practiceId);
+    if (archiveError) return { error: archiveError.message };
+    const { error: ruleError } = await supabase.from("bookkeeping_vendor_rules").delete()
+      .eq("practice_id", practiceId).eq("bookkeeping_account_id", parsed.data);
+    if (ruleError) return { error: ruleError.message };
+    revalidateFinancialWorkspace();
+    return { success: true, disposition: "archived" as const };
+  }
+  if (error) return { error: error.message };
+  revalidateFinancialWorkspace();
+  return { success: true, disposition: "deleted" as const };
+}
+
 function revalidateFinancialWorkspace() {
   revalidatePath("/admin/financial");
+  revalidatePath("/admin/financial/accounts");
   revalidatePath("/admin/financial/rules");
+  revalidatePath("/admin/financial/loans");
+  revalidatePath("/admin/financial/reports");
   revalidatePath("/admin/financial-transactions");
+}
+
+function firstValidationError(error: z.ZodError) {
+  return error.issues[0]?.message ?? "Invalid chart of accounts entry";
+}
+
+function friendlyAccountError(error: { code?: string; message: string }) {
+  if (error.code === "23505") return "An account with this name already exists";
+  return error.message;
 }
 
 function summarizeTransactions(

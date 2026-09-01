@@ -26,7 +26,7 @@ test("buildFinancialReportsData calculates selectable spending periods", () => {
     now: new Date("2026-08-06T18:00:00Z"),
   });
 
-  const month = data.periods.find((period) => period.key === "month")!;
+  const month = data.periods.find((period) => period.key === "month:2026-08")!;
   const sixMonths = data.periods.find((period) => period.key === "six_months")!;
   const year = data.periods.find((period) => period.key === "year")!;
   const allTime = data.periods.find((period) => period.key === "all_time")!;
@@ -45,7 +45,7 @@ test("category reports include zero-dollar expense accounts", () => {
     transactions,
     now: new Date("2026-08-06T18:00:00Z"),
   });
-  const month = data.periods.find((period) => period.key === "month")!;
+  const month = data.periods.find((period) => period.key === "month:2026-08")!;
 
   assert.equal(month.categories.length, 3);
   assert.deepEqual(
@@ -70,6 +70,21 @@ test("the six-month chart runs from March through August", () => {
   assert.equal(data.months.find((month) => month.label === "Aug")?.expenseCents, 15901);
 });
 
+test("reports expose each calendar month as an independent period", () => {
+  const data = buildFinancialReportsData({
+    accounts,
+    transactions,
+    now: new Date("2026-08-06T18:00:00Z"),
+  });
+
+  const monthPeriods = data.periods.filter((period) => period.key.startsWith("month:"));
+  assert.equal(monthPeriods[0].key, "month:2026-08");
+  assert.equal(monthPeriods[0].label, "August 2026");
+  assert.equal(monthPeriods.at(-1)?.key, "month:2025-12");
+  assert.equal(data.periods.find((period) => period.key === "month:2026-07")?.expenseCents, 5000);
+  assert.match(data.periods.find((period) => period.key === "month:2026-07")?.dateRange ?? "", /Jul 1 – Jul 31, 2026/);
+});
+
 test("ledger reversals reduce income and expense totals", () => {
   const data = buildFinancialReportsData({
     accounts,
@@ -81,7 +96,7 @@ test("ledger reversals reduce income and expense totals", () => {
     ],
     now: new Date("2026-08-06T18:00:00Z"),
   });
-  const month = data.periods.find((period) => period.key === "month")!;
+  const month = data.periods.find((period) => period.key === "month:2026-08")!;
 
   assert.equal(month.expenseCents, 7500);
   assert.equal(month.grossExpenseCents, 7500);
@@ -100,7 +115,7 @@ test("expense category credits do not distort the spending-share denominator", (
     ],
     now: new Date("2026-08-06T18:00:00Z"),
   });
-  const month = data.periods.find((period) => period.key === "month")!;
+  const month = data.periods.find((period) => period.key === "month:2026-08")!;
 
   assert.equal(month.grossExpenseCents, 50257);
   assert.equal(month.expenseCreditsCents, -7900);

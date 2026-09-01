@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { BarElement, CategoryScale, Chart as ChartJS, Legend, LinearScale, Tooltip as ChartTooltip } from "chart.js";
-import { Search } from "lucide-react";
+import { CalendarDays, ChevronDown, Search } from "lucide-react";
 import { Bar as ChartBar } from "react-chartjs-2";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -12,7 +12,9 @@ import { cn } from "@/lib/utils";
 ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip, Legend);
 
 export function FinancialReportsDashboard({ data }: { data: FinancialReportsData }) {
-  const [periodKey, setPeriodKey] = useState<FinancialReportPeriodKey>("month");
+  const monthPeriods = data.periods.filter((entry) => entry.key.startsWith("month:"));
+  const aggregatePeriods = data.periods.filter((entry) => !entry.key.startsWith("month:"));
+  const [periodKey, setPeriodKey] = useState<FinancialReportPeriodKey>(monthPeriods[0]?.key ?? "six_months");
   const [query, setQuery] = useState("");
   const [showZero, setShowZero] = useState(true);
   const period = data.periods.find((entry) => entry.key === periodKey) ?? data.periods[0];
@@ -35,22 +37,41 @@ export function FinancialReportsDashboard({ data }: { data: FinancialReportsData
           <h2 className="text-lg font-semibold">Financial reports</h2>
           <p className="mt-1 text-sm text-muted-foreground">Posted and reviewed activity from accounts enabled for bookkeeping.</p>
         </div>
-        <div className="grid w-full grid-cols-2 rounded-lg border bg-muted/35 p-0.5 sm:inline-flex sm:w-fit" role="tablist" aria-label="Reporting period">
-          {data.periods.map((entry) => (
-            <button
-              key={entry.key}
-              type="button"
-              role="tab"
-              aria-selected={period.key === entry.key}
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <label className="relative block min-w-48">
+            <span className="sr-only">Report month</span>
+            <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <select
+              aria-label="Report month"
+              value={period.key.startsWith("month:") ? period.key : ""}
+              onChange={(event) => setPeriodKey(event.target.value as FinancialReportPeriodKey)}
               className={cn(
-                "h-8 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors",
-                period.key === entry.key && "bg-background text-foreground shadow-sm",
+                "h-9 w-full appearance-none rounded-md border bg-background pl-9 pr-8 text-sm font-medium",
+                !period.key.startsWith("month:") && "text-muted-foreground",
               )}
-              onClick={() => setPeriodKey(entry.key)}
             >
-              {entry.label}
-            </button>
-          ))}
+              {!period.key.startsWith("month:") && <option value="">Select month</option>}
+              {monthPeriods.map((entry) => <option key={entry.key} value={entry.key}>{entry.label}</option>)}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          </label>
+          <div className="grid grid-cols-3 rounded-lg border bg-muted/35 p-0.5" role="tablist" aria-label="Reporting period">
+            {aggregatePeriods.map((entry) => (
+              <button
+                key={entry.key}
+                type="button"
+                role="tab"
+                aria-selected={period.key === entry.key}
+                className={cn(
+                  "h-8 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors",
+                  period.key === entry.key && "bg-background text-foreground shadow-sm",
+                )}
+                onClick={() => setPeriodKey(entry.key)}
+              >
+                {entry.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

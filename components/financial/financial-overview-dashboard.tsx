@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import {
   CategoryScale,
   Chart as ChartJS,
@@ -15,6 +16,7 @@ import {
   AlertCircle,
   ArrowRight,
   CalendarDays,
+  ChevronDown,
   ChevronRight,
   ListChecks,
   ReceiptText,
@@ -30,13 +32,29 @@ import { cn } from "@/lib/utils";
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ChartTooltip, Legend);
 
 export function FinancialOverviewDashboard({ data }: { data: FinancialWorkspaceData }) {
+  const [monthKey, setMonthKey] = useState(data.months.at(-1)?.key ?? "");
+  const selectedIndex = Math.max(0, data.months.findIndex((month) => month.key === monthKey));
+  const selectedMonth = data.months[selectedIndex] ?? data.months.at(-1)!;
+  const trendMonths = data.months.slice(Math.max(0, selectedIndex - 5), selectedIndex + 1);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Button variant="outline" size="lg" className="h-10 px-3">
-          <CalendarDays />
-          {data.monthLabel}
-        </Button>
+        <label className="relative block min-w-52">
+          <span className="sr-only">Overview month</span>
+          <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <select
+            aria-label="Overview month"
+            value={selectedMonth.key}
+            onChange={(event) => setMonthKey(event.target.value)}
+            className="h-10 w-full appearance-none rounded-md border bg-background pl-9 pr-9 text-sm font-medium shadow-sm"
+          >
+            {[...data.months].reverse().map((month) => (
+              <option key={month.key} value={month.key}>{month.longLabel}</option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        </label>
         <Button nativeButton={false} size="lg" className="h-10 bg-emerald-700 px-4 text-white hover:bg-emerald-800" render={<Link href="/admin/financial-transactions" />}>
           <ListChecks />
           Review {data.pendingCount.toLocaleString()} transactions
@@ -48,22 +66,22 @@ export function FinancialOverviewDashboard({ data }: { data: FinancialWorkspaceD
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 id="pnl-heading" className="font-semibold">P&amp;L snapshot</h2>
-              <p className="mt-0.5 text-sm text-muted-foreground">{data.monthDateRange} · reviewed transactions</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">{selectedMonth.dateRange} · reviewed transactions</p>
             </div>
             <Badge variant="outline">Live</Badge>
           </div>
           <div className="mt-5 grid gap-6 lg:grid-cols-[260px_1fr]">
             <div className="space-y-3">
-              <FinancialLine label="Revenue" value={data.revenueCents} />
-              <FinancialLine label="Operating expenses" value={data.expenseCents} negative />
+              <FinancialLine label="Revenue" value={selectedMonth.revenueCents} />
+              <FinancialLine label="Operating expenses" value={selectedMonth.expenseCents} negative />
               <div className="border-t pt-4">
-                <FinancialLine label="Net operating income" value={data.netIncomeCents} emphasized />
+                <FinancialLine label="Net operating income" value={selectedMonth.revenueCents - selectedMonth.expenseCents} emphasized />
               </div>
               <Link href="/admin/financial/reports" className="inline-flex items-center gap-1 pt-3 text-sm font-medium text-emerald-700 hover:text-emerald-800 dark:text-emerald-400">
                 View full P&amp;L report <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
-            <TrendChart months={data.months} />
+            <TrendChart months={trendMonths} />
           </div>
         </section>
 
@@ -84,13 +102,13 @@ export function FinancialOverviewDashboard({ data }: { data: FinancialWorkspaceD
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
           <div>
             <h2 id="activity-heading" className="font-semibold">Recent bookkeeping activity</h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">Most recent imported activity across included accounts</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Most recent imported activity for {selectedMonth.longLabel}</p>
           </div>
           <Link href="/admin/financial-transactions" className="inline-flex items-center gap-1 text-sm font-medium text-emerald-700 hover:text-emerald-800 dark:text-emerald-400">
             View all activity <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
-        {data.recentActivity.length ? (
+        {selectedMonth.recentActivity.length ? (
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -104,7 +122,7 @@ export function FinancialOverviewDashboard({ data }: { data: FinancialWorkspaceD
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.recentActivity.map((activity) => (
+                {selectedMonth.recentActivity.map((activity) => (
                   <TableRow key={activity.id}>
                     <TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(activity.date)}</TableCell>
                     <TableCell className="max-w-72 truncate font-medium">{activity.description}</TableCell>
@@ -120,7 +138,7 @@ export function FinancialOverviewDashboard({ data }: { data: FinancialWorkspaceD
             </Table>
           </div>
         ) : (
-          <div className="px-5 py-14 text-center text-sm text-muted-foreground">No bookkeeping activity is available yet.</div>
+          <div className="px-5 py-14 text-center text-sm text-muted-foreground">No bookkeeping activity is available for {selectedMonth.longLabel}.</div>
         )}
         <div className="flex items-center gap-2 border-t px-5 py-3 text-xs text-muted-foreground">
           <RefreshCw className="h-3.5 w-3.5" />

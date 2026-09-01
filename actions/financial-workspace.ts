@@ -5,7 +5,13 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { transactionDisplayName, type BookkeepingAccount, type FinancialTransaction } from "@/lib/financial-transactions";
 import { buildFinancialReportsData, type FinancialReportsData } from "@/lib/financial-reports";
-import type { FinancialWorkspaceData, FinancialWorkspaceRule } from "@/lib/financial-workspace";
+import {
+  financialWorkspaceMonthCount,
+  getFinancialWorkspaceMonthFrames,
+  type FinancialWorkspaceActivity,
+  type FinancialWorkspaceData,
+  type FinancialWorkspaceRule,
+} from "@/lib/financial-workspace";
 import { requireMemberModuleAccess } from "@/actions/member-module-access";
 
 const updateRuleSchema = z.object({
@@ -29,10 +35,7 @@ const requireFinancialAccess = () => requireMemberModuleAccess("financial");
 export async function getFinancialWorkspaceData(): Promise<FinancialWorkspaceData> {
   const { supabase, practiceId } = await requireFinancialAccess();
   const today = new Date();
-  const monthFrames = getMonthFrames(today, 6);
-  const periodStart = monthFrames[0].start;
-  const periodEnd = monthFrames.at(-1)!.end;
-  const current = monthFrames.at(-1)!;
+  const currentFrame = getFinancialWorkspaceMonthFrames(today, 1)[0];
 
   const [accountResult, ruleResult, connectionResult, financialAccountResult, overdueResult] = await Promise.all([
     supabase.from("bookkeeping_accounts")
@@ -57,7 +60,7 @@ export async function getFinancialWorkspaceData(): Promise<FinancialWorkspaceDat
   const includedAccountIds = (financialAccountResult.data ?? []).map((account) => account.id as string);
   const [transactions, pendingCount, unmatchedTransferCount] = includedAccountIds.length
     ? await Promise.all([
-        getWorkspaceTransactions(supabase, practiceId, includedAccountIds, periodStart, periodEnd),
+        getWorkspaceTransactions(supabase, practiceId, includedAccountIds, currentFrame.end),
         getWorkspaceTransactionCount(supabase, practiceId, includedAccountIds),
         getWorkspaceTransactionCount(supabase, practiceId, includedAccountIds, true),
       ])
@@ -82,17 +85,40 @@ export async function getFinancialWorkspaceData(): Promise<FinancialWorkspaceDat
     updatedAt: rule.updated_at as string,
   }));
   const accountById = new Map(accounts.map((account) => [account.id, account]));
-  const months = monthFrames.map((frame) => {
-    const totals = summarizeTransactions(
-      transactions.filter((transaction) => transaction.transaction_date >= frame.start && transaction.transaction_date < frame.end),
-      accountById,
-    );
-    return { key: frame.start.slice(0, 7), label: frame.shortLabel, ...totals };
-  });
-  const currentTransactions = transactions.filter(
-    (transaction) => transaction.transaction_date >= current.start && transaction.transaction_date < current.end,
+  const monthFrames = getFinancialWorkspaceMonthFrames(
+    today,
+    financialWorkspaceMonthCount(transactions.at(-1)?.transaction_date, today),
   );
-  const currentTotals = summarizeTransactions(currentTransactions, accountById);
+  const toActivity = (transaction: WorkspaceTransaction): FinancialWorkspaceActivity => {
+    const account = transaction.bookkeeping_account_id ? accountById.get(transaction.bookkeeping_account_id) : null;
+    return {
+      id: transaction.id,
+      date: transaction.transaction_date,
+      description: transactionDisplayName(transaction as FinancialTransaction),
+      category: account?.accountType ?? "Uncategorized",
+      account: account ? `${account.accountNumber ? `${account.accountNumber} ` : ""}${account.name}` : "Choose account",
+      amountCents: transaction.amount_cents,
+      reviewStatus: transaction.review_status,
+      categorySource: transaction.category_source,
+    };
+  };
+  const months = monthFrames.map((frame) => {
+    const monthTransactions = transactions.filter(
+      (transaction) => transaction.transaction_date >= frame.start && transaction.transaction_date < frame.end,
+    );
+    return {
+      key: frame.key,
+      label: frame.shortLabel,
+      longLabel: frame.longLabel,
+      dateRange: frame.dateRange,
+      ...summarizeTransactions(monthTransactions, accountById),
+      recentActivity: monthTransactions.slice(0, 8).map(toActivity),
+    };
+  });
+  const current = months.at(-1)!;
+  const currentTransactions = transactions.filter(
+    (transaction) => transaction.transaction_date >= currentFrame.start && transaction.transaction_date < currentFrame.end,
+  );
   const expenseByAccount = new Map<string, number>();
   for (const transaction of currentTransactions) {
     if (transaction.review_status !== "reviewed" || transaction.amount_cents <= 0) continue;
@@ -104,9 +130,9 @@ export async function getFinancialWorkspaceData(): Promise<FinancialWorkspaceDat
   return {
     monthLabel: current.longLabel,
     monthDateRange: current.dateRange,
-    revenueCents: currentTotals.revenueCents,
-    expenseCents: currentTotals.expenseCents,
-    netIncomeCents: currentTotals.revenueCents - currentTotals.expenseCents,
+    revenueCents: current.revenueCents,
+    expenseCents: current.expenseCents,
+    netIncomeCents: current.revenueCents - current.expenseCents,
     pendingCount,
     unmatchedTransferCount,
     overdueBillCount: overdueResult.count ?? 0,
@@ -116,19 +142,7 @@ export async function getFinancialWorkspaceData(): Promise<FinancialWorkspaceDat
       .map((connection) => connection.transactions_last_synced_at as string | null)
       .filter((value): value is string => Boolean(value)).sort().at(-1) ?? null,
     months,
-    recentActivity: transactions.slice(0, 8).map((transaction) => {
-      const account = transaction.bookkeeping_account_id ? accountById.get(transaction.bookkeeping_account_id) : null;
-      return {
-        id: transaction.id,
-        date: transaction.transaction_date,
-        description: transactionDisplayName(transaction as FinancialTransaction),
-        category: account?.accountType ?? "Uncategorized",
-        account: account ? `${account.accountNumber ? `${account.accountNumber} ` : ""}${account.name}` : "Choose account",
-        amountCents: transaction.amount_cents,
-        reviewStatus: transaction.review_status,
-        categorySource: transaction.category_source,
-      };
-    }),
+    recentActivity: current.recentActivity,
     expenseBreakdown: [...expenseByAccount.entries()]
       .map(([name, amountCents]) => ({ name, amountCents }))
       .sort((a, b) => b.amountCents - a.amountCents).slice(0, 8),
@@ -214,7 +228,6 @@ async function getWorkspaceTransactions(
   supabase: ReturnType<typeof createAdminClient>,
   practiceId: string,
   accountIds: string[],
-  periodStart: string,
   periodEnd: string,
 ) {
   const rows: WorkspaceTransaction[] = [];
@@ -224,7 +237,7 @@ async function getWorkspaceTransactions(
       .select("id, transaction_date, merchant_name, counterparty_name, name, amount_cents, review_status, category_source, bookkeeping_account_id, is_removed, pending")
       .eq("practice_id", practiceId).eq("is_removed", false).eq("pending", false)
       .in("account_id", accountIds)
-      .gte("transaction_date", periodStart).lt("transaction_date", periodEnd)
+      .lt("transaction_date", periodEnd)
       .order("transaction_date", { ascending: false })
       .range(from, from + pageSize - 1);
     if (error) throw new Error(error.message);
@@ -458,27 +471,6 @@ function isIncomeType(value: string) {
 
 function isExpenseType(value: string) {
   return /(expense|cost of goods|cogs)/i.test(value);
-}
-
-function getMonthFrames(now: Date, count: number) {
-  const formatter = new Intl.DateTimeFormat("en-US", { timeZone: "America/Phoenix", year: "numeric", month: "numeric" });
-  const parts = formatter.formatToParts(now);
-  const currentYear = Number(parts.find((part) => part.type === "year")?.value);
-  const currentMonthIndex = Number(parts.find((part) => part.type === "month")?.value) - 1;
-  return Array.from({ length: count }, (_, index) => {
-    const date = new Date(Date.UTC(currentYear, currentMonthIndex - (count - 1 - index), 1));
-    const next = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1));
-    const year = date.getUTCFullYear();
-    const month = date.getUTCMonth() + 1;
-    const days = new Date(Date.UTC(year, month, 0)).getUTCDate();
-    return {
-      start: `${year}-${String(month).padStart(2, "0")}-01`,
-      end: `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-01`,
-      shortLabel: new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" }).format(date),
-      longLabel: new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(date),
-      dateRange: `${new Intl.DateTimeFormat("en-US", { month: "long", timeZone: "UTC" }).format(date)} 1–${days}, ${year}`,
-    };
-  });
 }
 
 function toPhoenixDate(value: Date) {

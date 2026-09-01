@@ -1,6 +1,10 @@
 import type { BookkeepingAccount, FinancialTransaction } from "@/lib/financial-transactions";
 
-export type FinancialReportPeriodKey = "month" | "six_months" | "year" | "all_time";
+export type FinancialReportPeriodKey =
+  | `month:${string}`
+  | "six_months"
+  | "year"
+  | "all_time";
 
 export interface FinancialReportCategory {
   id: string;
@@ -65,8 +69,19 @@ export function buildFinancialReportsData({
   const allTimeStart = earliestTransaction < monthStart ? earliestTransaction : monthStart;
   const accountById = new Map(accounts.map((account) => [account.id, account]));
 
+  const monthPeriods = buildMonthStarts(allTimeStart, monthStart)
+    .map((start) => {
+      const end = start === monthStart ? tomorrow : nextMonthStart(start);
+      return createPeriod(
+        `month:${start.slice(0, 7)}`,
+        formatMonthLabel(start),
+        start,
+        end,
+      );
+    })
+    .reverse();
   const periods: FinancialReportPeriod[] = [
-    createPeriod("month", "This month", monthStart, tomorrow),
+    ...monthPeriods,
     createPeriod("six_months", "Last 6 months", sixMonthStart, tomorrow),
     createPeriod("year", "This year", yearStart, tomorrow),
     createPeriod("all_time", "All time", allTimeStart, tomorrow),
@@ -172,6 +187,30 @@ export function buildFinancialReportsData({
       categories,
     };
   }
+}
+
+function buildMonthStarts(firstDate: string, currentMonthStart: string) {
+  const starts: string[] = [];
+  let cursor = firstDate.slice(0, 7) + "-01";
+  while (cursor <= currentMonthStart) {
+    starts.push(cursor);
+    cursor = nextMonthStart(cursor);
+  }
+  return starts;
+}
+
+function nextMonthStart(value: string) {
+  const [year, month] = value.split("-").map(Number);
+  const next = new Date(Date.UTC(year, month, 1));
+  return isoDate(next.getUTCFullYear(), next.getUTCMonth() + 1, 1);
+}
+
+function formatMonthLabel(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${value}T12:00:00Z`));
 }
 
 function assignSpendingShares(

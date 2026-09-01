@@ -5,7 +5,6 @@ import {
   type WorkspaceAccess,
 } from "@/lib/workspace-access";
 import {
-  BadgeDollarSign,
   BarChart3,
   Calculator,
   CheckSquare,
@@ -46,7 +45,6 @@ export const adminOnlyLinks: NavLink[] = [
   { href: "/admin/supply-invoices", label: "Supply Invoice Inbox", icon: PackageSearch, moduleKey: "supply_management" },
   { href: "/admin/bills", label: "Bills", icon: ReceiptText, moduleKey: "bills" },
   { href: "/admin/financial", label: "Financial", icon: Landmark, moduleKey: "financial" },
-  { href: "/admin/cherry-financing", label: "Approved Financing", icon: BadgeDollarSign, moduleKey: "approved_financing" },
   { href: "/admin/export", label: "Export & Analyze", icon: Download, moduleKey: "export_analyze" },
   { href: "/admin/stats", label: "Stats Setup", icon: BarChart3, moduleKey: "stats" },
   { href: "/admin/employees", label: "Team & Access", icon: Settings, moduleKey: "team_access" },

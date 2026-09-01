@@ -1,5 +1,5 @@
-import { ModuleAccessLayout } from "@/components/layout/module-access-layout";
+import { redirect } from "next/navigation";
 
-export default function Layout({ children }: { children: React.ReactNode }) {
-  return <ModuleAccessLayout moduleKey="patient_surveys">{children}</ModuleAccessLayout>;
+export default function Layout() {
+  redirect("/dashboard");
 }

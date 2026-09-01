@@ -19,7 +19,6 @@ import {
   Loader2,
   RefreshCw,
   Search,
-  SlidersHorizontal,
   Sparkles,
   Tags,
 } from "lucide-react";
@@ -83,6 +82,7 @@ export function FinancialTransactionsDashboard({
   });
   const [status, setStatus] = useState<StatusFilter>("pending");
   const [query, setQuery] = useState("");
+  const [bookkeepingAccountFilterId, setBookkeepingAccountFilterId] = useState("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(() => new Set());
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -123,8 +123,12 @@ export function FinancialTransactionsDashboard({
       if (!transaction.transaction_date.startsWith(month)) return false;
       if (accountId !== "all" && transaction.account_id !== accountId) return false;
       if (status !== "all" && transaction.review_status !== status) return false;
+      if (bookkeepingAccountFilterId !== "all" && bookkeepingAccountIds[transaction.id] !== bookkeepingAccountFilterId) return false;
       if (!normalizedQuery) return true;
       const account = transaction.account_id ? accountById.get(transaction.account_id) : null;
+      const bookkeepingAccount = initialData.bookkeepingAccounts.find(
+        (candidate) => candidate.id === bookkeepingAccountIds[transaction.id],
+      );
       return [
         transactionDisplayName(transaction),
         transaction.original_description,
@@ -132,9 +136,10 @@ export function FinancialTransactionsDashboard({
         account?.name,
         account?.nickname,
         account?.institutionName,
+        bookkeepingAccount ? bookkeepingAccountSearchLabel(bookkeepingAccount) : null,
       ].some((value) => value?.toLowerCase().includes(normalizedQuery));
     });
-  }, [accountById, accountId, month, query, status, transactions]);
+  }, [accountById, accountId, bookkeepingAccountFilterId, bookkeepingAccountIds, initialData.bookkeepingAccounts, month, query, status, transactions]);
 
   const resolvedSelectedId = filtered.some((transaction) => transaction.id === selectedId)
     ? selectedId
@@ -193,6 +198,10 @@ export function FinancialTransactionsDashboard({
     : activeMovement.netCents;
   const disabled = isPending || busyId !== null;
   const groupedTransactions = useMemo(() => groupTransactionsByWeek(filtered), [filtered]);
+  const filteredTotalCents = filtered.reduce((total, transaction) => total + transaction.amount_cents, 0);
+  const filteredBookkeepingAccount = initialData.bookkeepingAccounts.find(
+    (account) => account.id === bookkeepingAccountFilterId,
+  );
   const bulkEligible = useMemo(() => filtered.filter((transaction) =>
     transaction.review_status === "pending" &&
     Boolean(bookkeepingAccountIds[transaction.id]) &&
@@ -421,10 +430,6 @@ export function FinancialTransactionsDashboard({
   }, [bookkeepingAccountIds, checkedIds, previewMode, reviewModes, router, transactions]);
 
   useEffect(() => {
-    setCheckedIds(new Set());
-  }, [accountId, month, query, status]);
-
-  useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       if (target?.matches("input, textarea, select, [contenteditable='true']")) return;
@@ -444,7 +449,10 @@ export function FinancialTransactionsDashboard({
   function changeMonth(direction: -1 | 1) {
     const index = availableMonths.indexOf(month);
     const next = availableMonths[index - direction];
-    if (next) setMonth(next);
+    if (next) {
+      setMonth(next);
+      setCheckedIds(new Set());
+    }
   }
 
   return (
@@ -461,7 +469,10 @@ export function FinancialTransactionsDashboard({
           <Button size="icon-sm" variant="outline" aria-label="Previous month" onClick={() => changeMonth(-1)} disabled={availableMonths.indexOf(month) === availableMonths.length - 1}>
             <ArrowLeft />
           </Button>
-          <select className="h-8 rounded-md border bg-background px-3 text-sm font-medium" value={month} onChange={(event) => setMonth(event.target.value)} aria-label="Bookkeeping month">
+          <select className="h-8 rounded-md border bg-background px-3 text-sm font-medium" value={month} onChange={(event) => {
+            setMonth(event.target.value);
+            setCheckedIds(new Set());
+          }} aria-label="Bookkeeping month">
             {availableMonths.map((value) => <option key={value} value={value}>{formatMonth(value)}</option>)}
           </select>
           <Button size="icon-sm" variant="outline" aria-label="Next month" onClick={() => changeMonth(1)} disabled={availableMonths.indexOf(month) <= 0}>
@@ -488,7 +499,10 @@ export function FinancialTransactionsDashboard({
             progress={overallProgress(transactions, month)}
             accent={accountAccents[0]}
             selected={accountId === "all"}
-            onClick={() => setAccountId("all")}
+            onClick={() => {
+              setAccountId("all");
+              setCheckedIds(new Set());
+            }}
           />
           {accountStats.map((account) => (
             <AccountRailItem
@@ -499,7 +513,10 @@ export function FinancialTransactionsDashboard({
               progress={account.progress}
               accent={accountAccent(account.id)}
               selected={accountId === account.id}
-              onClick={() => setAccountId(account.id)}
+              onClick={() => {
+                setAccountId(account.id);
+                setCheckedIds(new Set());
+              }}
             />
           ))}
         </aside>
@@ -514,7 +531,10 @@ export function FinancialTransactionsDashboard({
                 </h3>
                 <p className="mt-1 text-xs text-muted-foreground">{activeAccount ? `${activeAccount.institutionName} · ` : ""}{formatMonth(month)} activity imported from connected institutions</p>
               </div>
-              <select className="h-8 rounded-md border bg-background px-2 text-xs" value={accountId} onChange={(event) => setAccountId(event.target.value)} aria-label="Change account">
+              <select className="h-8 rounded-md border bg-background px-2 text-xs" value={accountId} onChange={(event) => {
+                setAccountId(event.target.value);
+                setCheckedIds(new Set());
+              }} aria-label="Change account">
                 <option value="all">Change account</option>
                 {initialData.accounts.map((account) => <option key={account.id} value={account.id}>{accountDisplayName(account)}{accountMaskText(account)}</option>)}
               </select>
@@ -527,7 +547,10 @@ export function FinancialTransactionsDashboard({
           </section>
 
           <section className="flex flex-wrap items-center gap-2 border-b px-3 py-2.5">
-            <select className="h-8 rounded-md border bg-background px-2 text-xs" value={status} onChange={(event) => setStatus(event.target.value as StatusFilter)} aria-label="Transaction status">
+            <select className="h-8 rounded-md border bg-background px-2 text-xs" value={status} onChange={(event) => {
+              setStatus(event.target.value as StatusFilter);
+              setCheckedIds(new Set());
+            }} aria-label="Transaction status">
               <option value="pending">Needs review</option>
               <option value="all">All transactions</option>
               <option value="reviewed">Reviewed</option>
@@ -535,9 +558,41 @@ export function FinancialTransactionsDashboard({
             </select>
             <div className="relative min-w-40 flex-1">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input className="h-8 pl-8 text-xs" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search transactions" />
+              <Input className="h-8 pl-8 text-xs" value={query} onChange={(event) => {
+                setQuery(event.target.value);
+                setCheckedIds(new Set());
+              }} placeholder="Search transactions" />
             </div>
-            <Button size="icon-sm" variant="ghost" title="More filters" aria-label="More filters"><SlidersHorizontal /></Button>
+            <div className="relative min-w-44">
+              <Tags className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <select
+                className="h-8 w-full appearance-none rounded-md border bg-background pl-8 pr-7 text-xs"
+                value={bookkeepingAccountFilterId}
+                onChange={(event) => {
+                  setBookkeepingAccountFilterId(event.target.value);
+                  setCheckedIds(new Set());
+                }}
+                aria-label="Chart of account filter"
+              >
+                <option value="all">All chart accounts</option>
+                {bookkeepingAccountsByType.map(([type, accounts]) => (
+                  <optgroup key={type} label={type}>
+                    {accounts.map((account) => (
+                      <option key={account.id} value={account.id}>{bookkeepingAccountSearchLabel(account)}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            </div>
+            {filteredBookkeepingAccount && (
+              <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-md border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-xs text-emerald-950">
+                <span className="font-medium">{bookkeepingAccountSearchLabel(filteredBookkeepingAccount)}</span>
+                <span className="tabular-nums">
+                  {filtered.length} {filtered.length === 1 ? "transaction" : "transactions"} · {formatCurrency(filteredTotalCents)} total in view
+                </span>
+              </div>
+            )}
           </section>
 
           {checkedTransactions.length > 0 && (

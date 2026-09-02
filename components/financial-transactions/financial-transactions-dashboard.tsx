@@ -202,9 +202,9 @@ export function FinancialTransactionsDashboard({
     .filter(([type]) => /expense/i.test(type)), [bookkeepingAccountsByType]);
   const defaultInterestAccountId = initialData.bookkeepingAccounts.find((account) => /interest expense/i.test(account.name))?.id ?? "";
   const defaultFeeAccountId = initialData.bookkeepingAccounts.find((account) => /finance fee|loan fee/i.test(account.name))?.id
-    ?? (defaultInterestAccountId || undefined)
-    ?? initialData.bookkeepingAccounts.find((account) => /bank service charge/i.test(account.name))?.id
-    ?? "";
+    || defaultInterestAccountId
+    || initialData.bookkeepingAccounts.find((account) => /bank service charge/i.test(account.name))?.id
+    || "";
   const activeAccount = accountId === "all" ? null : accountById.get(accountId);
   const activeStats = accountStats.find((account) => account.id === accountId);
   const monthTransactions = transactions.filter((transaction) => transaction.transaction_date.startsWith(month));

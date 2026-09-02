@@ -125,10 +125,11 @@ export function suggestedLoanPaymentAllocations(
 ): LoanPaymentAllocation[] {
   if (totalCents <= 0 || !transactionDate) return [];
 
-  const groups = Map.groupBy(
-    loans,
-    (loan) => `${loan.lenderName.toLowerCase()}::${loan.bookkeepingAccountId}`,
-  );
+  const groups = new Map<string, LoanAllocationCandidate[]>();
+  for (const loan of loans) {
+    const key = `${loan.lenderName.toLowerCase()}::${loan.bookkeepingAccountId}`;
+    groups.set(key, [...(groups.get(key) ?? []), loan]);
+  }
   for (const group of groups.values()) {
     const candidates = group.flatMap((loan) => {
       const entry = loan.schedule

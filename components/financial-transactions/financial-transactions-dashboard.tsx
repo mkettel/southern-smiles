@@ -42,7 +42,7 @@ import {
   type FinancialTransactionAccountSummary,
   type FinancialTransactionDashboardData,
 } from "@/lib/financial-transactions";
-import { suggestedLoanPaymentAllocations, suggestedLoanPaymentSplit } from "@/lib/financial-loans";
+import { suggestedLoanPayment, suggestedLoanPaymentAllocations } from "@/lib/financial-loans";
 import { cn } from "@/lib/utils";
 
 type StatusFilter = "all" | "pending" | "reviewed" | "excluded";
@@ -181,13 +181,18 @@ export function FinancialTransactionsDashboard({
     : "";
   const selectedLoan = initialData.loans.find((loan) => loan.id === selectedLoanId) ?? null;
   const selectedValueCents = Math.abs(selected?.amount_cents ?? 0);
-  const suggestedSplit = usesScheduledLoanGroup
+  const paymentSuggestion = selected?.amount_cents && selected.amount_cents > 0 && !usesScheduledLoanGroup
+    ? suggestedLoanPayment(selectedLoan, selectedValueCents, selected.transaction_date)
+    : null;
+  const suggestedSplit = selected?.amount_cents && selected.amount_cents < 0
+    ? { principal: selectedValueCents, interest: 0, fee: 0 }
+    : usesScheduledLoanGroup
     ? scheduledLoanAllocations.reduce((total, allocation) => ({
         principal: total.principal + allocation.principal,
         interest: total.interest + allocation.interest,
         fee: total.fee + allocation.fee,
       }), { principal: 0, interest: 0, fee: 0 })
-    : suggestedLoanPaymentSplit(selectedLoan, selectedValueCents, selected?.transaction_date);
+    : paymentSuggestion?.split ?? { principal: 0, interest: 0, fee: 0 };
   const principalCents = selected
     ? usesScheduledLoanGroup ? suggestedSplit.principal : inputCents(principalAmounts[selected.id], suggestedSplit.principal)
     : 0;
@@ -375,7 +380,9 @@ export function FinancialTransactionsDashboard({
     const loanId = useScheduled ? "" : explicitSelection ?? initialData.suggestedLoanByTransaction[transaction.id] ?? "";
     if (!useScheduled && !loanId) return toast.error("Choose the loan first");
     const loan = initialData.loans.find((item) => item.id === loanId) ?? null;
-    const defaults = suggestedLoanPaymentSplit(loan, valueCents, transaction.transaction_date);
+    const defaults = transaction.amount_cents < 0
+      ? { principal: valueCents, interest: 0, fee: 0 }
+      : suggestedLoanPayment(loan, valueCents, transaction.transaction_date).split;
     const allocations = useScheduled
       ? scheduled.map((allocation) => ({
           loanId: allocation.loanId,
@@ -834,7 +841,12 @@ export function FinancialTransactionsDashboard({
                 ) : (
                   <div className="space-y-4">
                     <InspectorField label={selected.amount_cents < 0 ? "Loan or credit line" : "Loan being paid"}>
-                      <select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={usesScheduledLoanGroup ? SCHEDULED_LOAN_GROUP : selectedLoanId} onChange={(event) => setLoanIds((current) => ({ ...current, [selected.id]: event.target.value }))}>
+                      <select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={usesScheduledLoanGroup ? SCHEDULED_LOAN_GROUP : selectedLoanId} onChange={(event) => {
+                        setLoanIds((current) => ({ ...current, [selected.id]: event.target.value }));
+                        setPrincipalAmounts((current) => { const next = { ...current }; delete next[selected.id]; return next; });
+                        setInterestAmounts((current) => { const next = { ...current }; delete next[selected.id]; return next; });
+                        setFeeAmounts((current) => { const next = { ...current }; delete next[selected.id]; return next; });
+                      }}>
                         <option value="">Choose loan</option>
                         {scheduledLoanAllocations.length > 1 && <option value={SCHEDULED_LOAN_GROUP}>{initialData.loans.find((loan) => loan.id === scheduledLoanAllocations[0]?.loanId)?.lenderName} · {scheduledLoanAllocations.length} scheduled loans</option>}
                         {initialData.loans.map((loan) => <option key={loan.id} value={loan.id}>{loan.lenderName} · {loan.name} · {formatCurrency(loan.currentBalanceCents)}</option>)}
@@ -849,12 +861,14 @@ export function FinancialTransactionsDashboard({
                       </div>
                     ) : selectedLoan && <div className="rounded-md border border-amber-200 bg-amber-50/70 p-3 text-xs"><div className="flex justify-between gap-3"><span className="font-medium text-amber-950">Current loan balance</span><span className="font-semibold tabular-nums text-amber-950">{formatCurrency(selectedLoan.currentBalanceCents)}</span></div>{selectedLoan.scheduledPaymentCents && <p className="mt-1 text-muted-foreground">Expected payment {formatCurrency(selectedLoan.scheduledPaymentCents)} · {selectedLoan.paymentFrequency}</p>}</div>}
                     {selected.amount_cents < 0 ? <p className="text-xs text-muted-foreground">This inflow increases the loan balance by {formatCurrency(selectedValueCents)}. It does not count as income.</p> : <>
+                      {paymentSuggestion?.basis === "early_schedule" && <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-xs text-sky-950"><p className="font-medium">Estimated from the {formatFullDate(paymentSuggestion.dueDate!)} installment</p><p className="mt-1 text-sky-800">This payment arrived early. Review the lender's posted allocation before approving.</p></div>}
+                      {paymentSuggestion?.basis === "unavailable" && selectedLoan && <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">No reliable principal and interest split was found. Enter the lender's posted allocation to continue.</div>}
                       {!usesScheduledLoanGroup && <div className="grid grid-cols-3 gap-2">
                         <AmountField label="Principal" value={principalAmounts[selected.id] ?? dollarsFromCents(suggestedSplit.principal)} onChange={(value) => setPrincipalAmounts((current) => ({ ...current, [selected.id]: value }))} />
                         <AmountField label="Interest" value={interestAmounts[selected.id] ?? dollarsFromCents(suggestedSplit.interest)} onChange={(value) => setInterestAmounts((current) => ({ ...current, [selected.id]: value }))} />
                         <AmountField label="Fees" value={feeAmounts[selected.id] ?? dollarsFromCents(suggestedSplit.fee)} onChange={(value) => setFeeAmounts((current) => ({ ...current, [selected.id]: value }))} />
                       </div>}
-                      <div className={cn("flex justify-between rounded-md border px-3 py-2 text-xs", splitRemainingCents === 0 ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900")}><span>{splitRemainingCents === 0 ? "Split matches payment" : "Amount left to assign"}</span><span className="font-semibold tabular-nums">{formatCurrency(Math.abs(splitRemainingCents))}</span></div>
+                      <div className={cn("flex justify-between rounded-md border px-3 py-2 text-xs", splitRemainingCents === 0 ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900")}><span>{splitRemainingCents === 0 ? "Split matches payment" : paymentSuggestion?.basis === "unavailable" ? "Payment amount unassigned" : "Amount left to assign"}</span><span className="font-semibold tabular-nums">{formatCurrency(Math.abs(splitRemainingCents))}</span></div>
                       {interestCents > 0 && <InspectorField label="Interest expense account"><BookkeepingAccountCombobox accountsByType={expenseAccountsByType} value={interestAccountIds[selected.id] ?? defaultInterestAccountId} onValueChange={(value) => setInterestAccountIds((current) => ({ ...current, [selected.id]: value }))} /></InspectorField>}
                       {feeCents > 0 && <InspectorField label="Fee expense account"><BookkeepingAccountCombobox accountsByType={expenseAccountsByType} value={feeAccountIds[selected.id] ?? defaultFeeAccountId} onValueChange={(value) => setFeeAccountIds((current) => ({ ...current, [selected.id]: value }))} /></InspectorField>}
                     </>}

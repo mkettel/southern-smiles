@@ -61,6 +61,7 @@ export interface FinancialLoansData {
 
 export interface LoanSplitCandidate {
   interestMethod?: string | null;
+  paymentFrequency?: string | null;
   lastPrincipalCents?: number | null;
   lastInterestCents?: number | null;
   lastFeeCents?: number | null;
@@ -85,37 +86,60 @@ export interface LoanPaymentAllocation extends LoanPaymentSplit {
 }
 
 const NEARBY_SCHEDULE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const EARLY_MONTHLY_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
+export interface LoanPaymentSuggestion {
+  split: LoanPaymentSplit;
+  basis: "schedule" | "early_schedule" | "prorated" | "fixed_fee" | "interest_free" | "unavailable";
+  dueDate?: string;
+}
 
 export function suggestedLoanPaymentSplit(
   loan: LoanSplitCandidate | null,
   totalCents: number,
   transactionDate?: string,
 ): LoanPaymentSplit {
-  if (!loan || totalCents <= 0) return { principal: Math.max(0, totalCents), interest: 0, fee: 0 };
+  return suggestedLoanPayment(loan, totalCents, transactionDate).split;
+}
+
+export function suggestedLoanPayment(
+  loan: LoanSplitCandidate | null,
+  totalCents: number,
+  transactionDate?: string,
+): LoanPaymentSuggestion {
+  const unavailable: LoanPaymentSuggestion = { split: { principal: 0, interest: 0, fee: 0 }, basis: "unavailable" };
+  if (!loan || totalCents <= 0) return unavailable;
 
   const nearby = loan.schedule
     .map((entry) => ({ entry, distance: dateDistance(entry.dueDate, transactionDate) }))
     .filter(({ distance }) => distance <= NEARBY_SCHEDULE_WINDOW_MS)
     .sort((a, b) => a.distance - b.distance);
   const exact = nearby.find(({ entry }) => entry.paymentCents === totalCents)?.entry;
-  if (exact) return scheduleSplit(exact);
+  if (exact) return { split: scheduleSplit(exact), basis: "schedule", dueDate: exact.dueDate };
+
+  // Monthly installments may be paid early. Keep these estimates distinct from nearby matches.
+  if (loan.paymentFrequency === "monthly" && transactionDate) {
+    const early = loan.schedule.filter((entry) => entry.dueDate > transactionDate
+      && dateDistance(entry.dueDate, transactionDate) <= EARLY_MONTHLY_WINDOW_MS
+      && entry.paymentCents === totalCents);
+    if (early.length === 1) return { split: scheduleSplit(early[0]!), basis: "early_schedule", dueDate: early[0]!.dueDate };
+  }
 
   const partial = nearby.find(({ entry }) => totalCents < entry.paymentCents)?.entry;
-  if (partial) return prorateSplit(partial, totalCents);
-
-  const lastTotal = (loan.lastPrincipalCents ?? 0) + (loan.lastInterestCents ?? 0) + (loan.lastFeeCents ?? 0);
-  if (lastTotal === totalCents) return {
-    principal: loan.lastPrincipalCents ?? totalCents,
-    interest: loan.lastInterestCents ?? 0,
-    fee: loan.lastFeeCents ?? 0,
-  };
+  if (partial) return { split: prorateSplit(partial, totalCents), basis: "prorated", dueDate: partial.dueDate };
 
   if (loan.interestMethod === "fixed_fee") {
     const template = loan.schedule.find((entry) => entry.paymentCents === totalCents);
-    if (template) return scheduleSplit(template);
+    if (template) return { split: scheduleSplit(template), basis: "fixed_fee" };
+    const lastTotal = (loan.lastPrincipalCents ?? 0) + (loan.lastInterestCents ?? 0) + (loan.lastFeeCents ?? 0);
+    if (lastTotal === totalCents) return {
+      split: { principal: loan.lastPrincipalCents ?? 0, interest: loan.lastInterestCents ?? 0, fee: loan.lastFeeCents ?? 0 },
+      basis: "fixed_fee",
+    };
   }
 
-  return { principal: totalCents, interest: 0, fee: 0 };
+  if (loan.interestMethod === "interest_free") return { split: { principal: totalCents, interest: 0, fee: 0 }, basis: "interest_free" };
+  return unavailable;
 }
 
 export function suggestedLoanPaymentAllocations(

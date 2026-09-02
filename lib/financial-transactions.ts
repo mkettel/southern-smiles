@@ -72,6 +72,7 @@ export interface FinancialLoanSummary {
   currentBalanceCents: number;
   scheduledPaymentCents: number | null;
   paymentFrequency: string | null;
+  interestMethod: string;
   lastPrincipalCents: number | null;
   lastInterestCents: number | null;
   lastFeeCents: number | null;

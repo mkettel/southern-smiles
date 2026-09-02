@@ -42,10 +42,12 @@ import {
   type FinancialTransactionAccountSummary,
   type FinancialTransactionDashboardData,
 } from "@/lib/financial-transactions";
+import { suggestedLoanPaymentAllocations, suggestedLoanPaymentSplit } from "@/lib/financial-loans";
 import { cn } from "@/lib/utils";
 
 type StatusFilter = "all" | "pending" | "reviewed" | "excluded";
 type ReviewMode = "category" | "transfer" | "loan";
+const SCHEDULED_LOAN_GROUP = "__scheduled_loan_group__";
 type TransferKind = "internal" | "credit_card_payment" | "line_of_credit_draw" | "loan_payment";
 
 export function FinancialTransactionsDashboard({
@@ -168,20 +170,41 @@ export function FinancialTransactionsDashboard({
     transferAccount,
     selected?.amount_cents ?? 0,
   );
-  const selectedLoanId = selected
-    ? loanIds[selected.id] ?? initialData.suggestedLoanByTransaction[selected.id] ?? ""
+  const scheduledLoanAllocations = selected && selected.amount_cents > 0
+    ? suggestedLoanPaymentAllocations(matchingLoans(selected, initialData.loans), Math.abs(selected.amount_cents), selected.transaction_date)
+    : [];
+  const explicitLoanSelection = selected ? loanIds[selected.id] : undefined;
+  const usesScheduledLoanGroup = scheduledLoanAllocations.length > 1 &&
+    (!explicitLoanSelection || explicitLoanSelection === SCHEDULED_LOAN_GROUP);
+  const selectedLoanId = selected && !usesScheduledLoanGroup
+    ? explicitLoanSelection ?? initialData.suggestedLoanByTransaction[selected.id] ?? ""
     : "";
   const selectedLoan = initialData.loans.find((loan) => loan.id === selectedLoanId) ?? null;
   const selectedValueCents = Math.abs(selected?.amount_cents ?? 0);
-  const suggestedSplit = loanSplitDefaults(selectedLoan, selectedValueCents, selected?.transaction_date);
-  const principalCents = selected ? inputCents(principalAmounts[selected.id], suggestedSplit.principal) : 0;
-  const interestCents = selected ? inputCents(interestAmounts[selected.id], suggestedSplit.interest) : 0;
-  const feeCents = selected ? inputCents(feeAmounts[selected.id], suggestedSplit.fee) : 0;
+  const suggestedSplit = usesScheduledLoanGroup
+    ? scheduledLoanAllocations.reduce((total, allocation) => ({
+        principal: total.principal + allocation.principal,
+        interest: total.interest + allocation.interest,
+        fee: total.fee + allocation.fee,
+      }), { principal: 0, interest: 0, fee: 0 })
+    : suggestedLoanPaymentSplit(selectedLoan, selectedValueCents, selected?.transaction_date);
+  const principalCents = selected
+    ? usesScheduledLoanGroup ? suggestedSplit.principal : inputCents(principalAmounts[selected.id], suggestedSplit.principal)
+    : 0;
+  const interestCents = selected
+    ? usesScheduledLoanGroup ? suggestedSplit.interest : inputCents(interestAmounts[selected.id], suggestedSplit.interest)
+    : 0;
+  const feeCents = selected
+    ? usesScheduledLoanGroup ? suggestedSplit.fee : inputCents(feeAmounts[selected.id], suggestedSplit.fee)
+    : 0;
   const splitRemainingCents = selectedValueCents - principalCents - interestCents - feeCents;
   const expenseAccountsByType = useMemo(() => bookkeepingAccountsByType.map(([type, accounts]): [string, BookkeepingAccount[]] => [type, accounts])
     .filter(([type]) => /expense/i.test(type)), [bookkeepingAccountsByType]);
   const defaultInterestAccountId = initialData.bookkeepingAccounts.find((account) => /interest expense/i.test(account.name))?.id ?? "";
-  const defaultFeeAccountId = initialData.bookkeepingAccounts.find((account) => /bank service charge|finance fee/i.test(account.name))?.id ?? "";
+  const defaultFeeAccountId = initialData.bookkeepingAccounts.find((account) => /finance fee|loan fee/i.test(account.name))?.id
+    ?? (defaultInterestAccountId || undefined)
+    ?? initialData.bookkeepingAccounts.find((account) => /bank service charge/i.test(account.name))?.id
+    ?? "";
   const activeAccount = accountId === "all" ? null : accountById.get(accountId);
   const activeStats = accountStats.find((account) => account.id === accountId);
   const monthTransactions = transactions.filter((transaction) => transaction.transaction_date.startsWith(month));
@@ -343,14 +366,32 @@ export function FinancialTransactionsDashboard({
   }, [accountById, note, previewMode, router, transactions, transferAccountIds, transferKinds]);
 
   const confirmLoanTransaction = useCallback(async (transaction: FinancialTransaction) => {
-    const loanId = loanIds[transaction.id] ?? initialData.suggestedLoanByTransaction[transaction.id] ?? "";
-    if (!loanId) return toast.error("Choose the loan first");
     const valueCents = Math.abs(transaction.amount_cents);
+    const scheduled = transaction.amount_cents > 0
+      ? suggestedLoanPaymentAllocations(matchingLoans(transaction, initialData.loans), valueCents, transaction.transaction_date)
+      : [];
+    const explicitSelection = loanIds[transaction.id];
+    const useScheduled = scheduled.length > 1 && (!explicitSelection || explicitSelection === SCHEDULED_LOAN_GROUP);
+    const loanId = useScheduled ? "" : explicitSelection ?? initialData.suggestedLoanByTransaction[transaction.id] ?? "";
+    if (!useScheduled && !loanId) return toast.error("Choose the loan first");
     const loan = initialData.loans.find((item) => item.id === loanId) ?? null;
-    const defaults = loanSplitDefaults(loan, valueCents, transaction.transaction_date);
-    const principal = inputCents(principalAmounts[transaction.id], defaults.principal);
-    const interest = inputCents(interestAmounts[transaction.id], defaults.interest);
-    const fees = inputCents(feeAmounts[transaction.id], defaults.fee);
+    const defaults = suggestedLoanPaymentSplit(loan, valueCents, transaction.transaction_date);
+    const allocations = useScheduled
+      ? scheduled.map((allocation) => ({
+          loanId: allocation.loanId,
+          principalCents: allocation.principal,
+          interestCents: allocation.interest,
+          feeCents: allocation.fee,
+        }))
+      : [{
+          loanId,
+          principalCents: inputCents(principalAmounts[transaction.id], defaults.principal),
+          interestCents: inputCents(interestAmounts[transaction.id], defaults.interest),
+          feeCents: inputCents(feeAmounts[transaction.id], defaults.fee),
+        }];
+    const principal = allocations.reduce((sum, allocation) => sum + allocation.principalCents, 0);
+    const interest = allocations.reduce((sum, allocation) => sum + allocation.interestCents, 0);
+    const fees = allocations.reduce((sum, allocation) => sum + allocation.feeCents, 0);
     if (principal + interest + fees !== valueCents) return toast.error("Principal, interest, and fees must equal the transaction amount");
     const interestAccountId = interestAccountIds[transaction.id] ?? defaultInterestAccountId;
     const feeAccountId = feeAccountIds[transaction.id] ?? defaultFeeAccountId;
@@ -360,16 +401,18 @@ export function FinancialTransactionsDashboard({
     if (previewMode) { applyLocalReview(); toast.success("Sample loan transaction posted"); return; }
     setBusyId(transaction.id);
     const result = await reviewFinancialLoanTransaction({
-      transactionId: transaction.id, loanId,
+      transactionId: transaction.id,
       activityKind: transaction.amount_cents < 0 ? "draw" : "payment",
-      principalCents: principal, interestCents: interest, feeCents: fees,
+      allocations,
       interestAccountId: interestAccountId || null,
       feeAccountId: feeAccountId || null,
       note: note || null,
     });
     setBusyId(null);
     if (result.error) return toast.error(result.error);
-    applyLocalReview(); setNote(""); toast.success(transaction.amount_cents < 0 ? "Loan draw posted" : "Loan payment posted");
+    applyLocalReview(); setNote(""); toast.success(transaction.amount_cents < 0
+      ? "Loan draw posted"
+      : useScheduled ? `Loan payment allocated across ${allocations.length} loans` : "Loan payment posted");
     startTransition(() => router.refresh());
   }, [defaultFeeAccountId, defaultInterestAccountId, feeAccountIds, feeAmounts, initialData.loans, initialData.suggestedLoanByTransaction, interestAccountIds, interestAmounts, loanIds, note, previewMode, principalAmounts, router]);
 
@@ -791,18 +834,26 @@ export function FinancialTransactionsDashboard({
                 ) : (
                   <div className="space-y-4">
                     <InspectorField label={selected.amount_cents < 0 ? "Loan or credit line" : "Loan being paid"}>
-                      <select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={selectedLoanId} onChange={(event) => setLoanIds((current) => ({ ...current, [selected.id]: event.target.value }))}>
+                      <select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={usesScheduledLoanGroup ? SCHEDULED_LOAN_GROUP : selectedLoanId} onChange={(event) => setLoanIds((current) => ({ ...current, [selected.id]: event.target.value }))}>
                         <option value="">Choose loan</option>
+                        {scheduledLoanAllocations.length > 1 && <option value={SCHEDULED_LOAN_GROUP}>{initialData.loans.find((loan) => loan.id === scheduledLoanAllocations[0]?.loanId)?.lenderName} · {scheduledLoanAllocations.length} scheduled loans</option>}
                         {initialData.loans.map((loan) => <option key={loan.id} value={loan.id}>{loan.lenderName} · {loan.name} · {formatCurrency(loan.currentBalanceCents)}</option>)}
                       </select>
                     </InspectorField>
-                    {selectedLoan && <div className="rounded-md border border-amber-200 bg-amber-50/70 p-3 text-xs"><div className="flex justify-between gap-3"><span className="font-medium text-amber-950">Current loan balance</span><span className="font-semibold tabular-nums text-amber-950">{formatCurrency(selectedLoan.currentBalanceCents)}</span></div>{selectedLoan.scheduledPaymentCents && <p className="mt-1 text-muted-foreground">Expected payment {formatCurrency(selectedLoan.scheduledPaymentCents)} · {selectedLoan.paymentFrequency}</p>}</div>}
+                    {usesScheduledLoanGroup ? (
+                      <div className="divide-y rounded-md border border-amber-200 bg-amber-50/70 text-xs">
+                        {scheduledLoanAllocations.map((allocation) => {
+                          const loan = initialData.loans.find((item) => item.id === allocation.loanId);
+                          return <div key={allocation.loanId} className="p-3"><div className="flex justify-between gap-3"><span className="font-medium text-amber-950">{loan?.name ?? "Scheduled loan"}</span><span className="font-semibold tabular-nums text-amber-950">{formatCurrency(allocation.principal + allocation.interest + allocation.fee)}</span></div><p className="mt-1 text-muted-foreground">{formatCurrency(allocation.principal)} principal{allocation.interest > 0 && ` · ${formatCurrency(allocation.interest)} interest`}{allocation.fee > 0 && ` · ${formatCurrency(allocation.fee)} fee`}</p></div>;
+                        })}
+                      </div>
+                    ) : selectedLoan && <div className="rounded-md border border-amber-200 bg-amber-50/70 p-3 text-xs"><div className="flex justify-between gap-3"><span className="font-medium text-amber-950">Current loan balance</span><span className="font-semibold tabular-nums text-amber-950">{formatCurrency(selectedLoan.currentBalanceCents)}</span></div>{selectedLoan.scheduledPaymentCents && <p className="mt-1 text-muted-foreground">Expected payment {formatCurrency(selectedLoan.scheduledPaymentCents)} · {selectedLoan.paymentFrequency}</p>}</div>}
                     {selected.amount_cents < 0 ? <p className="text-xs text-muted-foreground">This inflow increases the loan balance by {formatCurrency(selectedValueCents)}. It does not count as income.</p> : <>
-                      <div className="grid grid-cols-3 gap-2">
+                      {!usesScheduledLoanGroup && <div className="grid grid-cols-3 gap-2">
                         <AmountField label="Principal" value={principalAmounts[selected.id] ?? dollarsFromCents(suggestedSplit.principal)} onChange={(value) => setPrincipalAmounts((current) => ({ ...current, [selected.id]: value }))} />
                         <AmountField label="Interest" value={interestAmounts[selected.id] ?? dollarsFromCents(suggestedSplit.interest)} onChange={(value) => setInterestAmounts((current) => ({ ...current, [selected.id]: value }))} />
                         <AmountField label="Fees" value={feeAmounts[selected.id] ?? dollarsFromCents(suggestedSplit.fee)} onChange={(value) => setFeeAmounts((current) => ({ ...current, [selected.id]: value }))} />
-                      </div>
+                      </div>}
                       <div className={cn("flex justify-between rounded-md border px-3 py-2 text-xs", splitRemainingCents === 0 ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900")}><span>{splitRemainingCents === 0 ? "Split matches payment" : "Amount left to assign"}</span><span className="font-semibold tabular-nums">{formatCurrency(Math.abs(splitRemainingCents))}</span></div>
                       {interestCents > 0 && <InspectorField label="Interest expense account"><BookkeepingAccountCombobox accountsByType={expenseAccountsByType} value={interestAccountIds[selected.id] ?? defaultInterestAccountId} onValueChange={(value) => setInterestAccountIds((current) => ({ ...current, [selected.id]: value }))} /></InspectorField>}
                       {feeCents > 0 && <InspectorField label="Fee expense account"><BookkeepingAccountCombobox accountsByType={expenseAccountsByType} value={feeAccountIds[selected.id] ?? defaultFeeAccountId} onValueChange={(value) => setFeeAccountIds((current) => ({ ...current, [selected.id]: value }))} /></InspectorField>}
@@ -830,7 +881,7 @@ export function FinancialTransactionsDashboard({
                   {selectedReviewMode === "transfer" ? (
                     <Button size="sm" className="w-full bg-sky-700 text-white hover:bg-sky-800" onClick={() => confirmTransfer(selected)} disabled={disabled || !transferAccountId}>{busyId === selected.id ? <Loader2 className="animate-spin" /> : <ArrowRightLeft />}Post transfer</Button>
                   ) : selectedReviewMode === "loan" ? (
-                    <Button size="sm" className="w-full bg-amber-700 text-white hover:bg-amber-800" onClick={() => confirmLoanTransaction(selected)} disabled={disabled || !selectedLoanId || splitRemainingCents !== 0}>{busyId === selected.id ? <Loader2 className="animate-spin" /> : <Landmark />}{selected.amount_cents < 0 ? "Post loan draw" : "Post loan payment"}</Button>
+                    <Button size="sm" className="w-full bg-amber-700 text-white hover:bg-amber-800" onClick={() => confirmLoanTransaction(selected)} disabled={disabled || (!usesScheduledLoanGroup && !selectedLoanId) || splitRemainingCents !== 0}>{busyId === selected.id ? <Loader2 className="animate-spin" /> : <Landmark />}{selected.amount_cents < 0 ? "Post loan draw" : usesScheduledLoanGroup ? "Post allocated payment" : "Post loan payment"}</Button>
                   ) : (
                     <Button size="sm" className="w-full bg-emerald-700 text-white hover:bg-emerald-800" onClick={() => review(selected)} disabled={disabled || !bookkeepingAccountIds[selected.id]}>{busyId === selected.id ? <Loader2 className="animate-spin" /> : <Check />}Approve</Button>
                   )}
@@ -1103,22 +1154,17 @@ function parseDate(value: string) { return new Date(`${value}T12:00:00`); }
 function toDateKey(date: Date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; }
 function currentMonthKey() { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`; }
 function formatMonth(value: string) { const [year, month] = value.split("-").map(Number); return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(new Date(year, month - 1, 1)); }
+function matchingLoans(transaction: FinancialTransaction, loans: FinancialTransactionDashboardData["loans"]) {
+  const description = [transaction.name, transaction.merchant_name, transaction.original_description]
+    .filter(Boolean).join(" ").toLowerCase();
+  return loans.filter((loan) => description.includes(loan.lenderName.toLowerCase()) ||
+    transaction.bookkeeping_account_id === loan.bookkeepingAccountId);
+}
+
 function formatCurrency(cents: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100); }
 function formatSignedCurrency(cents: number) { return `${cents > 0 ? "+" : cents < 0 ? "−" : ""}${formatCurrency(Math.abs(cents))}`; }
 function dollarsFromCents(cents: number) { return (cents / 100).toFixed(2); }
 function inputCents(value: string | undefined, fallback: number) { if (value === undefined) return fallback; const amount = Number(value); return Number.isFinite(amount) ? Math.round(amount * 100) : 0; }
-function loanSplitDefaults(loan: FinancialTransactionDashboardData["loans"][number] | null, totalCents: number, transactionDate?: string) {
-  const scheduled = loan?.schedule
-    .filter((entry) => entry.paymentCents === totalCents)
-    .map((entry) => ({ entry, distance: transactionDate ? Math.abs(parseDate(entry.dueDate).getTime() - parseDate(transactionDate).getTime()) : Number.POSITIVE_INFINITY }))
-    .filter(({ distance }) => distance <= 7 * 24 * 60 * 60 * 1000)
-    .sort((a, b) => a.distance - b.distance)[0]?.entry;
-  if (scheduled) return { principal: scheduled.principalCents, interest: scheduled.interestCents, fee: scheduled.feeCents };
-  const lastTotal = (loan?.lastPrincipalCents ?? 0) + (loan?.lastInterestCents ?? 0) + (loan?.lastFeeCents ?? 0);
-  return loan && lastTotal === totalCents
-    ? { principal: loan.lastPrincipalCents ?? totalCents, interest: loan.lastInterestCents ?? 0, fee: loan.lastFeeCents ?? 0 }
-    : { principal: totalCents, interest: 0, fee: 0 };
-}
 function formatSignedAmount(cents: number) { return `${cents < 0 ? "+" : "−"}${formatCurrency(Math.abs(cents))}`; }
 function formatSignedTotal(items: FinancialTransaction[]) { const total = items.reduce((sum, item) => sum + item.amount_cents, 0); return formatSignedAmount(total); }
 function formatDateOnly(value: string) { return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(parseDate(value)); }

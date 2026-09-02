@@ -43,11 +43,13 @@ const transferSchema = z.object({
 });
 const loanTransactionSchema = z.object({
   transactionId: z.string().uuid(),
-  loanId: z.string().uuid(),
   activityKind: z.enum(["payment", "draw"]),
-  principalCents: z.number().int().nonnegative(),
-  interestCents: z.number().int().nonnegative(),
-  feeCents: z.number().int().nonnegative(),
+  allocations: z.array(z.object({
+    loanId: z.string().uuid(),
+    principalCents: z.number().int().nonnegative(),
+    interestCents: z.number().int().nonnegative(),
+    feeCents: z.number().int().nonnegative(),
+  })).min(1).max(20),
   interestAccountId: z.string().uuid().nullable().optional(),
   feeAccountId: z.string().uuid().nullable().optional(),
   note: z.string().trim().max(1000).nullable().optional(),
@@ -125,7 +127,7 @@ export async function getFinancialTransactionDashboardData(): Promise<
 
   const { data: loans, error: loanError } = await supabase
     .from("financial_loans")
-    .select("id, name, lender_name, loan_type, account_reference, bookkeeping_account_id, current_balance_cents, scheduled_payment_cents, payment_frequency")
+    .select("id, name, lender_name, loan_type, account_reference, bookkeeping_account_id, current_balance_cents, scheduled_payment_cents, payment_frequency, interest_method")
     .eq("practice_id", practiceId)
     .eq("status", "active")
     .order("lender_name")
@@ -237,6 +239,7 @@ export async function getFinancialTransactionDashboardData(): Promise<
     currentBalanceCents: Number(loan.current_balance_cents),
     scheduledPaymentCents: loan.scheduled_payment_cents === null ? null : Number(loan.scheduled_payment_cents),
     paymentFrequency: loan.payment_frequency as string | null,
+    interestMethod: loan.interest_method as string,
     lastPrincipalCents: latestPaymentByLoan.get(loan.id as string)?.principal ?? null,
     lastInterestCents: latestPaymentByLoan.get(loan.id as string)?.interest ?? null,
     lastFeeCents: latestPaymentByLoan.get(loan.id as string)?.fee ?? null,
@@ -270,11 +273,19 @@ export async function getFinancialTransactionDashboardData(): Promise<
       typedTransactions.flatMap((transaction) => {
         const haystack = [transaction.name, transaction.merchant_name, transaction.original_description]
           .filter(Boolean).join(" ").toLowerCase();
-        const match = loanSummaries.find((loan) =>
+        const transactionTime = new Date(`${transaction.transaction_date}T12:00:00`).getTime();
+        const scheduledMatch = transaction.amount_cents > 0
+          ? loanSummaries.find((loan) => loan.schedule.some((entry) =>
+              entry.paymentCents === transaction.amount_cents &&
+              Math.abs(new Date(`${entry.dueDate}T12:00:00`).getTime() - transactionTime) <= 7 * 24 * 60 * 60 * 1000,
+            ))
+          : null;
+        const exactMatch = loanSummaries.find((loan) =>
           (loan.accountReference && haystack.includes(loan.accountReference.toLowerCase())) ||
-          haystack.includes(loan.lenderName.toLowerCase()) ||
           haystack.includes(loan.name.toLowerCase()),
         );
+        const lenderMatches = loanSummaries.filter((loan) => haystack.includes(loan.lenderName.toLowerCase()));
+        const match = scheduledMatch ?? exactMatch ?? (lenderMatches.length === 1 ? lenderMatches[0] : null);
         return match ? [[transaction.id, match.id]] : [];
       }),
     ),
@@ -544,21 +555,25 @@ export async function reviewFinancialLoanTransaction(input: unknown) {
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid loan transaction" };
   }
-  if (parsed.data.interestCents > 0 && !parsed.data.interestAccountId) {
+  const interestCents = parsed.data.allocations.reduce((sum, allocation) => sum + allocation.interestCents, 0);
+  const feeCents = parsed.data.allocations.reduce((sum, allocation) => sum + allocation.feeCents, 0);
+  if (interestCents > 0 && !parsed.data.interestAccountId) {
     return { error: "Choose an interest expense account" };
   }
-  if (parsed.data.feeCents > 0 && !parsed.data.feeAccountId) {
+  if (feeCents > 0 && !parsed.data.feeAccountId) {
     return { error: "Choose a fee expense account" };
   }
   const { supabase, userId, practiceId } = await requireFinancialAccess();
-  const { error } = await supabase.rpc("post_financial_loan_transaction", {
+  const { error } = await supabase.rpc("post_financial_loan_allocations", {
     p_practice_id: practiceId,
     p_transaction_id: parsed.data.transactionId,
-    p_loan_id: parsed.data.loanId,
     p_activity_kind: parsed.data.activityKind,
-    p_principal_cents: parsed.data.principalCents,
-    p_interest_cents: parsed.data.interestCents,
-    p_fee_cents: parsed.data.feeCents,
+    p_allocations: parsed.data.allocations.map((allocation) => ({
+      loan_id: allocation.loanId,
+      principal_cents: allocation.principalCents,
+      interest_cents: allocation.interestCents,
+      fee_cents: allocation.feeCents,
+    })),
     p_interest_account_id: parsed.data.interestAccountId ?? null,
     p_fee_account_id: parsed.data.feeAccountId ?? null,
     p_review_note: parsed.data.note || null,

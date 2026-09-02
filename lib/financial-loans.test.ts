@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { availableCredit, creditUtilization, loanProgress, suggestedLoanPaymentAllocations, suggestedLoanPaymentSplit } from "@/lib/financial-loans";
+import { availableCredit, creditUtilization, loanProgress, suggestedLoanPayment, suggestedLoanPaymentAllocations, suggestedLoanPaymentSplit } from "@/lib/financial-loans";
 
 test("line of credit utilization uses the revolving credit limit", () => {
   const loan = { creditLimitCents: 3000000, availableCreditCents: null, currentBalanceCents: 2002720 };
@@ -33,6 +33,40 @@ test("uses the exact nearby amortization split", () => {
     schedule: [{ dueDate: "2026-08-13", paymentCents: 126575, principalCents: 95825, interestCents: 30750, feeCents: 0 }],
   }, 126575, "2026-08-13");
   assert.deepEqual(split, { principal: 95825, interest: 30750, fee: 0 });
+});
+
+test("uses a monthly installment paid up to two weeks early and marks it as estimated", () => {
+  const suggestion = suggestedLoanPayment({
+    interestMethod: "amortizing",
+    paymentFrequency: "monthly",
+    schedule: [{ dueDate: "2026-09-09", paymentCents: 95386, principalCents: 89869, interestCents: 5517, feeCents: 0 }],
+  }, 95386, "2026-08-31");
+
+  assert.deepEqual(suggestion, {
+    split: { principal: 89869, interest: 5517, fee: 0 },
+    basis: "early_schedule",
+    dueDate: "2026-09-09",
+  });
+});
+
+test("leaves an unmatched interest-bearing payment unallocated", () => {
+  const suggestion = suggestedLoanPayment({
+    interestMethod: "amortizing",
+    paymentFrequency: "monthly",
+    schedule: [{ dueDate: "2026-10-09", paymentCents: 95386, principalCents: 90541, interestCents: 4845, feeCents: 0 }],
+  }, 95386, "2026-08-31");
+
+  assert.deepEqual(suggestion, {
+    split: { principal: 0, interest: 0, fee: 0 },
+    basis: "unavailable",
+  });
+});
+
+test("treats payments on verified interest-free loans as principal", () => {
+  assert.deepEqual(suggestedLoanPaymentSplit({
+    interestMethod: "interest_free",
+    schedule: [],
+  }, 25000, "2026-08-31"), { principal: 25000, interest: 0, fee: 0 });
 });
 
 test("prorates a split payment and preserves every cent", () => {

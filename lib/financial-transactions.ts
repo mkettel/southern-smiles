@@ -194,6 +194,39 @@ export function normalizeVendorName(value: string) {
     .slice(0, 300);
 }
 
+export function transactionRuleFingerprint(
+  transaction: Pick<
+    FinancialTransaction,
+    "name" | "merchant_name" | "counterparty_name" | "original_description"
+  >,
+) {
+  const source = transaction.original_description ?? transaction.name;
+  return normalizeVendorName(source)
+    .split(" ")
+    .filter((token) => !/\d/.test(token))
+    .join(" ")
+    .slice(0, 300);
+}
+
+export function isAutoApprovalEligibleTransaction(
+  transaction: Pick<
+    FinancialTransaction,
+    | "amount_cents"
+    | "pending"
+    | "name"
+    | "merchant_name"
+    | "counterparty_name"
+    | "original_description"
+  >,
+) {
+  if (transaction.pending || transaction.amount_cents <= 0) return false;
+  const fingerprint = transactionRuleFingerprint(transaction);
+  if (fingerprint.length < 8 || fingerprint.split(" ").length < 3) return false;
+  return !/(^| )(online transfer|wire transfer|credit card payment|loan payment|mortgage payment|payment thank you|epayment ach pmt|zelle|line of credit)( |$)/.test(
+    fingerprint,
+  );
+}
+
 export function findMatchingBookkeepingAccountId(
   normalizedVendor: string,
   rules: Array<{
@@ -214,6 +247,28 @@ export function findMatchingBookkeepingAccountId(
     )
     .sort((left, right) => right.normalizedVendor.length - left.normalizedVendor.length)[0]
     ?.bookkeepingAccountId;
+}
+
+export function findBestMatchingBookkeepingAccountId(
+  normalizedCandidates: string[],
+  rules: Array<{
+    normalizedVendor: string;
+    bookkeepingAccountId: string;
+    matchType: FinancialRuleMatchType;
+  }>,
+) {
+  return rules
+    .filter((rule) =>
+      normalizedCandidates.some((candidate) =>
+        rule.matchType === "exact"
+          ? candidate === rule.normalizedVendor
+          : candidate.includes(rule.normalizedVendor),
+      ),
+    )
+    .sort((left, right) =>
+      right.normalizedVendor.length - left.normalizedVendor.length ||
+      Number(right.matchType === "exact") - Number(left.matchType === "exact"),
+    )[0]?.bookkeepingAccountId;
 }
 
 export function calculateTransactionTotals(

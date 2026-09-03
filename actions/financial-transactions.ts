@@ -4,8 +4,10 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
   calculateTransactionTotals,
-  findMatchingBookkeepingAccountId,
+  findBestMatchingBookkeepingAccountId,
+  isAutoApprovalEligibleTransaction,
   normalizeVendorName,
+  transactionRuleFingerprint,
   transactionDisplayName,
   type FinancialTransaction,
   type FinancialTransactionDashboardData,
@@ -56,6 +58,41 @@ const loanTransactionSchema = z.object({
 });
 
 const requireFinancialAccess = () => requireMemberModuleAccess("financial");
+
+type AutoRuleTransaction = Pick<
+  FinancialTransaction,
+  | "account_id"
+  | "amount_cents"
+  | "pending"
+  | "name"
+  | "merchant_name"
+  | "counterparty_name"
+  | "original_description"
+>;
+
+async function confirmAutoApprovalRule({
+  supabase,
+  practiceId,
+  userId,
+  transaction,
+  bookkeepingAccountId,
+}: {
+  supabase: ReturnType<typeof createAdminClient>;
+  practiceId: string;
+  userId: string;
+  transaction: AutoRuleTransaction;
+  bookkeepingAccountId: string;
+}) {
+  if (!transaction.account_id || !isAutoApprovalEligibleTransaction(transaction)) return null;
+  return supabase.rpc("confirm_bookkeeping_auto_rule", {
+    p_practice_id: practiceId,
+    p_financial_account_id: transaction.account_id,
+    p_transaction_fingerprint: transactionRuleFingerprint(transaction),
+    p_direction: "outflow",
+    p_bookkeeping_account_id: bookkeepingAccountId,
+    p_confirmed_by: userId,
+  });
+}
 
 function isSetupMissing(error: { code?: string; message?: string } | null) {
   const message = error?.message?.toLowerCase() ?? "";
@@ -299,9 +336,10 @@ export async function getFinancialTransactionDashboardData(): Promise<
         ]
           .filter((value): value is string => Boolean(value))
           .map(normalizeVendorName);
-        const suggestedAccountId = normalizedCandidates
-          .map((candidate) => findMatchingBookkeepingAccountId(candidate, activeRules))
-          .find((accountId): accountId is string => Boolean(accountId));
+        const suggestedAccountId = findBestMatchingBookkeepingAccountId(
+          normalizedCandidates,
+          activeRules,
+        );
         return suggestedAccountId ? [[transaction.id, suggestedAccountId]] : [];
       }),
     ),
@@ -331,7 +369,7 @@ export async function reviewFinancialTransaction(input: unknown) {
   const now = new Date().toISOString();
   const { data: transaction, error: transactionError } = await supabase
     .from("financial_transactions")
-    .select("id, account_id, name, merchant_name, counterparty_name")
+    .select("id, account_id, amount_cents, pending, name, merchant_name, counterparty_name, original_description")
     .eq("id", parsed.data.transactionId)
     .eq("practice_id", practiceId)
     .eq("is_removed", false)
@@ -411,6 +449,17 @@ export async function reviewFinancialTransaction(input: unknown) {
         { onConflict: "practice_id,normalized_vendor" },
       );
     if (ruleError) return { error: ruleError.message };
+
+    const autoRuleResult = await confirmAutoApprovalRule({
+      supabase,
+      practiceId,
+      userId,
+      transaction: transaction as AutoRuleTransaction,
+      bookkeepingAccountId: parsed.data.accountId,
+    });
+    if (autoRuleResult?.error) {
+      return { error: `Transaction posted, but its auto-approval rule could not be updated: ${autoRuleResult.error.message}` };
+    }
   }
 
   revalidatePath("/admin/financial-transactions");
@@ -439,7 +488,7 @@ export async function reviewFinancialTransactions(input: unknown) {
 
   const { data: transactions, error: transactionError } = await supabase
     .from("financial_transactions")
-    .select("id, account_id, name, merchant_name, counterparty_name, review_status")
+    .select("id, account_id, amount_cents, pending, name, merchant_name, counterparty_name, original_description, review_status")
     .eq("practice_id", practiceId)
     .eq("is_removed", false)
     .in("id", [...requestedById.keys()]);
@@ -517,6 +566,25 @@ export async function reviewFinancialTransactions(input: unknown) {
       .from("bookkeeping_vendor_rules")
       .upsert(rules, { onConflict: "practice_id,normalized_vendor" });
     if (ruleError) errors.push({ transactionId: null, message: `Transactions posted, but vendor rules could not be updated: ${ruleError.message}` });
+  }
+
+  for (const transactionId of reviewedIds) {
+    const transaction = transactionById.get(transactionId);
+    const requested = requestedById.get(transactionId);
+    if (!transaction || !requested) continue;
+    const autoRuleResult = await confirmAutoApprovalRule({
+      supabase,
+      practiceId,
+      userId,
+      transaction: transaction as AutoRuleTransaction,
+      bookkeepingAccountId: requested.accountId,
+    });
+    if (autoRuleResult?.error) {
+      errors.push({
+        transactionId,
+        message: `Transaction posted, but its auto-approval rule could not be updated: ${autoRuleResult.error.message}`,
+      });
+    }
   }
 
   revalidatePath("/admin/financial-transactions");

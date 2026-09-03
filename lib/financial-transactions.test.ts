@@ -4,9 +4,12 @@ import type { Transaction } from "plaid";
 import {
   calculateCashMovement,
   calculateTransactionTotals,
+  findBestMatchingBookkeepingAccountId,
   findMatchingBookkeepingAccountId,
+  isAutoApprovalEligibleTransaction,
   mapPlaidTransaction,
   normalizeVendorName,
+  transactionRuleFingerprint,
   transactionDisplayName,
   type FinancialTransaction,
 } from "@/lib/financial-transactions";
@@ -128,5 +131,65 @@ test("exact rules take priority over broader contains rules", () => {
       },
     ]),
     "exact",
+  );
+});
+
+test("specific description rules beat a generic merchant rule", () => {
+  assert.equal(
+    findBestMatchingBookkeepingAccountId(
+      ["intuit", "recurring payment intuit qbooks online"],
+      [
+        { normalizedVendor: "intuit", bookkeepingAccountId: "payroll", matchType: "exact" },
+        { normalizedVendor: "intuit qbooks", bookkeepingAccountId: "software", matchType: "contains" },
+      ],
+    ),
+    "software",
+  );
+});
+
+test("transaction fingerprints remove changing dates and reference numbers", () => {
+  const first = {
+    name: "Intuit",
+    merchant_name: "Intuit",
+    counterparty_name: null,
+    original_description: "RECURRING PAYMENT AUTHORIZED ON 08/16 INTUIT *QBooks Onl S586228473898608 CARD 9389",
+  };
+  const second = {
+    ...first,
+    original_description: "RECURRING PAYMENT AUTHORIZED ON 09/16 INTUIT *QBooks Onl S991234567890123 CARD 9389",
+  };
+
+  assert.equal(transactionRuleFingerprint(first), transactionRuleFingerprint(second));
+  assert.equal(
+    transactionRuleFingerprint(first),
+    "recurring payment authorized on intuit qbooks onl card",
+  );
+});
+
+test("auto approval accepts recurring expenses but rejects transfers and loan payments", () => {
+  const recurringExpense = {
+    amount_cents: 14183,
+    pending: false,
+    name: "Intuit",
+    merchant_name: "Intuit",
+    counterparty_name: null,
+    original_description: "RECURRING PAYMENT AUTHORIZED ON 08/16 INTUIT QBooks Online CARD 9389",
+  };
+  assert.equal(isAutoApprovalEligibleTransaction(recurringExpense), true);
+  assert.equal(
+    isAutoApprovalEligibleTransaction({
+      ...recurringExpense,
+      name: "American Express",
+      original_description: "BUSINESS TO BUSINESS ACH AMEX EPAYMENT ACH PMT 260831",
+    }),
+    false,
+  );
+  assert.equal(
+    isAutoApprovalEligibleTransaction({
+      ...recurringExpense,
+      name: "Wells Fargo",
+      original_description: "ONLINE TRANSFER TO CHECKING XXXXXX6378 REF IB0ZHT2LPK",
+    }),
+    false,
   );
 });

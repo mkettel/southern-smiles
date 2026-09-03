@@ -12,7 +12,7 @@ export default async function FinancialRulesPage() {
   return (
     <FinancialWorkspaceShell active="rules">
       <div className="mb-5"><h2 className="text-lg font-semibold">Categorization rules</h2><p className="mt-1 text-sm text-muted-foreground">Vendor rules are learned when you approve transactions. Change the destination here to update future suggestions.</p></div>
-      <FinancialRulesTable rules={data.rules} accounts={data.accounts} />
+      <FinancialRulesTable rules={data.rules} autoRules={data.autoRules} accounts={data.accounts} />
     </FinancialWorkspaceShell>
   );
 }

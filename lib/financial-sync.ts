@@ -12,7 +12,12 @@ import {
   type FinancialAccount,
 } from "@/lib/financial-connections";
 import { decryptFinancialToken } from "@/lib/financial-token-crypto";
-import { mapPlaidTransaction } from "@/lib/financial-transactions";
+import {
+  isAutoApprovalEligibleTransaction,
+  mapPlaidTransaction,
+  transactionRuleFingerprint,
+  type FinancialTransaction,
+} from "@/lib/financial-transactions";
 import { getPlaidApiErrorDetails, getPlaidClient } from "@/lib/plaid-client";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -282,6 +287,74 @@ export interface FinancialTransactionSyncResult {
   status: "not_enabled" | "pending" | "ready";
 }
 
+async function autoApproveImportedTransactions({
+  supabase,
+  practiceId,
+  connectionId,
+  providerTransactionIds,
+}: {
+  supabase: AdminClient;
+  practiceId: string;
+  connectionId: string;
+  providerTransactionIds: string[];
+}) {
+  if (!providerTransactionIds.length) return;
+  const { data: transactions, error: transactionError } = await supabase
+    .from("financial_transactions")
+    .select("id, account_id, amount_cents, pending, name, merchant_name, counterparty_name, original_description")
+    .eq("practice_id", practiceId)
+    .eq("connection_id", connectionId)
+    .eq("review_status", "pending")
+    .eq("is_removed", false)
+    .in("provider_transaction_id", providerTransactionIds);
+  if (transactionError) throw new Error(transactionError.message);
+
+  const eligibleTransactions = (transactions ?? []).filter((transaction) =>
+    transaction.account_id &&
+    isAutoApprovalEligibleTransaction(transaction as Pick<
+      FinancialTransaction,
+      "amount_cents" | "pending" | "name" | "merchant_name" | "counterparty_name" | "original_description"
+    >),
+  );
+  const financialAccountIds = [...new Set(
+    eligibleTransactions.map((transaction) => transaction.account_id as string),
+  )];
+  if (!financialAccountIds.length) return;
+
+  const { data: rules, error: ruleError } = await supabase
+    .from("bookkeeping_auto_rules")
+    .select("financial_account_id, transaction_fingerprint, direction, bookkeeping_account_id")
+    .eq("practice_id", practiceId)
+    .eq("direction", "outflow")
+    .eq("is_enabled", true)
+    .in("financial_account_id", financialAccountIds);
+  if (ruleError) throw new Error(ruleError.message);
+
+  const accountIdByRuleKey = new Map(
+    (rules ?? []).map((rule) => [
+      `${rule.financial_account_id as string}:${rule.transaction_fingerprint as string}`,
+      rule.bookkeeping_account_id as string,
+    ]),
+  );
+  for (const transaction of eligibleTransactions) {
+    const bookkeepingAccountId = accountIdByRuleKey.get(
+      `${transaction.account_id as string}:${transactionRuleFingerprint(transaction as Pick<
+        FinancialTransaction,
+        "name" | "merchant_name" | "counterparty_name" | "original_description"
+      >)}`,
+    );
+    if (!bookkeepingAccountId) continue;
+    const { error } = await supabase.rpc("post_categorized_financial_transaction", {
+      p_practice_id: practiceId,
+      p_transaction_id: transaction.id as string,
+      p_bookkeeping_account_id: bookkeepingAccountId,
+      p_review_note: "Auto-approved after 3 matching confirmations",
+      p_reviewed_by: null,
+    });
+    if (error) throw new Error(error.message);
+  }
+}
+
 export async function syncFinancialTransactions({
   supabase,
   connectionId,
@@ -344,6 +417,13 @@ export async function syncFinancialTransactions({
         .from("financial_transactions")
         .upsert(rows, { onConflict: "connection_id,provider_transaction_id" });
       if (upsertError) throw new Error(upsertError.message);
+
+      await autoApproveImportedTransactions({
+        supabase,
+        practiceId,
+        connectionId,
+        providerTransactionIds: changedTransactions.map((transaction) => transaction.transaction_id),
+      });
     }
 
     const removedIds = [...new Set(batch.removedIds)];

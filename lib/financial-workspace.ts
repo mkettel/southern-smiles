@@ -11,6 +11,15 @@ export interface FinancialWorkspaceRule {
   updatedAt: string;
 }
 
+export interface FinancialWorkspaceAutoRule {
+  id: string;
+  fingerprint: string;
+  bookkeepingAccountId: string;
+  confirmationCount: number;
+  isEnabled: boolean;
+  updatedAt: string;
+}
+
 export interface FinancialWorkspaceMonth {
   key: string;
   label: string;
@@ -49,6 +58,7 @@ export interface FinancialWorkspaceData {
   expenseBreakdown: Array<{ name: string; amountCents: number }>;
   accounts: BookkeepingAccount[];
   rules: FinancialWorkspaceRule[];
+  autoRules: FinancialWorkspaceAutoRule[];
 }
 
 export interface FinancialWorkspaceMonthFrame {

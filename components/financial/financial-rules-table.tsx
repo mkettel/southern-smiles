@@ -4,15 +4,15 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { deleteFinancialRule, updateFinancialRule } from "@/actions/financial-workspace";
+import { deleteFinancialRule, setBookkeepingAutoRuleEnabled, updateFinancialRule } from "@/actions/financial-workspace";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { BookkeepingAccount } from "@/lib/financial-transactions";
-import type { FinancialWorkspaceRule } from "@/lib/financial-workspace";
+import type { FinancialWorkspaceAutoRule, FinancialWorkspaceRule } from "@/lib/financial-workspace";
 
-export function FinancialRulesTable({ rules, accounts }: { rules: FinancialWorkspaceRule[]; accounts: BookkeepingAccount[] }) {
+export function FinancialRulesTable({ rules, autoRules, accounts }: { rules: FinancialWorkspaceRule[]; autoRules: FinancialWorkspaceAutoRule[]; accounts: BookkeepingAccount[] }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -50,8 +50,39 @@ export function FinancialRulesTable({ rules, accounts }: { rules: FinancialWorks
     startTransition(() => router.refresh());
   }
 
+  async function toggleAutoRule(ruleId: string, isEnabled: boolean) {
+    setBusyId(ruleId);
+    const result = await setBookkeepingAutoRuleEnabled({ ruleId, isEnabled });
+    setBusyId(null);
+    if (result.error) return toast.error(result.error);
+    toast.success(isEnabled ? "Automatic approval enabled" : "Automatic approval paused");
+    startTransition(() => router.refresh());
+  }
+
   return (
     <div className="space-y-4">
+      {autoRules.length > 0 && (
+        <div className="overflow-hidden rounded-lg border bg-card">
+          <div className="border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">Automatic approvals</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">Enabled after three matching approvals. Loans and transfers are never included.</p>
+          </div>
+          <Table>
+            <TableHeader><TableRow className="bg-muted/40 hover:bg-muted/40"><TableHead>Transaction pattern</TableHead><TableHead>Send to</TableHead><TableHead>Confirmed</TableHead><TableHead className="w-24">Active</TableHead></TableRow></TableHeader>
+            <TableBody>
+              {autoRules.map((rule) => {
+                const account = accounts.find((entry) => entry.id === rule.bookkeepingAccountId);
+                return <TableRow key={rule.id}>
+                  <TableCell className="max-w-[420px] font-medium capitalize">{rule.fingerprint}</TableCell>
+                  <TableCell>{account ? `${account.accountNumber ? `${account.accountNumber} ` : ""}${account.name}` : "Unknown account"}</TableCell>
+                  <TableCell>{rule.confirmationCount} of 3</TableCell>
+                  <TableCell><input type="checkbox" role="switch" aria-label={`Automatic approval for ${rule.fingerprint}`} checked={rule.isEnabled} disabled={isPending || busyId !== null} onChange={(event) => toggleAutoRule(rule.id, event.target.checked)} className="h-4 w-4 accent-primary" /></TableCell>
+                </TableRow>;
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
       <div className="relative max-w-md">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search vendor rules" className="pl-9" />

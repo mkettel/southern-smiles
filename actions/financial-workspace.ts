@@ -9,6 +9,7 @@ import {
   financialWorkspaceMonthCount,
   getFinancialWorkspaceMonthFrames,
   type FinancialWorkspaceActivity,
+  type FinancialWorkspaceAutoRule,
   type FinancialWorkspaceData,
   type FinancialWorkspaceRule,
 } from "@/lib/financial-workspace";
@@ -19,6 +20,7 @@ const updateRuleSchema = z.object({
   bookkeepingAccountId: z.string().uuid(),
 });
 const ruleIdSchema = z.string().uuid();
+const autoRuleSchema = z.object({ ruleId: z.string().uuid(), isEnabled: z.boolean() });
 const bookkeepingAccountSchema = z.object({
   accountNumber: z.string().trim().max(40, "Account number must be 40 characters or fewer"),
   name: z.string().trim().min(1, "Account name is required").max(200, "Account name must be 200 characters or fewer"),
@@ -37,13 +39,16 @@ export async function getFinancialWorkspaceData(): Promise<FinancialWorkspaceDat
   const today = new Date();
   const currentFrame = getFinancialWorkspaceMonthFrames(today, 1)[0];
 
-  const [accountResult, ruleResult, connectionResult, financialAccountResult, overdueResult] = await Promise.all([
+  const [accountResult, ruleResult, autoRuleResult, connectionResult, financialAccountResult, overdueResult] = await Promise.all([
     supabase.from("bookkeeping_accounts")
       .select("id, account_number, name, account_type, detail_type, external_source")
       .eq("practice_id", practiceId).eq("is_active", true)
       .order("account_type").order("account_number", { nullsFirst: false }).order("name"),
     supabase.from("bookkeeping_vendor_rules")
       .select("id, normalized_vendor, match_type, bookkeeping_account_id, source, sample_count, confidence, updated_at")
+      .eq("practice_id", practiceId).order("updated_at", { ascending: false }),
+    supabase.from("bookkeeping_auto_rules")
+      .select("id, transaction_fingerprint, bookkeeping_account_id, confirmation_count, is_enabled, updated_at")
       .eq("practice_id", practiceId).order("updated_at", { ascending: false }),
     supabase.from("financial_connections")
       .select("id, transactions_last_synced_at")
@@ -54,7 +59,7 @@ export async function getFinancialWorkspaceData(): Promise<FinancialWorkspaceDat
       .eq("practice_id", practiceId).eq("status", "unpaid").lt("due_date", toPhoenixDate(today)),
   ]);
 
-  for (const result of [accountResult, ruleResult, connectionResult, financialAccountResult, overdueResult]) {
+  for (const result of [accountResult, ruleResult, autoRuleResult, connectionResult, financialAccountResult, overdueResult]) {
     if (result.error) throw new Error(result.error.message);
   }
   const includedAccountIds = (financialAccountResult.data ?? []).map((account) => account.id as string);
@@ -82,6 +87,14 @@ export async function getFinancialWorkspaceData(): Promise<FinancialWorkspaceDat
     source: rule.source as FinancialWorkspaceRule["source"],
     sampleCount: rule.sample_count as number,
     confidence: Number(rule.confidence),
+    updatedAt: rule.updated_at as string,
+  }));
+  const autoRules: FinancialWorkspaceAutoRule[] = (autoRuleResult.data ?? []).map((rule) => ({
+    id: rule.id as string,
+    fingerprint: rule.transaction_fingerprint as string,
+    bookkeepingAccountId: rule.bookkeeping_account_id as string,
+    confirmationCount: rule.confirmation_count as number,
+    isEnabled: rule.is_enabled as boolean,
     updatedAt: rule.updated_at as string,
   }));
   const accountById = new Map(accounts.map((account) => [account.id, account]));
@@ -148,6 +161,7 @@ export async function getFinancialWorkspaceData(): Promise<FinancialWorkspaceDat
       .sort((a, b) => b.amountCents - a.amountCents).slice(0, 8),
     accounts,
     rules,
+    autoRules,
   };
 }
 
@@ -306,6 +320,18 @@ export async function deleteFinancialRule(ruleId: string) {
   const { supabase, practiceId } = await requireFinancialAccess();
   const { error } = await supabase.from("bookkeeping_vendor_rules").delete()
     .eq("id", parsed.data).eq("practice_id", practiceId);
+  if (error) return { error: error.message };
+  revalidateFinancialWorkspace();
+  return { success: true };
+}
+
+export async function setBookkeepingAutoRuleEnabled(input: unknown) {
+  const parsed = autoRuleSchema.safeParse(input);
+  if (!parsed.success) return { error: "Invalid automatic rule update" };
+  const { supabase, practiceId } = await requireFinancialAccess();
+  const { error } = await supabase.from("bookkeeping_auto_rules")
+    .update({ is_enabled: parsed.data.isEnabled, updated_at: new Date().toISOString() })
+    .eq("id", parsed.data.ruleId).eq("practice_id", practiceId);
   if (error) return { error: error.message };
   revalidateFinancialWorkspace();
   return { success: true };

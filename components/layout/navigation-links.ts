@@ -11,6 +11,7 @@ import {
   ClipboardList,
   Download,
   FileText,
+  Gamepad2,
   Landmark,
   LayoutDashboard,
   MessageSquarePlus,
@@ -33,6 +34,7 @@ export const sharedLinks: NavLink[] = [
   { href: "/dashboard", label: "OIC", icon: LayoutDashboard, moduleKey: "operations" },
   { href: "/stats", label: "Stats", icon: BarChart3, moduleKey: "stats" },
   { href: "/tasks", label: "My Tasks", icon: CheckSquare, moduleKey: "tasks" },
+  { href: "/games", label: "Survival Game", icon: Gamepad2 },
   { href: "/oic-log", label: "Action Log", icon: FileText, moduleKey: "oic_log" },
   { href: "/org-board", label: "Org Board", icon: Network, moduleKey: "org_board" },
 ];

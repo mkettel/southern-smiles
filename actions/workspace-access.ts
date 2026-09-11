@@ -2,9 +2,12 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { getCurrentPracticeId } from "@/lib/practice";
 import {
   getWorkspaceHomeHref,
+  isWorkspaceType,
+  resolvePlanForWorkspaceType,
   resolveWorkspaceAccess,
   type ModuleKey,
   type WorkspaceAccess,
@@ -62,4 +65,57 @@ export async function requireWorkspaceModulePage(moduleKey: ModuleKey) {
     redirect(`${getWorkspaceHomeHref(access)}?feature=unavailable`);
   }
   return access;
+}
+
+export async function updateWorkspaceType(input: { workspaceType: string }) {
+  if (!isWorkspaceType(input.workspaceType)) {
+    return { error: "Choose a valid workspace type" } as const;
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" } as const;
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, practice_id")
+    .eq("id", user.id)
+    .single();
+  if (profile?.role !== "admin" || !profile.practice_id) {
+    return { error: "Admin access required" } as const;
+  }
+
+  const { data: current, error: readError } = await supabase
+    .from("practice_product_settings")
+    .select("plan_key")
+    .eq("practice_id", profile.practice_id)
+    .maybeSingle();
+
+  if (readError?.code === "42P01") {
+    return {
+      error:
+        "Workspace settings are not set up yet. Apply the workspace entitlements migration first.",
+    } as const;
+  }
+
+  const planKey = resolvePlanForWorkspaceType(input.workspaceType, current?.plan_key);
+
+  const { error } = await supabase
+    .from("practice_product_settings")
+    .upsert(
+      {
+        practice_id: profile.practice_id,
+        workspace_type: input.workspaceType,
+        plan_key: planKey,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "practice_id" },
+    );
+
+  if (error) return { error: error.message } as const;
+
+  revalidatePath("/", "layout");
+  return { success: true, workspaceType: input.workspaceType, planKey } as const;
 }

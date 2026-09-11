@@ -164,3 +164,76 @@ export function getWorkspaceHomeHref(access: WorkspaceAccess): string {
   if (access.modules.financial) return "/admin/financial";
   return "/profile";
 }
+
+export interface WorkspaceTypeOption {
+  value: WorkspaceType;
+  label: string;
+  description: string;
+  defaultPlan: PlanKey;
+}
+
+export const WORKSPACE_TYPE_OPTIONS: readonly WorkspaceTypeOption[] = [
+  {
+    value: "dental_practice",
+    label: "Dental Practice",
+    description:
+      "Weekly stats and conditions, procedure costs, supplies, patient surveys, and financing.",
+    defaultPlan: "dental_growth",
+  },
+  {
+    value: "household",
+    label: "Household",
+    description:
+      "Personal budgeting: connected accounts, bills, budget, and shared tasks.",
+    defaultPlan: "household",
+  },
+  {
+    value: "general_business",
+    label: "Business",
+    description:
+      "Stats and conditions, operating costs, bills, financial accounts, and reporting.",
+    defaultPlan: "business_core",
+  },
+];
+
+// Plans that belong to each workspace type. Switching types keeps the current
+// plan when it already fits; otherwise the type's default plan is used.
+const WORKSPACE_PLANS: Record<WorkspaceType, ReadonlySet<PlanKey>> = {
+  dental_practice: new Set(["legacy", "dental_core", "dental_growth"]),
+  household: new Set(["household"]),
+  general_business: new Set(["business_core"]),
+};
+
+export function resolvePlanForWorkspaceType(
+  workspaceType: WorkspaceType,
+  currentPlan?: unknown,
+): PlanKey {
+  if (isPlanKey(currentPlan) && WORKSPACE_PLANS[workspaceType].has(currentPlan)) {
+    return currentPlan;
+  }
+  const option = WORKSPACE_TYPE_OPTIONS.find((o) => o.value === workspaceType);
+  return option?.defaultPlan ?? "legacy";
+}
+
+export const MODULE_LABELS: Record<ModuleKey, string> = {
+  operations: "Operations",
+  stats: "Stats",
+  tasks: "Tasks",
+  oic_log: "Action Log",
+  org_board: "Org Board",
+  command_center: "Command Center",
+  budgeting: "Overhead",
+  procedure_costs: "Procedure Costs",
+  supply_management: "Supply Management",
+  bills: "Bills",
+  financial: "Financial",
+  approved_financing: "Approved Financing",
+  patient_surveys: "Patient Surveys",
+  export_analyze: "Export & Analyze",
+  team_access: "Team & Access",
+};
+
+export function getPlanModules(planKey: PlanKey): ModuleKey[] {
+  const included = PLAN_MODULES[planKey];
+  return MODULE_KEYS.filter((moduleKey) => included.has(moduleKey));
+}

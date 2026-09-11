@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/actions/auth";
 import { getPracticeSettings } from "@/actions/settings";
 import { SettingsForm } from "@/components/admin/settings-form";
+import { WorkspaceTypeForm } from "@/components/admin/workspace-type-form";
 import { getWorkspaceAccess } from "@/actions/workspace-access";
 import { getWorkspaceEntityLabel } from "@/lib/workspace-access";
 
@@ -24,6 +25,8 @@ export default async function SettingsPage() {
           Configure your {organizationLabel.toLowerCase()} name, logo, branding, and contact information
         </p>
       </div>
+
+      <WorkspaceTypeForm access={access} />
 
       <SettingsForm settings={settings} organizationLabel={organizationLabel} />
     </div>

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  MODULE_KEYS,
+  getPlanModules,
+  resolvePlanForWorkspaceType,
   getWorkspaceHomeHref,
   getWorkspaceLabel,
   resolveWorkspaceAccess,
@@ -59,4 +62,29 @@ test("unknown database values fall back to the backward-compatible legacy bundle
   assert.equal(access.workspaceType, "dental_practice");
   assert.equal(access.planKey, "legacy");
   assert.equal(Object.values(access.modules).every(Boolean), true);
+});
+
+test("switching workspace type keeps a plan that already fits the type", () => {
+  assert.equal(resolvePlanForWorkspaceType("dental_practice", "legacy"), "legacy");
+  assert.equal(resolvePlanForWorkspaceType("dental_practice", "dental_core"), "dental_core");
+  assert.equal(resolvePlanForWorkspaceType("household", "household"), "household");
+});
+
+test("switching workspace type falls back to the type's default plan", () => {
+  assert.equal(resolvePlanForWorkspaceType("household", "legacy"), "household");
+  assert.equal(resolvePlanForWorkspaceType("general_business", "household"), "business_core");
+  assert.equal(resolvePlanForWorkspaceType("dental_practice", "household"), "dental_growth");
+  assert.equal(resolvePlanForWorkspaceType("dental_practice", undefined), "dental_growth");
+});
+
+test("plan module lists match the plan bundles", () => {
+  assert.deepEqual(getPlanModules("household"), [
+    "operations",
+    "tasks",
+    "budgeting",
+    "bills",
+    "financial",
+    "team_access",
+  ]);
+  assert.equal(getPlanModules("legacy").length, MODULE_KEYS.length);
 });

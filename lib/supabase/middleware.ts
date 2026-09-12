@@ -6,7 +6,8 @@ export async function updateSession(request: NextRequest) {
     process.env.NODE_ENV === "development" &&
     (request.nextUrl.pathname.startsWith("/supply-ordering-preview") ||
       request.nextUrl.pathname.startsWith("/financial-transactions-preview") ||
-      request.nextUrl.pathname.startsWith("/household-finance-preview"));
+      request.nextUrl.pathname.startsWith("/household-finance-preview") ||
+      request.nextUrl.pathname.startsWith("/household-spending-preview"));
   let supabaseResponse = NextResponse.next({
     request,
   });

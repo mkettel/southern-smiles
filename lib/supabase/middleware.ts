@@ -5,7 +5,8 @@ export async function updateSession(request: NextRequest) {
   const isLocalPreview =
     process.env.NODE_ENV === "development" &&
     (request.nextUrl.pathname.startsWith("/supply-ordering-preview") ||
-      request.nextUrl.pathname.startsWith("/financial-transactions-preview"));
+      request.nextUrl.pathname.startsWith("/financial-transactions-preview") ||
+      request.nextUrl.pathname.startsWith("/household-finance-preview"));
   let supabaseResponse = NextResponse.next({
     request,
   });

@@ -93,6 +93,7 @@ const WORKSPACE_LABELS: Partial<
     operations: "Home",
     budgeting: "Budget",
     team_access: "Household & Access",
+    financial: "Finances",
   },
   general_business: {
     budgeting: "Operating Costs",

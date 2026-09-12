@@ -38,7 +38,10 @@ function txn(date: string, amount: number, category: string, overrides: Partial<
 
 test("ranges resolve with an equal-length previous window", () => {
   const thisMonth = resolveSpendingRange("this_month", "2026-09-11");
-  assert.deepEqual([thisMonth.start, thisMonth.end, thisMonth.previousStart, thisMonth.previousEnd], ["2026-09-01", "2026-09-11", "2026-08-21", "2026-08-31"]);
+  assert.deepEqual([thisMonth.start, thisMonth.end, thisMonth.previousStart, thisMonth.previousEnd], ["2026-09-01", "2026-09-11", "2026-08-01", "2026-08-11"]);
+
+  const clamped = resolveSpendingRange("this_month", "2026-03-30");
+  assert.deepEqual([clamped.previousStart, clamped.previousEnd], ["2026-02-01", "2026-02-28"]);
 
   const lastMonth = resolveSpendingRange("last_month", "2026-03-15");
   assert.deepEqual([lastMonth.start, lastMonth.end], ["2026-02-01", "2026-02-28"]);

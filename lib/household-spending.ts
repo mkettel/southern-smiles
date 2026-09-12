@@ -160,6 +160,14 @@ export function resolveSpendingRange(key: SpendingRangeKey, today: string): Spen
       break;
   }
 
+  if (key === "this_month") {
+    // Compare against the same days of last month, not the trailing days.
+    const last = shiftMonthKey(monthKey, -1);
+    const lastEnd = endOfMonth(last);
+    const sameDay = `${last}-${today.slice(8, 10)}`;
+    return { key, label, start, end, previousStart: startOfMonth(last), previousEnd: sameDay < lastEnd ? sameDay : lastEnd };
+  }
+
   const lengthDays = daysInclusive(start, end);
   const previousEnd = addDays(start, -1);
   const previousStart = addDays(previousEnd, -(lengthDays - 1));

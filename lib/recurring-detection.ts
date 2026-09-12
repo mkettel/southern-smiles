@@ -5,7 +5,7 @@
 import {
   accountLabel,
   categoryLabel,
-  isTransferCategory,
+  isTransferTransaction,
   type HouseholdAccountRow,
   type HouseholdTransactionRow,
 } from "@/lib/household-finance";
@@ -115,7 +115,7 @@ export function detectRecurringStreams(input: {
   let earliest: string | null = null;
   for (const txn of input.transactions) {
     if (txn.pending || txn.amount_cents <= 0) continue;
-    if (isTransferCategory(txn.plaid_category_primary)) continue;
+    if (isTransferTransaction(txn)) continue;
     if (!earliest || txn.transaction_date < earliest) earliest = txn.transaction_date;
     const key = recurringStreamKey(txn);
     if (key.length < 3) continue;

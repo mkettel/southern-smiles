@@ -6,7 +6,7 @@ import {
   accountKind,
   accountLabel,
   categoryLabel,
-  isTransferCategory,
+  isTransferTransaction,
   monthKeyOf,
   shiftMonthKey,
   type HouseholdAccountKind,
@@ -173,7 +173,7 @@ export function spendingAccountOptions(accounts: HouseholdAccountRow[]): Spendin
 export function isSpendingTransaction(txn: HouseholdTransactionRow): boolean {
   if (txn.pending || txn.amount_cents === 0) return false;
   const category = (txn.plaid_category_primary ?? "").toUpperCase();
-  if (category === "INCOME" || isTransferCategory(category)) return false;
+  if (category === "INCOME" || isTransferTransaction(txn)) return false;
   return true;
 }
 

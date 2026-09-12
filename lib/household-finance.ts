@@ -173,6 +173,18 @@ export function isTransferCategory(key: string | null | undefined): boolean {
   return FLOW_EXCLUDED_CATEGORIES.has((key ?? "").toUpperCase());
 }
 
+// Some banks report a credit card payment as a loan payment rather than a
+// transfer. It is still money moving between the household's own accounts,
+// and the purchases it covers are already counted on the card.
+const TRANSFER_DETAILED_CATEGORIES = new Set(["LOAN_PAYMENTS_CREDIT_CARD_PAYMENT"]);
+
+export function isTransferTransaction(
+  txn: Pick<HouseholdTransactionRow, "plaid_category_primary" | "plaid_category_detailed">,
+): boolean {
+  if (isTransferCategory(txn.plaid_category_primary)) return true;
+  return TRANSFER_DETAILED_CATEGORIES.has((txn.plaid_category_detailed ?? "").toUpperCase());
+}
+
 export function accountKind(row: Pick<HouseholdAccountRow, "account_type" | "account_subtype">): HouseholdAccountKind {
   const type = row.account_type.toLowerCase();
   const subtype = (row.account_subtype ?? "").toLowerCase();
@@ -269,7 +281,7 @@ export function buildHouseholdFinanceData(input: {
       continue;
     }
     const category = (txn.plaid_category_primary ?? "").toUpperCase();
-    if (isTransferCategory(category)) continue;
+    if (isTransferTransaction(txn)) continue;
 
     const bucket = monthBuckets.get(monthKeyOf(txn.transaction_date));
     if (!bucket) continue;
@@ -391,7 +403,7 @@ export function buildHouseholdFinanceData(input: {
         accountKind: (txn.account_id && kindById.get(txn.account_id)) || "other",
         amountCents: txn.amount_cents,
         pending: txn.pending,
-        isTransfer: isTransferCategory(key),
+        isTransfer: isTransferTransaction(txn),
       };
     });
 

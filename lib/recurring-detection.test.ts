@@ -175,3 +175,35 @@ test("insurance is a bill even when the merchant name alone does not say so", ()
   );
   assert.equal(byDetail.streams[0].kind, "bill");
 });
+
+test("one merchant billing two different amounts becomes two streams", () => {
+  const data = detect([
+    ...monthly("State Farm", 4, [3_248, 3_248, 3_248, 3_248], "2026-06", { plaid_category_detailed: "GENERAL_SERVICES_INSURANCE" }),
+    ...monthly("State Farm", 22, [41_241, 38_873, 38_873, 38_873], "2026-05", { plaid_category_detailed: "GENERAL_SERVICES_INSURANCE" }),
+  ]);
+
+  assert.deepEqual(
+    data.streams.map((stream) => [stream.key, stream.label, stream.cadence, stream.kind, stream.typicalAmountCents]),
+    [
+      ["state farm@389", "State Farm · $388.73", "monthly", "bill", 38_873],
+      ["state farm@32", "State Farm · $32.48", "monthly", "bill", 3_248],
+    ],
+  );
+  assert.equal(data.summary.monthlyCents, 38_873 + 3_248);
+});
+
+test("small usage charges do not break a subscription under the same merchant", () => {
+  const data = detect([
+    ...monthly("Anthropic", 11, [10_888, 10_888, 10_888, 10_888, 10_888], "2026-04"),
+    charge("Anthropic", "2026-04-20", 4_899),
+    charge("Anthropic", "2026-05-14", 544),
+    charge("Anthropic", "2026-05-31", 545),
+    charge("Anthropic", "2026-05-31", 4_899),
+  ]);
+
+  assert.equal(data.streams.length, 1);
+  assert.equal(data.streams[0].key, "anthropic");
+  assert.equal(data.streams[0].label, "Anthropic");
+  assert.equal(data.streams[0].cadence, "monthly");
+  assert.equal(data.streams[0].typicalAmountCents, 10_888);
+});

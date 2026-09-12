@@ -126,8 +126,7 @@ export function detectRecurringStreams(input: {
 
   const streams: RecurringStream[] = [];
   for (const [key, group] of groups) {
-    const stream = analyzeGroup(key, group, input.today, labelsById, overrides[key] ?? "detected");
-    if (stream) streams.push(stream);
+    streams.push(...analyzeGroup(key, group, input.today, labelsById, overrides));
   }
 
   streams.sort(compareStreams);
@@ -160,7 +159,52 @@ export function compareStreams(a: RecurringStream, b: RecurringStream): number {
   return rank(a) - rank(b) || b.monthlyEquivalentCents - a.monthlyEquivalentCents || a.label.localeCompare(b.label);
 }
 
+// Charges from one merchant are split into amount clusters before cadence
+// detection, so an insurer billing two policies, or a subscription plus
+// occasional usage charges under the same name, become separate streams.
+const CLUSTER_GAP_RATIO = 1.35;
+
+function clusterByAmount(group: HouseholdTransactionRow[]): HouseholdTransactionRow[][] {
+  const sorted = [...group].sort((a, b) => a.amount_cents - b.amount_cents);
+  const clusters: HouseholdTransactionRow[][] = [];
+  for (const txn of sorted) {
+    const current = clusters[clusters.length - 1];
+    const previous = current?.[current.length - 1]?.amount_cents ?? 0;
+    // Chain on the previous amount so a bill that drifts up over time stays
+    // together, while a jump of more than a third starts a new cluster.
+    if (current && txn.amount_cents <= Math.max(previous * CLUSTER_GAP_RATIO, previous + 100)) current.push(txn);
+    else clusters.push([txn]);
+  }
+  return clusters;
+}
+
 function analyzeGroup(
+  key: string,
+  group: HouseholdTransactionRow[],
+  today: string,
+  labelsById: Map<string, string>,
+  overrides: Record<string, RecurringOverride>,
+): RecurringStream[] {
+  const clusters = clusterByAmount(group).filter((cluster) => cluster.length >= MIN_OCCURRENCES_FIXED);
+  const results: RecurringStream[] = [];
+  for (const cluster of clusters) {
+    // A merchant with a single qualifying cluster keeps the bare merchant key
+    // so existing confirmations survive; multiple clusters are keyed by their
+    // typical amount in whole dollars.
+    const streamKey = clusters.length === 1 ? key : `${key}@${Math.round(median(cluster.map((txn) => txn.amount_cents)) / 100)}`;
+    const stream = analyzeOccurrences(streamKey, cluster, today, labelsById, overrides[streamKey] ?? "detected");
+    if (!stream) continue;
+    if (clusters.length > 1) stream.label = `${stream.label} · ${formatDollars(stream.typicalAmountCents)}`;
+    results.push(stream);
+  }
+  return results;
+}
+
+function formatDollars(cents: number): string {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+}
+
+function analyzeOccurrences(
   key: string,
   group: HouseholdTransactionRow[],
   today: string,

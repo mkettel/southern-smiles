@@ -8,11 +8,13 @@ import {
   CategoryScale,
   Chart as ChartJS,
   Legend,
+  LineElement,
   LinearScale,
+  PointElement,
   Tooltip as ChartTooltip,
 } from "chart.js";
-import { Bar, Doughnut } from "react-chartjs-2";
-import { ArrowDownRight, ArrowUpRight, BarChart3, CalendarRange, ChevronDown, Grid3x3, Layers, PieChart, X } from "lucide-react";
+import { Bar, Doughnut, Line } from "react-chartjs-2";
+import { ArrowDownRight, ArrowUpRight, BarChart3, CalendarRange, ChevronDown, Grid3x3, Layers, PieChart, TrendingUp, X } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCents, formatCentsCompact, type HouseholdAccountRow, type HouseholdTransactionRow } from "@/lib/household-finance";
 import {
@@ -21,19 +23,21 @@ import {
   OTHER_CATEGORY_KEY,
   SPENDING_RANGE_KEYS,
   assignCategorySlots,
+  buildSpendingPace,
   buildSpendingView,
   foldCategories,
   resolveSpendingRange,
   spendingAccountOptions,
   type SpendingCategory,
+  type SpendingPace,
   type SpendingRangeKey,
   type SpendingView,
 } from "@/lib/household-spending";
 import { cn } from "@/lib/utils";
 
-ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, ChartTooltip, Legend);
+ChartJS.register(ArcElement, BarElement, LineElement, PointElement, CategoryScale, LinearScale, ChartTooltip, Legend);
 
-type ChartType = "donut" | "bars" | "months" | "heatmap";
+type ChartType = "donut" | "bars" | "months" | "heatmap" | "pace";
 
 // Reference categorical palette, slots in validated order; the dark column
 // is the same hues re-stepped for the dark surface.
@@ -55,6 +59,7 @@ const CHART_TYPES: { id: ChartType; label: string; icon: typeof PieChart }[] = [
   { id: "bars", label: "Ranked", icon: BarChart3 },
   { id: "months", label: "By month", icon: Layers },
   { id: "heatmap", label: "Heatmap", icon: Grid3x3 },
+  { id: "pace", label: "Pace", icon: TrendingUp },
 ];
 
 export function HouseholdSpendingExplorer({
@@ -73,9 +78,16 @@ export function HouseholdSpendingExplorer({
   const { resolvedTheme } = useTheme();
   const mode = resolvedTheme === "dark" ? "dark" : "light";
 
+  // Pace always compares the current month to the months before it, so the
+  // rest of the page follows "This month" while it is selected.
+  const effectiveRangeKey: SpendingRangeKey = chartType === "pace" ? "this_month" : rangeKey;
   const view = useMemo(
-    () => buildSpendingView({ transactions, accounts, today, rangeKey, accountId }),
-    [transactions, accounts, today, rangeKey, accountId],
+    () => buildSpendingView({ transactions, accounts, today, rangeKey: effectiveRangeKey, accountId }),
+    [transactions, accounts, today, effectiveRangeKey, accountId],
+  );
+  const pace = useMemo(
+    () => (chartType === "pace" ? buildSpendingPace({ transactions, today, accountId }) : null),
+    [chartType, transactions, today, accountId],
   );
   const accountOptions = useMemo(() => spendingAccountOptions(accounts), [accounts]);
   const slots = useMemo(() => assignCategorySlots(transactions), [transactions]);
@@ -91,15 +103,16 @@ export function HouseholdSpendingExplorer({
           <div role="group" aria-label="Time range" className="flex flex-wrap gap-1 rounded-md border bg-background p-1">
             {SPENDING_RANGE_KEYS.map((key) => {
               const label = resolveSpendingRange(key, today).label;
-              const active = key === rangeKey;
+              const active = key === effectiveRangeKey;
               return (
                 <button
                   key={key}
                   type="button"
                   aria-pressed={active}
+                  disabled={chartType === "pace"}
                   onClick={() => setRangeKey(key)}
                   className={cn(
-                    "rounded px-2.5 py-1 text-sm transition-colors",
+                    "rounded px-2.5 py-1 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50",
                     active ? "bg-foreground text-background" : "text-muted-foreground hover:bg-accent hover:text-foreground",
                   )}
                 >
@@ -176,7 +189,7 @@ export function HouseholdSpendingExplorer({
         <section className="rounded-lg border bg-card p-5" aria-labelledby="chart-heading">
           <h2 id="chart-heading" className="font-semibold">{chartTitle(chartType)}</h2>
           <p className="mt-0.5 text-sm text-muted-foreground">{chartHint(chartType, monthCount)}</p>
-          {view.categories.length === 0 ? (
+          {view.categories.length === 0 && chartType !== "pace" ? (
             <p className="mt-10 pb-6 text-center text-sm text-muted-foreground">No spending in this range.</p>
           ) : chartType === "donut" ? (
             <DonutChart view={view} colorFor={colorFor} mode={mode} selectedKey={selectedKey} onSelect={setSelectedKey} />
@@ -184,6 +197,8 @@ export function HouseholdSpendingExplorer({
             <RankedBars view={view} color={SERIES[mode][0]} selectedKey={selectedKey} onSelect={setSelectedKey} />
           ) : chartType === "months" ? (
             <MonthlyStack view={view} colorFor={colorFor} mode={mode} />
+          ) : chartType === "pace" && pace ? (
+            <PaceChart pace={pace} mode={mode} />
           ) : (
             <Heatmap view={view} mode={mode} selectedKey={selectedKey} onSelect={setSelectedKey} />
           )}
@@ -593,8 +608,94 @@ function deltaOf(current: number, previous: number | null): { direction: "up" | 
   return { direction: pct > 0 ? "up" : "down", label: `${pct > 0 ? "+" : ""}${pct}%` };
 }
 
+function PaceChart({ pace, mode }: { pace: SpendingPace; mode: "light" | "dark" }) {
+  const palette = SERIES[mode];
+  const chrome = CHROME[mode];
+  const days = Math.max(...pace.series.map((month) => month.daysInMonth));
+  const labels = Array.from({ length: days }, (_, index) => String(index + 1));
+  const priorColors = [chrome.unslotted, palette[1]];
+  const current = pace.series[pace.series.length - 1];
+  const priors = pace.series.filter((month) => !month.isCurrent);
+
+  return (
+    <div className="mt-4">
+      <p className="text-sm">
+        <span className="font-semibold">{formatCents(pace.currentCents)}</span>
+        <span className="text-muted-foreground"> spent through day {pace.todayDay}</span>
+        {pace.sameDay.map((month) => (
+          <span key={month.key} className="text-muted-foreground">
+            {" · "}
+            {month.label} at day {pace.todayDay}: <span className="text-foreground">{formatCents(month.cents)}</span>
+            {month.deltaTenths !== null && (
+              <span className={cn("ml-1 font-medium", month.deltaTenths > 0 ? "text-destructive" : "text-emerald-700 dark:text-emerald-400")}>
+                ({month.deltaTenths > 0 ? "+" : ""}{formatTenths(month.deltaTenths)})
+              </span>
+            )}
+          </span>
+        ))}
+      </p>
+      <div className="mt-4 h-[280px] min-w-0">
+        <Line
+          data={{
+            labels,
+            datasets: [
+              ...priors.map((month, index) => ({
+                label: month.label,
+                data: month.cumulative.map((value) => value / 100),
+                borderColor: priorColors[index] ?? chrome.unslotted,
+                backgroundColor: priorColors[index] ?? chrome.unslotted,
+                borderWidth: 2,
+                borderDash: [6, 4],
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                tension: 0,
+                spanGaps: false,
+              })),
+              {
+                label: `${current.label} (so far)`,
+                data: current.cumulative.map((value) => value / 100),
+                borderColor: palette[0],
+                backgroundColor: palette[0],
+                borderWidth: 2.5,
+                pointRadius: current.cumulative.map((_, index) => (index === current.cumulative.length - 1 ? 5 : 0)),
+                pointHoverRadius: 5,
+                tension: 0,
+              },
+            ],
+          }}
+          options={{
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            interaction: { intersect: false, mode: "index" },
+            plugins: {
+              legend: { position: "bottom", labels: { boxWidth: 18, boxHeight: 2, color: chrome.legend } },
+              tooltip: {
+                callbacks: {
+                  title: (items) => `Day ${items[0]?.label ?? ""}`,
+                  label: (context) => `${context.dataset.label}: ${formatCents(Number(context.raw) * 100)}`,
+                },
+              },
+            },
+            scales: {
+              x: { grid: { display: false }, border: { display: false }, ticks: { color: chrome.tick, maxTicksLimit: 11, maxRotation: 0 } },
+              y: { beginAtZero: true, border: { display: false }, grid: { color: chrome.grid }, ticks: { color: chrome.tick, callback: (value) => formatCentsCompact(Number(value) * 100) } },
+            },
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function chartTitle(type: ChartType) {
-  return { donut: "Share of spending", bars: "Categories ranked", months: "Spending by month", heatmap: "Category by month" }[type];
+  return {
+    donut: "Share of spending",
+    bars: "Categories ranked",
+    months: "Spending by month",
+    heatmap: "Category by month",
+    pace: "Month-to-date pace",
+  }[type];
 }
 
 function chartHint(type: ChartType, monthCount: number) {
@@ -603,6 +704,7 @@ function chartHint(type: ChartType, monthCount: number) {
     bars: "Every category, largest first · click to drill in",
     months: monthCount > 1 ? "Stacked by category so you can see which months ran hot" : "Needs at least two months",
     heatmap: "Darker cells are bigger months for that category",
+    pace: "Running total by day of month · dashed lines are the two previous months",
   }[type];
 }
 

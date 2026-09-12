@@ -13,7 +13,7 @@ import {
   type HouseholdAccountRow,
   type HouseholdTransactionRow,
 } from "@/lib/household-finance";
-import { addDays, recurringStreamKey } from "@/lib/recurring-detection";
+import { addDays, daysBetween, recurringStreamKey } from "@/lib/recurring-detection";
 
 export type SpendingRangeKey = "this_month" | "last_month" | "3_months" | "6_months" | "12_months" | "ytd";
 
@@ -305,4 +305,78 @@ function daysInclusive(start: string, end: string): number {
     return Date.UTC(year, month - 1, day);
   };
   return Math.round((toUtc(end) - toUtc(start)) / 86_400_000) + 1;
+}
+
+export interface SpendingPaceSeries {
+  key: string;
+  label: string;
+  isCurrent: boolean;
+  /** Cumulative spending by day of month (index 0 = day 1), through the last day with data. */
+  cumulative: number[];
+  daysInMonth: number;
+  totalCents: number;
+}
+
+export interface SpendingPace {
+  todayDay: number;
+  currentCents: number;
+  series: SpendingPaceSeries[];
+  /** Prior months' cumulative totals at the same day of month as today. */
+  sameDay: { key: string; label: string; cents: number; deltaTenths: number | null }[];
+}
+
+/** Month-to-date cumulative spending for the current month versus the months before it. */
+export function buildSpendingPace(input: {
+  transactions: HouseholdTransactionRow[];
+  today: string;
+  accountId?: string | null;
+  monthsBack?: number;
+}): SpendingPace {
+  const monthsBack = input.monthsBack ?? 2;
+  const currentKey = monthKeyOf(input.today);
+  const todayDay = Number(input.today.slice(8, 10));
+  const inAccount = (txn: HouseholdTransactionRow) => !input.accountId || txn.account_id === input.accountId;
+
+  const series: SpendingPaceSeries[] = [];
+  for (let offset = monthsBack; offset >= 0; offset -= 1) {
+    const key = shiftMonthKey(currentKey, -offset);
+    const isCurrent = offset === 0;
+    const daysInMonth = daysBetween(`${key}-01`, `${shiftMonthKey(key, 1)}-01`);
+    const lastDay = isCurrent ? Math.min(todayDay, daysInMonth) : daysInMonth;
+    const perDay = new Array<number>(daysInMonth).fill(0);
+    for (const txn of input.transactions) {
+      if (!isSpendingTransaction(txn) || !inAccount(txn) || monthKeyOf(txn.transaction_date) !== key) continue;
+      perDay[Number(txn.transaction_date.slice(8, 10)) - 1] += txn.amount_cents;
+    }
+    const cumulative: number[] = [];
+    let running = 0;
+    for (let day = 0; day < lastDay; day += 1) {
+      running += perDay[day];
+      cumulative.push(running);
+    }
+    series.push({
+      key,
+      label: new Intl.DateTimeFormat("en-US", { month: "long" }).format(new Date(`${key}-01T12:00:00`)),
+      isCurrent,
+      cumulative,
+      daysInMonth,
+      totalCents: perDay.reduce((sum, value) => sum + value, 0),
+    });
+  }
+
+  const current = series[series.length - 1];
+  const currentCents = current.cumulative[current.cumulative.length - 1] ?? 0;
+  const sameDay = series
+    .filter((month) => !month.isCurrent)
+    .map((month) => {
+      const cents = month.cumulative[Math.min(todayDay, month.daysInMonth) - 1] ?? 0;
+      return {
+        key: month.key,
+        label: month.label,
+        cents,
+        deltaTenths: cents > 0 ? Math.round(((currentCents - cents) / cents) * 1000) : null,
+      };
+    });
+
+  return { todayDay, currentCents, series, sameDay };
 }

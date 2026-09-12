@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { HouseholdAccountRow, HouseholdTransactionRow } from "./household-finance";
-import { assignCategorySlots, buildSpendingView, foldCategories, resolveSpendingRange } from "./household-spending";
+import { assignCategorySlots, buildSpendingPace, buildSpendingView, foldCategories, resolveSpendingRange } from "./household-spending";
 
 const card: HouseholdAccountRow = {
   id: "card",
@@ -138,4 +138,37 @@ test("color slots are fixed for core categories and stable for the biggest other
   assert.deepEqual([slots.get("TRAVEL"), slots.get("MEDICAL"), slots.get("ENTERTAINMENT")], [5, 6, 7]);
   assert.equal(slots.has("PERSONAL_CARE"), false);
   assert.equal(slots.has("TRANSFER_OUT"), false);
+});
+
+test("pace builds cumulative month-to-date lines and same-day comparisons", () => {
+  const pace = buildSpendingPace({
+    today: "2026-09-11",
+    transactions: [
+      txn("2026-09-02", 1_000, "FOOD_AND_DRINK"),
+      txn("2026-09-05", 2_000, "FOOD_AND_DRINK"),
+      txn("2026-09-11", 500, "TRAVEL"),
+      txn("2026-09-12", 9_999, "TRAVEL"),
+      txn("2026-08-03", 4_000, "FOOD_AND_DRINK"),
+      txn("2026-08-20", 6_000, "FOOD_AND_DRINK"),
+      txn("2026-08-10", 4_000, "TRANSFER_OUT"),
+      txn("2026-07-31", 1_000, "FOOD_AND_DRINK"),
+    ],
+  });
+
+  assert.equal(pace.todayDay, 11);
+  assert.deepEqual(pace.series.map((month) => [month.key, month.isCurrent, month.cumulative.length, month.totalCents]), [
+    ["2026-07", false, 31, 1_000],
+    ["2026-08", false, 31, 10_000],
+    ["2026-09", true, 11, 13_499],
+  ]);
+  const current = pace.series[2];
+  assert.equal(current.cumulative[0], 0);
+  assert.equal(current.cumulative[1], 1_000);
+  assert.equal(current.cumulative[4], 3_000);
+  assert.equal(current.cumulative[10], 3_500);
+  assert.equal(pace.currentCents, 3_500);
+  assert.deepEqual(pace.sameDay.map((month) => [month.label, month.cents, month.deltaTenths]), [
+    ["July", 0, null],
+    ["August", 4_000, -125],
+  ]);
 });

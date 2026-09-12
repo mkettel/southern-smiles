@@ -193,3 +193,22 @@ test("balance history sums snapshots by kind and appends today", () => {
     ],
   );
 });
+
+test("credit card payments labeled as loan payments are transfers, not spending", () => {
+  const data = buildHouseholdFinanceData({
+    accounts: [card, checking],
+    transactions: [
+      txn({ id: "card-pay", account_id: "chk", amount_cents: 400_000, plaid_category_primary: "LOAN_PAYMENTS", plaid_category_detailed: "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT" }),
+      txn({ id: "car-loan", account_id: "chk", amount_cents: 61_200, plaid_category_primary: "LOAN_PAYMENTS", plaid_category_detailed: "LOAN_PAYMENTS_CAR_PAYMENT" }),
+    ],
+    snapshots: [],
+    today: "2026-09-11",
+    connectionCount: 1,
+    lastSyncedAt: null,
+  });
+
+  const month = data.months.at(-1)!;
+  assert.equal(month.spendingCents, 61_200);
+  assert.equal(data.recentTransactions.find((row) => row.id === "card-pay")?.isTransfer, true);
+  assert.equal(data.recentTransactions.find((row) => row.id === "car-loan")?.isTransfer, false);
+});

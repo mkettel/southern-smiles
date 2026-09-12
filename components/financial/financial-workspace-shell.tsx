@@ -3,28 +3,41 @@ import { getWorkspaceAccess } from "@/actions/workspace-access";
 import { cn } from "@/lib/utils";
 
 const tabs = [
-  { id: "overview", label: "Overview", href: "/admin/financial" },
-  { id: "bookkeeping", label: "Bookkeeping", href: "/admin/financial-transactions" },
-  { id: "rules", label: "Rules", href: "/admin/financial/rules" },
-  { id: "accounts", label: "Chart of accounts", href: "/admin/financial/accounts" },
-  { id: "loans", label: "Loans", href: "/admin/financial/loans" },
-  { id: "reports", label: "Reports", href: "/admin/financial/reports" },
-  { id: "connections", label: "Connections", href: "/admin/financial-connections" },
+  { id: "overview", href: "/admin/financial" },
+  { id: "spending", href: "/admin/financial/spending" },
+  { id: "bookkeeping", href: "/admin/financial-transactions" },
+  { id: "rules", href: "/admin/financial/rules" },
+  { id: "accounts", href: "/admin/financial/accounts" },
+  { id: "loans", href: "/admin/financial/loans" },
+  { id: "reports", href: "/admin/financial/reports" },
+  { id: "connections", href: "/admin/financial-connections" },
 ] as const;
 
 export type FinancialWorkspaceTab = typeof tabs[number]["id"];
 
-// Households get a trimmed tab set: the bookkeeping review flow still exists
-// (as "Transactions"), but the QuickBooks-style rules, chart of accounts, and
-// P&L reports are practice tooling.
-const householdTabs: Record<FinancialWorkspaceTab, string | null> = {
-  overview: "Overview",
-  bookkeeping: "Transactions",
-  rules: null,
-  accounts: null,
-  loans: "Loans",
-  reports: null,
-  connections: "Connections",
+// A null label hides the tab for that workspace. Practices keep the full
+// QuickBooks-style bookkeeping set; households get personal-finance tabs.
+const TAB_LABELS: Record<"practice" | "household", Record<FinancialWorkspaceTab, string | null>> = {
+  practice: {
+    overview: "Overview",
+    spending: null,
+    bookkeeping: "Bookkeeping",
+    rules: "Rules",
+    accounts: "Chart of accounts",
+    loans: "Loans",
+    reports: "Reports",
+    connections: "Connections",
+  },
+  household: {
+    overview: "Overview",
+    spending: "Spending",
+    bookkeeping: "Transactions",
+    rules: null,
+    accounts: null,
+    loans: "Loans",
+    reports: null,
+    connections: "Connections",
+  },
 };
 
 export async function FinancialWorkspaceShell({
@@ -36,9 +49,11 @@ export async function FinancialWorkspaceShell({
 }) {
   const access = await getWorkspaceAccess();
   const isHousehold = access.workspaceType === "household";
-  const visibleTabs = tabs
-    .map((tab) => ({ ...tab, label: isHousehold ? householdTabs[tab.id] : tab.label }))
-    .filter((tab): tab is typeof tab & { label: string } => tab.label !== null);
+  const labels = TAB_LABELS[isHousehold ? "household" : "practice"];
+  const visibleTabs = tabs.flatMap((tab) => {
+    const label = labels[tab.id];
+    return label ? [{ ...tab, label }] : [];
+  });
 
   return (
     <div className="mx-auto w-full max-w-[1500px] [font-family:var(--font-geist-sans)]">

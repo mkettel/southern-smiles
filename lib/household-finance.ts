@@ -28,6 +28,7 @@ export interface HouseholdTransactionRow {
   amount_cents: number;
   pending: boolean;
   plaid_category_primary: string | null;
+  plaid_category_detailed?: string | null;
 }
 
 export interface HouseholdSnapshotRow {

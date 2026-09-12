@@ -8,6 +8,7 @@ import {
   type HouseholdSnapshotRow,
   type HouseholdTransactionRow,
 } from "@/lib/household-finance";
+import { detectRecurringStreams } from "@/lib/recurring-detection";
 
 // Dev-only preview of the household overview with deterministic sample data,
 // so the layout can be iterated on without a Plaid connection or a login.
@@ -35,10 +36,10 @@ const MERCHANTS: Record<string, string[]> = {
   FOOD_AND_DRINK: ["Sprouts", "Trader Joe's", "Chipotle", "Pizzeria Bianco", "Starbucks", "Fry's Food"],
   TRANSPORTATION: ["QT Fuel", "Chevron", "Waymo", "ADOT MVD"],
   GENERAL_MERCHANDISE: ["Amazon", "Target", "Costco", "REI"],
-  ENTERTAINMENT: ["Spotify", "Harkins Theatres", "Steam", "Netflix"],
+  ENTERTAINMENT: ["Harkins Theatres", "Steam", "AMC Theatres"],
   MEDICAL: ["Banner Health", "CVS Pharmacy"],
   PERSONAL_CARE: ["Great Clips", "Ulta"],
-  GENERAL_SERVICES: ["Verizon", "Adobe", "Rover"],
+  GENERAL_SERVICES: ["Rover", "Jiffy Lube", "USPS"],
   HOME_IMPROVEMENT: ["Home Depot", "Lowe's"],
   TRAVEL: ["Southwest", "Airbnb", "Hertz"],
 };
@@ -76,6 +77,25 @@ function buildFixtures(today: string) {
       push({ account_id: "acct-bills", transaction_date: day(key, 2), name: "ONLINE TRANSFER FROM CHK 0235", merchant_name: null, amount_cents: -320_000, pending: false, plaid_category_primary: "TRANSFER_IN" });
       push({ account_id: "acct-checking", transaction_date: day(key, 2), name: "TRANSFER TO ALLY SAVINGS", merchant_name: "Ally", amount_cents: 75_000, pending: false, plaid_category_primary: "TRANSFER_OUT" });
       push({ account_id: "acct-savings", transaction_date: day(key, 2), name: "TRANSFER FROM BOFA", merchant_name: null, amount_cents: -75_000, pending: false, plaid_category_primary: "TRANSFER_IN" });
+    }
+    // Fixed subscriptions and bills on the card, same day every month.
+    const fixed: Array<[number, string, string, number, string]> = [
+      [3, "Spotify", "SPOTIFY USA", 1_199, "ENTERTAINMENT"],
+      [12, "Netflix", "NETFLIX.COM", 1_549, "ENTERTAINMENT"],
+      [18, "Verizon", "VERIZON WIRELESS", 8_920, "GENERAL_SERVICES"],
+      [22, "State Farm", "STATE FARM INSURANCE", 14_255, "GENERAL_SERVICES"],
+      [9, "Planet Fitness", "PLANET FITNESS", 2_499, "PERSONAL_CARE"],
+      [26, "Adobe", "ADOBE CREATIVE CLOUD", 5_999, "GENERAL_SERVICES"],
+    ];
+    for (const [dayOfMonth, merchant, name, amount, category] of fixed) {
+      if (!withinMonth(dayOfMonth)) continue;
+      push({ account_id: "acct-visa", transaction_date: day(key, dayOfMonth), name, merchant_name: merchant, amount_cents: amount, pending: false, plaid_category_primary: category });
+    }
+    if (offset === 10 || offset === 5) {
+      push({ account_id: "acct-visa", transaction_date: day(key, 14), name: "AMAZON PRIME", merchant_name: "Amazon Prime", amount_cents: 13_900, pending: false, plaid_category_primary: "GENERAL_SERVICES" });
+    }
+    if (offset >= 6) {
+      push({ account_id: "acct-visa", transaction_date: day(key, 6), name: "HULU", merchant_name: "Hulu", amount_cents: 1_799, pending: false, plaid_category_primary: "ENTERTAINMENT" });
     }
     if (withinMonth(20)) {
       // Credit card payment: shows on both sides, excluded from cash flow.
@@ -145,6 +165,13 @@ export default function HouseholdFinancePreviewPage() {
     lastSyncedAt: "2026-09-11T13:05:00Z",
   });
 
+  const recurring = detectRecurringStreams({
+    transactions,
+    accounts,
+    today,
+    overrides: { "rocket mortgage": "confirmed", "jiffy lube": "dismissed" },
+  });
+
   return (
     <div className="flex h-screen overflow-hidden bg-background" data-practice-id={PRACTICE_ID}>
       <Sidebar role="admin" practiceName="Kettelkamp Household" />
@@ -162,7 +189,7 @@ export default function HouseholdFinancePreviewPage() {
             <header className="mb-8 border-b pb-5">
               <h1 className="px-1 text-2xl font-semibold">Finances</h1>
             </header>
-            <HouseholdOverviewDashboard data={data} />
+            <HouseholdOverviewDashboard data={data} recurring={recurring} previewMode />
           </div>
         </main>
       </div>

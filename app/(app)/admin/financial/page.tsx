@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/actions/auth";
 import { getFinancialWorkspaceData } from "@/actions/financial-workspace";
 import { getHouseholdFinanceData } from "@/actions/household-finance";
+import { getHouseholdRecurringData } from "@/actions/household-recurring";
 import { getWorkspaceAccess } from "@/actions/workspace-access";
 import { FinancialOverviewDashboard } from "@/components/financial/financial-overview-dashboard";
 import { FinancialWorkspaceShell } from "@/components/financial/financial-workspace-shell";
@@ -16,11 +17,11 @@ export default async function AdminFinancialPage() {
   const access = await getWorkspaceAccess();
 
   if (access.workspaceType === "household") {
-    const data = await getHouseholdFinanceData();
+    const [data, recurring] = await Promise.all([getHouseholdFinanceData(), getHouseholdRecurringData()]);
     return (
       <FinancialWorkspaceShell active="overview">
         {data ? (
-          <HouseholdOverviewDashboard data={data} />
+          <HouseholdOverviewDashboard data={data} recurring={recurring} />
         ) : (
           <section className="rounded-lg border bg-card px-6 py-14 text-center text-sm text-muted-foreground">
             Financial connections are not set up for this workspace yet.{" "}

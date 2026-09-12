@@ -37,6 +37,8 @@ import {
   type HouseholdFinanceData,
   type HouseholdMonth,
 } from "@/lib/household-finance";
+import type { HouseholdRecurringData } from "@/lib/recurring-detection";
+import { HouseholdRecurringCard } from "@/components/financial/household-recurring-card";
 import { cn } from "@/lib/utils";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, ChartTooltip, Legend);
@@ -55,7 +57,15 @@ function useChartPalette(): ChartPalette {
   return resolvedTheme === "dark" ? PALETTES.dark : PALETTES.light;
 }
 
-export function HouseholdOverviewDashboard({ data }: { data: HouseholdFinanceData }) {
+export function HouseholdOverviewDashboard({
+  data,
+  recurring,
+  previewMode = false,
+}: {
+  data: HouseholdFinanceData;
+  recurring?: HouseholdRecurringData | null;
+  previewMode?: boolean;
+}) {
   const [monthKey, setMonthKey] = useState(data.months.at(-1)?.key ?? "");
   const selectedIndex = Math.max(0, data.months.findIndex((month) => month.key === monthKey));
   const month = data.months[selectedIndex] ?? data.months.at(-1)!;
@@ -162,6 +172,8 @@ export function HouseholdOverviewDashboard({ data }: { data: HouseholdFinanceDat
           <CategoryBars month={month} color={palette.spending} />
         </section>
       </div>
+
+      {recurring && <HouseholdRecurringCard data={recurring} previewMode={previewMode} />}
 
       <section className="overflow-hidden rounded-lg border bg-card" aria-labelledby="accounts-heading">
         <div className="border-b px-5 py-4">

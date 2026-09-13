@@ -1,31 +1,66 @@
 import Link from "next/link";
+import { getWorkspaceAccess } from "@/actions/workspace-access";
 import { cn } from "@/lib/utils";
 
 const tabs = [
-  { id: "overview", label: "Overview", href: "/admin/financial" },
-  { id: "bookkeeping", label: "Bookkeeping", href: "/admin/financial-transactions" },
-  { id: "rules", label: "Rules", href: "/admin/financial/rules" },
-  { id: "accounts", label: "Chart of accounts", href: "/admin/financial/accounts" },
-  { id: "loans", label: "Loans", href: "/admin/financial/loans" },
-  { id: "reports", label: "Reports", href: "/admin/financial/reports" },
-  { id: "connections", label: "Connections", href: "/admin/financial-connections" },
+  { id: "overview", href: "/admin/financial" },
+  { id: "spending", href: "/admin/financial/spending" },
+  { id: "bookkeeping", href: "/admin/financial-transactions" },
+  { id: "rules", href: "/admin/financial/rules" },
+  { id: "accounts", href: "/admin/financial/accounts" },
+  { id: "loans", href: "/admin/financial/loans" },
+  { id: "reports", href: "/admin/financial/reports" },
+  { id: "connections", href: "/admin/financial-connections" },
 ] as const;
 
 export type FinancialWorkspaceTab = typeof tabs[number]["id"];
 
-export function FinancialWorkspaceShell({
+// A null label hides the tab for that workspace. Practices keep the full
+// QuickBooks-style bookkeeping set; households get personal-finance tabs.
+const TAB_LABELS: Record<"practice" | "household", Record<FinancialWorkspaceTab, string | null>> = {
+  practice: {
+    overview: "Overview",
+    spending: null,
+    bookkeeping: "Bookkeeping",
+    rules: "Rules",
+    accounts: "Chart of accounts",
+    loans: "Loans",
+    reports: "Reports",
+    connections: "Connections",
+  },
+  household: {
+    overview: "Overview",
+    spending: "Spending",
+    bookkeeping: "Transactions",
+    rules: null,
+    accounts: null,
+    loans: "Loans",
+    reports: null,
+    connections: "Connections",
+  },
+};
+
+export async function FinancialWorkspaceShell({
   active,
   children,
 }: {
   active: FinancialWorkspaceTab;
   children: React.ReactNode;
 }) {
+  const access = await getWorkspaceAccess();
+  const isHousehold = access.workspaceType === "household";
+  const labels = TAB_LABELS[isHousehold ? "household" : "practice"];
+  const visibleTabs = tabs.flatMap((tab) => {
+    const label = labels[tab.id];
+    return label ? [{ ...tab, label }] : [];
+  });
+
   return (
     <div className="mx-auto w-full max-w-[1500px] [font-family:var(--font-geist-sans)]">
       <header className="mb-8 border-b">
-        <h1 className="px-1 text-2xl font-semibold">Financial</h1>
+        <h1 className="px-1 text-2xl font-semibold">{isHousehold ? "Finances" : "Financial"}</h1>
         <nav className="mt-5 flex gap-7 overflow-x-auto px-1" aria-label="Financial workspace">
-          {tabs.map((tab) => (
+          {visibleTabs.map((tab) => (
             <Link
               key={tab.id}
               href={tab.href}

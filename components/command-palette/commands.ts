@@ -3,6 +3,7 @@ import {
   ClipboardEdit,
   CheckSquare,
   FileText,
+  Gamepad2,
   Network,
   BarChart3,
   Settings,
@@ -114,6 +115,15 @@ export function buildCommands({ role, canAccessBills = false, canAccessSupplies 
       icon: CheckSquare,
       type: "navigate",
       href: "/tasks",
+    },
+    {
+      id: "nav-games",
+      label: "Survival Game",
+      keywords: ["games", "challenges", "rewards"],
+      group: "Navigate",
+      icon: Gamepad2,
+      type: "navigate",
+      href: "/games",
     },
     {
       id: "nav-oic",

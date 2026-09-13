@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { transactionDisplayName, type BookkeepingAccount, type FinancialTransaction } from "@/lib/financial-transactions";
 import { buildFinancialReportsData, type FinancialReportsData } from "@/lib/financial-reports";
+import { applyQuickBooksBaseline } from "@/lib/quickbooks-baseline";
 import {
   financialWorkspaceMonthCount,
   getFinancialWorkspaceMonthFrames,
@@ -192,7 +193,14 @@ export async function getFinancialReportsData(): Promise<FinancialReportsData> {
     ? await getReportTransactions(supabase, practiceId, includedAccountIds)
     : []);
 
-  return buildFinancialReportsData({ accounts, transactions, now: new Date() });
+  const { data: baseline, error: baselineError } = await supabase.from("accounting_source_baselines")
+    .select("document").eq("practice_id", practiceId).eq("is_active", true).maybeSingle();
+  if (baselineError) throw new Error(`Unable to verify reporting baseline: ${baselineError.message}`);
+  const effective = baseline
+    ? applyQuickBooksBaseline(baseline.document, practiceId, accounts, transactions)
+    : { accounts, transactions };
+  return { ...buildFinancialReportsData({ ...effective, now: new Date() }),
+    baselinePeriod: "baselinePeriod" in effective ? effective.baselinePeriod : undefined };
 }
 
 async function getLedgerReportTransactions(
@@ -211,7 +219,7 @@ async function getLedgerReportTransactions(
       .eq("practice_id", practiceId)
       .not("bookkeeping_account_id", "is", null)
       .eq("accounting_journal_entries.status", "posted")
-      .order("created_at", { ascending: false })
+      .order("created_at", { ascending: false }).order("id", { ascending: false })
       .range(from, from + pageSize - 1);
     if (error) {
       if (error.code === "PGRST204" || error.code === "PGRST205" ||

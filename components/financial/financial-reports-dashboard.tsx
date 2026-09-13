@@ -35,7 +35,9 @@ export function FinancialReportsDashboard({ data }: { data: FinancialReportsData
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold">Financial reports</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Posted and reviewed activity from accounts enabled for bookkeeping.</p>
+          <p className="mt-1 text-sm text-muted-foreground">{data.baselinePeriod
+            ? `QuickBooks baseline: ${data.baselinePeriod.from} through ${data.baselinePeriod.through}. Later activity: Board ledger.`
+            : "Posted and reviewed bookkeeping activity."}</p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
           <label className="relative block min-w-48">
@@ -78,9 +80,9 @@ export function FinancialReportsDashboard({ data }: { data: FinancialReportsData
       <div>
         <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">{period.dateRange}</p>
         <div className="grid gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-3">
-          <Metric label="Revenue" value={formatCurrency(period.revenueCents)} />
-          <Metric label="Operating expenses" value={formatCurrency(period.expenseCents)} />
-          <Metric label="Net operating income" value={formatCurrency(period.netIncomeCents)} accent={period.netIncomeCents >= 0} />
+          <Metric label="Total income" value={formatCurrency(period.revenueCents)} />
+          <Metric label="Total expenses" value={formatCurrency(period.expenseCents)} />
+          <Metric label="Net profit" value={formatCurrency(period.netIncomeCents)} accent={period.netIncomeCents >= 0} />
         </div>
       </div>
 

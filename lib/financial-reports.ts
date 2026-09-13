@@ -29,6 +29,7 @@ export interface FinancialReportPeriod {
 }
 
 export interface FinancialReportsData {
+  baselinePeriod?: { from: string; through: string };
   periods: FinancialReportPeriod[];
   months: Array<{
     key: string;

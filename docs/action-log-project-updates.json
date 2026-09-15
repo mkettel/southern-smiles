@@ -1,0 +1,32 @@
+[
+  {
+    "id": "website-pr-69",
+    "source_key": "github:mkettel/ssmilesdental-web:pr:69",
+    "title": "Add site-wide Google Ads website-call tracking",
+    "entry_text": "Deployed site-wide tracking for calls from eligible Google Ads website visitors. Calls lasting at least 60 seconds count toward the new secondary conversion action. Existing dedicated campaign tracking remains in place. This is a measurement change: an increase in recorded calls may reflect improved tracking rather than more actual inquiries.",
+    "effective_date": "2026-09-12",
+    "date_confirmed": false,
+    "implementation": "unconfirmed",
+    "area": "Marketing / Measurement",
+    "post_affected": "Marketing and front office",
+    "stats": ["Tracked website calls", "Qualified inquiries", "Booked consultations"],
+    "source_label": "SEO task / Website PR #69",
+    "source_url": "https://github.com/mkettel/ssmilesdental-web/pull/69",
+    "evidence": "The SEO task reported PR #69 merged, deployment successful, and the production tag and call-tracking library verified on September 12. Tracking was set to secondary, not a new bidding goal. Review this proposed effective date before adding."
+  },
+  {
+    "id": "website-pr-68",
+    "source_key": "github:mkettel/ssmilesdental-web:pr:68",
+    "title": "Connect the smile gallery to treatment-planning content",
+    "entry_text": "Added internal links between the smile gallery and smile-makeover planning content, giving visitors a clearer path from results to treatment information.",
+    "effective_date": "2026-09-02",
+    "date_confirmed": false,
+    "implementation": "unconfirmed",
+    "area": "Marketing / SEO",
+    "post_affected": "Website",
+    "stats": ["Organic visits to treatment pages", "Consultation requests", "Booked consultations"],
+    "source_label": "Website / PR #68",
+    "source_url": "https://github.com/mkettel/ssmilesdental-web/pull/68",
+    "evidence": "Repository history shows PR #68 merged September 2. The merge establishes a code change, not its live deployment date. Confirm production implementation before adding. No patient case details are included."
+  }
+]

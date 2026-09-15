@@ -4,7 +4,8 @@ import { NextResponse, type NextRequest } from "next/server";
 export async function updateSession(request: NextRequest) {
   const isLocalPreview =
     process.env.NODE_ENV === "development" &&
-    (request.nextUrl.pathname.startsWith("/supply-ordering-preview") ||
+    (request.nextUrl.pathname === "/action-log-preview" ||
+      request.nextUrl.pathname.startsWith("/supply-ordering-preview") ||
       request.nextUrl.pathname.startsWith("/financial-transactions-preview") ||
       request.nextUrl.pathname.startsWith("/household-finance-preview") ||
       request.nextUrl.pathname.startsWith("/household-spending-preview"));

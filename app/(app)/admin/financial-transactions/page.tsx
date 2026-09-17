@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { DatabaseZap } from "lucide-react";
 import { getProfile } from "@/actions/auth";
+import { requireMemberModulePage } from "@/actions/member-module-access";
 import { getFinancialTransactionDashboardData } from "@/actions/financial-transactions";
 import { FinancialWorkspaceShell } from "@/components/financial/financial-workspace-shell";
 import { FinancialTransactionsDashboard } from "@/components/financial-transactions/financial-transactions-dashboard";
@@ -8,7 +9,7 @@ import { FinancialTransactionsDashboard } from "@/components/financial-transacti
 export default async function AdminFinancialTransactionsPage() {
   const profile = await getProfile();
   if (!profile) redirect("/login");
-  if (profile.role !== "admin") redirect("/dashboard");
+  await requireMemberModulePage("financial");
 
   const data = await getFinancialTransactionDashboardData().catch(() => null);
 

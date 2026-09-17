@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Landmark } from "lucide-react";
 import { getProfile } from "@/actions/auth";
+import { requireMemberModulePage } from "@/actions/member-module-access";
 import { getFinancialConnectionsDashboardData } from "@/actions/financial-connections";
 import { FinancialWorkspaceShell } from "@/components/financial/financial-workspace-shell";
 import { FinancialConnectionsDashboard } from "@/components/financial-connections/financial-connections-dashboard";
@@ -8,7 +9,7 @@ import { FinancialConnectionsDashboard } from "@/components/financial-connection
 export default async function AdminFinancialConnectionsPage() {
   const profile = await getProfile();
   if (!profile) redirect("/login");
-  if (profile.role !== "admin") redirect("/dashboard");
+  await requireMemberModulePage("financial");
 
   const data = await getFinancialConnectionsDashboardData().catch(() => null);
 

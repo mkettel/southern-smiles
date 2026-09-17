@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "@/actions/auth";
+import { requireMemberModulePage } from "@/actions/member-module-access";
 import { getFinancialWorkspaceData } from "@/actions/financial-workspace";
 import { ChartOfAccountsManager } from "@/components/financial/chart-of-accounts-manager";
 import { FinancialWorkspaceShell } from "@/components/financial/financial-workspace-shell";
@@ -7,7 +8,7 @@ import { FinancialWorkspaceShell } from "@/components/financial/financial-worksp
 export default async function FinancialAccountsPage() {
   const profile = await getProfile();
   if (!profile) redirect("/login");
-  if (profile.role !== "admin") redirect("/dashboard");
+  await requireMemberModulePage("financial");
   const data = await getFinancialWorkspaceData();
   return (
     <FinancialWorkspaceShell active="accounts">

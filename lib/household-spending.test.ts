@@ -55,6 +55,22 @@ test("ranges resolve with an equal-length previous window", () => {
   assert.equal(ytd.start, "2026-01-01");
 });
 
+test("chart month counts follow the range, including January year to date", () => {
+  for (const [rangeKey, today, expected] of [
+    ["this_month", "2026-09-16", 1],
+    ["last_month", "2026-09-16", 1],
+    ["3_months", "2026-09-16", 3],
+    ["6_months", "2026-09-16", 6],
+    ["12_months", "2026-09-16", 12],
+    ["ytd", "2026-01-16", 1],
+    ["ytd", "2026-02-16", 2],
+  ] as const) {
+    const view = buildSpendingView({ accounts: [card], transactions: [], rangeKey, today });
+    assert.equal(view.months.length, expected);
+    assert.equal(view.range.start.slice(0, 7) !== view.range.end.slice(0, 7), expected > 1);
+  }
+});
+
 test("view groups by category with shares, months, merchants, and deltas", () => {
   const view = buildSpendingView({
     accounts: [card, checking],

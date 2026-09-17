@@ -1,5 +1,6 @@
 // Pure aggregation for the household (personal finance) overview.
 // No DB calls here so it can run against fixtures in tests and previews.
+import { categoryKeyOf, householdCategoryLabel } from "@/lib/household-categories";
 
 export type HouseholdAccountKind = "checking" | "savings" | "credit" | "other";
 
@@ -273,6 +274,7 @@ export function buildHouseholdFinanceData(input: {
   }
 
   let pendingCount = 0;
+  const categoryLabels = new Map(input.transactions.map((txn) => [categoryKeyOf(txn), householdCategoryLabel(txn)]));
   const sortedTransactions = [...input.transactions].sort((a, b) =>
     b.transaction_date.localeCompare(a.transaction_date) || b.id.localeCompare(a.id),
   );
@@ -296,7 +298,7 @@ export function buildHouseholdFinanceData(input: {
 
     // Spending, net of refunds in the same category.
     bucket.spendingCents += txn.amount_cents;
-    const key = category || "UNCATEGORIZED";
+    const key = categoryKeyOf(txn);
     const entry = bucket.categories.get(key) ?? { amountCents: 0, transactionCount: 0 };
     entry.amountCents += txn.amount_cents;
     entry.transactionCount += 1;
@@ -319,7 +321,7 @@ export function buildHouseholdFinanceData(input: {
     const categories = [...bucket.categories.entries()]
       .map(([categoryKey, entry]) => ({
         key: categoryKey,
-        label: categoryLabel(categoryKey),
+        label: categoryLabels.get(categoryKey) ?? "Uncategorized",
         amountCents: entry.amountCents,
         transactionCount: entry.transactionCount,
         shareTenths: positiveTotal > 0 ? Math.round((Math.max(0, entry.amountCents) / positiveTotal) * 1000) : 0,
@@ -394,13 +396,13 @@ export function buildHouseholdFinanceData(input: {
     .slice(0, HOUSEHOLD_RECENT_LIMIT)
     .map((txn) => {
       const row = txn.account_id ? accountsById.get(txn.account_id) : undefined;
-      const key = (txn.plaid_category_primary ?? "").toUpperCase() || "UNCATEGORIZED";
+      const key = categoryKeyOf(txn);
       return {
         id: txn.id,
         date: txn.transaction_date,
         description: txn.merchant_name?.trim() || txn.name,
         categoryKey: key,
-        categoryLabel: categoryLabel(key),
+        categoryLabel: householdCategoryLabel(txn),
         accountLabel: row ? accountLabel(row) : "Unknown account",
         accountKind: (txn.account_id && kindById.get(txn.account_id)) || "other",
         amountCents: txn.amount_cents,

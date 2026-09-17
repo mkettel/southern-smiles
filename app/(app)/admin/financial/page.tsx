@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getProfile } from "@/actions/auth";
+import { requireMemberModulePage } from "@/actions/member-module-access";
 import { getFinancialWorkspaceData } from "@/actions/financial-workspace";
 import { getHouseholdFinanceData } from "@/actions/household-finance";
 import { getHouseholdRecurringData } from "@/actions/household-recurring";
@@ -12,7 +13,7 @@ import { HouseholdOverviewDashboard } from "@/components/financial/household-ove
 export default async function AdminFinancialPage() {
   const profile = await getProfile();
   if (!profile) redirect("/login");
-  if (profile.role !== "admin") redirect("/dashboard");
+  await requireMemberModulePage("financial");
 
   const access = await getWorkspaceAccess();
 

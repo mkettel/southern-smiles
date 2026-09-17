@@ -61,7 +61,7 @@ export function HouseholdSpendingExplorer({
   transactions: HouseholdTransactionRow[];
   today: string;
 }) {
-  const [rangeKey, setRangeKey] = useState<SpendingRangeKey>("3_months");
+  const [rangeKey, setRangeKey] = useState<SpendingRangeKey>("this_month");
   const [accountId, setAccountId] = useState<string | null>(null);
   const [chartType, setChartType] = useState<ChartType>("donut");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);

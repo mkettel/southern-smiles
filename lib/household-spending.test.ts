@@ -160,7 +160,7 @@ test("assigned chart accounts override bank labels and missing assignments stay 
   ]);
   const view = buildSpendingView({ transactions, accounts: [card], today: "2026-09-11", rangeKey: "this_month" });
   assert.equal(view.totalCents, 13500);
-  assert.equal(view.categories.find((c) => c.key === "groceries")?.label, "5100 Groceries");
+  assert.equal(view.categories.find((c) => c.key === "groceries")?.label, "Groceries");
   assert.equal(view.categories.find((c) => c.key === "groceries")?.amountCents, 6000);
   assert.equal(view.categories.find((c) => c.key === "groceries")?.previousAmountCents, 1500);
   assert.equal(view.categories.find((c) => c.key === "UNCATEGORIZED")?.amountCents, 4500);

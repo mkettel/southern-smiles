@@ -1,11 +1,10 @@
 // Pure spending breakdown for the household "Spending" explorer.
 // Filters a set of posted outflows by time range and account, then groups
-// by Plaid category, merchant, and month. No DB access.
+// by assigned chart account, merchant, and month. No DB access.
 
 import {
   accountKind,
   accountLabel,
-  categoryLabel,
   isTransferTransaction,
   monthKeyOf,
   shiftMonthKey,
@@ -75,18 +74,7 @@ export interface SpendingView {
 
 export const SPENDING_RANGE_KEYS: SpendingRangeKey[] = ["this_month", "last_month", "3_months", "6_months", "12_months", "ytd"];
 
-/**
- * Fixed hue slots for the categories almost every household has. The
- * remaining slots go to the largest other categories across the whole
- * dataset (see `assignCategorySlots`), so a filter never repaints a category.
- */
-export const CATEGORY_COLOR_SLOTS: Record<string, number> = {
-  FOOD_AND_DRINK: 0,
-  GENERAL_MERCHANDISE: 1,
-  TRANSPORTATION: 2,
-  RENT_AND_UTILITIES: 3,
-  LOAN_PAYMENTS: 4,
-};
+export const CATEGORY_COLOR_SLOTS: Record<string, number> = {};
 
 export const CATEGORY_SLOT_COUNT = 8;
 
@@ -194,6 +182,7 @@ export function buildSpendingView(input: {
 }): SpendingView {
   const range = resolveSpendingRange(input.rangeKey, input.today);
   const labelsById = new Map(input.accounts.map((row) => [row.id, accountLabel(row)]));
+  const categoryLabels = new Map(input.transactions.map((txn) => [categoryKeyOf(txn), txn.bookkeeping_category_label]));
 
   const months: { key: string; label: string }[] = [];
   for (let key = monthKeyOf(range.start); key <= monthKeyOf(range.end); key = shiftMonthKey(key, 1)) {
@@ -240,7 +229,7 @@ export function buildSpendingView(input: {
   const categories: SpendingCategory[] = [...buckets.entries()]
     .map(([key, bucket]) => ({
       key,
-      label: categoryLabel(key),
+      label: key === "UNCATEGORIZED" ? "Uncategorized" : categoryLabels.get(key) ?? "Uncategorized",
       amountCents: bucket.amountCents,
       transactionCount: bucket.transactionCount,
       shareTenths: positiveTotal > 0 ? Math.round((Math.max(0, bucket.amountCents) / positiveTotal) * 1000) : 0,
@@ -303,8 +292,25 @@ export function foldCategories(categories: SpendingCategory[], limit: number): S
   ];
 }
 
-export function categoryKeyOf(txn: Pick<HouseholdTransactionRow, "plaid_category_primary">): string {
-  return (txn.plaid_category_primary ?? "").toUpperCase() || "UNCATEGORIZED";
+export interface SpendingChartAccount {
+  id: string;
+  account_number: string | null;
+  name: string;
+}
+
+export function withSpendingCategories(transactions: HouseholdTransactionRow[], accounts: SpendingChartAccount[]): HouseholdTransactionRow[] {
+  const byId = new Map(accounts.map((account) => [account.id, account]));
+  return transactions.map((txn) => {
+    const account = txn.bookkeeping_account_id ? byId.get(txn.bookkeeping_account_id) : undefined;
+    return {
+      ...txn,
+      bookkeeping_category_label: account ? [account.account_number, account.name].filter(Boolean).join(" ") : null,
+    };
+  });
+}
+
+export function categoryKeyOf(txn: Pick<HouseholdTransactionRow, "bookkeeping_account_id" | "bookkeeping_category_label">): string {
+  return txn.bookkeeping_account_id && txn.bookkeeping_category_label ? txn.bookkeeping_account_id : "UNCATEGORIZED";
 }
 
 function daysInclusive(start: string, end: string): number {

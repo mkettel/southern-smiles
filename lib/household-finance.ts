@@ -29,6 +29,8 @@ export interface HouseholdTransactionRow {
   pending: boolean;
   plaid_category_primary: string | null;
   plaid_category_detailed?: string | null;
+  bookkeeping_account_id?: string | null;
+  bookkeeping_category_label?: string | null;
 }
 
 export interface HouseholdSnapshotRow {

@@ -89,7 +89,7 @@ export async function getHouseholdTransactions(
   for (let from = 0; ; from += pageSize) {
     const { data, error } = await supabase
       .from("financial_transactions")
-      .select("id, account_id, transaction_date, name, merchant_name, amount_cents, pending, plaid_category_primary, plaid_category_detailed")
+      .select("id, account_id, transaction_date, name, merchant_name, amount_cents, pending, plaid_category_primary, plaid_category_detailed, bookkeeping_account_id")
       .eq("practice_id", practiceId)
       .eq("is_removed", false)
       .gte("transaction_date", startDate)
@@ -109,6 +109,7 @@ export async function getHouseholdTransactions(
         merchant_name: (row.merchant_name as string | null) ?? null,
         amount_cents: toNumber(row.amount_cents) ?? 0,
         pending: Boolean(row.pending),
+        bookkeeping_account_id: (row.bookkeeping_account_id as string | null) ?? null,
         plaid_category_primary: (row.plaid_category_primary as string | null) ?? null,
         plaid_category_detailed: (row.plaid_category_detailed as string | null) ?? null,
       });

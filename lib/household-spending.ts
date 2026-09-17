@@ -304,7 +304,7 @@ export function withSpendingCategories(transactions: HouseholdTransactionRow[], 
     const account = txn.bookkeeping_account_id ? byId.get(txn.bookkeeping_account_id) : undefined;
     return {
       ...txn,
-      bookkeeping_category_label: account ? [account.account_number, account.name].filter(Boolean).join(" ") : null,
+      bookkeeping_category_label: account?.name ?? null,
     };
   });
 }

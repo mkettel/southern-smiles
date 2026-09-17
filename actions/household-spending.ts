@@ -8,7 +8,7 @@ import {
   getHouseholdTransactions,
   toPhoenixDate,
 } from "@/lib/household-finance-queries";
-import { isSpendingTransaction } from "@/lib/household-spending";
+import { isSpendingTransaction, withSpendingCategories, type SpendingChartAccount } from "@/lib/household-spending";
 
 // Two years so every preset range has a same-length previous window to
 // compare against (12 months back needs 24 months of history).
@@ -34,6 +34,18 @@ export async function getHouseholdSpendingData(): Promise<HouseholdSpendingData 
   }
 
   const transactions = (await getHouseholdTransactions(supabase, practiceId, startDate)).filter(isSpendingTransaction);
+  // Include archived accounts: historical assignments still belong to their category.
+  const chartAccounts: SpendingChartAccount[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase.from("bookkeeping_accounts")
+      .select("id, account_number, name")
+      .eq("practice_id", practiceId)
+      .order("id")
+      .range(from, from + 999);
+    if (error) throw new Error(error.message);
+    chartAccounts.push(...(data ?? []));
+    if ((data?.length ?? 0) < 1000) break;
+  }
 
-  return { today, accounts, transactions };
+  return { today, accounts, transactions: withSpendingCategories(transactions, chartAccounts) };
 }

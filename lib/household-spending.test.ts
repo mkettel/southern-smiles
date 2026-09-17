@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { HouseholdAccountRow, HouseholdTransactionRow } from "./household-finance";
-import { assignCategorySlots, buildSpendingPace, buildSpendingView, foldCategories, resolveSpendingRange } from "./household-spending";
+import { assignCategorySlots, buildSpendingPace, buildSpendingView, foldCategories, resolveSpendingRange, withSpendingCategories } from "./household-spending";
 
 const card: HouseholdAccountRow = {
   id: "card",
@@ -32,6 +32,8 @@ function txn(date: string, amount: number, category: string, overrides: Partial<
     amount_cents: amount,
     pending: false,
     plaid_category_primary: category,
+    bookkeeping_account_id: category,
+    bookkeeping_category_label: `Assigned ${category}`,
     ...overrides,
   };
 }
@@ -126,7 +128,7 @@ test("folding keeps the top categories and sums the rest into Other", () => {
   assert.equal(foldCategories(view.categories, 10).length, 5);
 });
 
-test("color slots are fixed for core categories and stable for the biggest others", () => {
+test("color slots use the largest assigned categories across the dataset", () => {
   const slots = assignCategorySlots([
     txn("2026-09-01", 1_000, "FOOD_AND_DRINK"),
     txn("2026-09-01", 9_000, "TRAVEL"),
@@ -136,11 +138,50 @@ test("color slots are fixed for core categories and stable for the biggest other
     txn("2026-09-01", 50_000, "TRANSFER_OUT"),
   ]);
 
-  assert.equal(slots.get("FOOD_AND_DRINK"), 0);
-  assert.equal(slots.get("LOAN_PAYMENTS"), 4);
-  assert.deepEqual([slots.get("TRAVEL"), slots.get("MEDICAL"), slots.get("ENTERTAINMENT")], [5, 6, 7]);
-  assert.equal(slots.has("PERSONAL_CARE"), false);
+  assert.equal(slots.get("FOOD_AND_DRINK"), 4);
+  assert.equal(slots.has("LOAN_PAYMENTS"), false);
+  assert.deepEqual([slots.get("TRAVEL"), slots.get("MEDICAL"), slots.get("ENTERTAINMENT")], [0, 1, 2]);
+  assert.equal(slots.get("PERSONAL_CARE"), 3);
   assert.equal(slots.has("TRANSFER_OUT"), false);
+});
+
+test("assigned chart accounts override bank labels and missing assignments stay Uncategorized", () => {
+  const transactions = withSpendingCategories([
+    txn("2026-09-02", 5000, "GENERAL_MERCHANDISE", { bookkeeping_account_id: "groceries" }),
+    txn("2026-09-03", 2000, "FOOD_AND_DRINK", { bookkeeping_account_id: "groceries" }),
+    txn("2026-09-04", -1000, "GENERAL_MERCHANDISE", { bookkeeping_account_id: "groceries" }),
+    txn("2026-09-05", 3000, "GENERAL_MERCHANDISE", { bookkeeping_account_id: "supplies" }),
+    txn("2026-09-06", 4000, "FOOD_AND_DRINK", { bookkeeping_account_id: null }),
+    txn("2026-09-07", 500, "SERVICES", { bookkeeping_account_id: "missing" }),
+    txn("2026-08-02", 1500, "MEDICAL", { bookkeeping_account_id: "groceries" }),
+  ], [
+    { id: "groceries", account_number: "5100", name: "Groceries" },
+    { id: "supplies", account_number: null, name: "Household supplies" },
+  ]);
+  const view = buildSpendingView({ transactions, accounts: [card], today: "2026-09-11", rangeKey: "this_month" });
+  assert.equal(view.totalCents, 13500);
+  assert.equal(view.categories.find((c) => c.key === "groceries")?.label, "5100 Groceries");
+  assert.equal(view.categories.find((c) => c.key === "groceries")?.amountCents, 6000);
+  assert.equal(view.categories.find((c) => c.key === "groceries")?.previousAmountCents, 1500);
+  assert.equal(view.categories.find((c) => c.key === "UNCATEGORIZED")?.amountCents, 4500);
+  assert.equal(view.categories.find((c) => c.key === "supplies")?.label, "Household supplies");
+  for (const category of view.categories) {
+    assert.equal(view.transactions.filter((t) => t.categoryKey === category.key).reduce((sum, t) => sum + t.amountCents, 0), category.amountCents);
+    assert.equal(category.monthly.reduce((sum, amount) => sum + amount, 0), category.amountCents);
+  }
+});
+
+test("identical chart account names do not merge distinct account IDs", () => {
+  const transactions = withSpendingCategories([
+    txn("2026-09-02", 100, "FOOD_AND_DRINK", { bookkeeping_account_id: "a" }),
+    txn("2026-09-02", 200, "FOOD_AND_DRINK", { bookkeeping_account_id: "b" }),
+  ], [
+    { id: "a", account_number: null, name: "Other" },
+    { id: "b", account_number: null, name: "Other" },
+  ]);
+  const view = buildSpendingView({ transactions, accounts: [card], today: "2026-09-11", rangeKey: "this_month" });
+  assert.equal(view.categories.length, 2);
+  assert.deepEqual(view.categories.map((c) => c.key), ["b", "a"]);
 });
 
 test("pace builds cumulative month-to-date lines and same-day comparisons", () => {

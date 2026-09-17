@@ -83,6 +83,18 @@ test("a fixed monthly charge is detected as an active subscription", () => {
   assert.equal(stream.lastDate, "2026-08-12");
   assert.equal(stream.nextExpectedDate, "2026-09-12");
   assert.equal(stream.status, "detected");
+  assert.equal(stream.categoryLabel, "Uncategorized");
+});
+
+test("recurring labels use assigned names while bank classification remains intact", () => {
+  const data = detect(monthly("Netflix", 12, [1549, 1549, 1549, 1549], "2026-05", {
+    plaid_category_primary: "ENTERTAINMENT",
+    bookkeeping_account_id: "subscriptions",
+    bookkeeping_category_label: "Subscriptions",
+  }));
+  assert.equal(data.streams[0].categoryKey, "subscriptions");
+  assert.equal(data.streams[0].categoryLabel, "Subscriptions");
+  assert.equal(data.streams[0].kind, "subscription");
 });
 
 test("a variable monthly utility needs four occurrences and is classed as a bill", () => {

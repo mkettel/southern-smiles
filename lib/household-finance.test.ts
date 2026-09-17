@@ -130,7 +130,7 @@ test("transfers, card payments, and loan disbursements never count as income or 
   assert.equal(month.netCents, 296_000);
   assert.deepEqual(
     month.categories.map((category) => [category.key, category.amountCents, category.shareTenths]),
-    [["FOOD_AND_DRINK", 4_000, 1000]],
+    [["UNCATEGORIZED", 4_000, 1000]],
   );
   assert.equal(data.recentTransactions.find((row) => row.id === "pay")?.isTransfer, true);
 });

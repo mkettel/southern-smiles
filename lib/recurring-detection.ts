@@ -1,10 +1,10 @@
 // Local detection of recurring bills and subscriptions from synced
 // transactions. Pure: no DB access, so it runs on fixtures in tests and in
 // the dev preview.
+import { categoryKeyOf, householdCategoryLabel } from "@/lib/household-categories";
 
 import {
   accountLabel,
-  categoryLabel,
   isTransferTransaction,
   type HouseholdAccountRow,
   type HouseholdTransactionRow,
@@ -248,7 +248,8 @@ function analyzeOccurrences(
 
   const lastDate = occurrences[occurrences.length - 1].transaction_date;
   const isActive = daysBetween(lastDate, today) <= spec.maxDays * 1.5;
-  const categoryKey = mostCommon(occurrences.map((txn) => (txn.plaid_category_primary ?? "").toUpperCase() || "UNCATEGORIZED"));
+  const bankCategoryKey = mostCommon(occurrences.map((txn) => (txn.plaid_category_primary ?? "").toUpperCase() || "UNCATEGORIZED"));
+  const categoryKey = mostCommon(occurrences.map(categoryKeyOf));
   const label = mostCommon(occurrences.map((txn) => txn.merchant_name?.trim() || txn.name));
   const accountId = mostCommon(occurrences.map((txn) => txn.account_id ?? ""));
 
@@ -257,7 +258,7 @@ function analyzeOccurrences(
     label,
     accountLabel: (accountId && labelsById.get(accountId)) || "Unknown account",
     categoryKey,
-    categoryLabel: categoryLabel(categoryKey),
+    categoryLabel: householdCategoryLabel(occurrences.find((txn) => categoryKeyOf(txn) === categoryKey)!),
     cadence,
     cadenceLabel: spec.label,
     kind: classifyKind(
@@ -266,7 +267,7 @@ function analyzeOccurrences(
         mostCommon(occurrences.map((txn) => normalizeText(txn.name))),
         mostCommon(occurrences.map((txn) => normalizeText(txn.plaid_category_detailed ?? ""))),
       ].join(" "),
-      categoryKey,
+      bankCategoryKey,
       amountIsFixed,
     ),
     typicalAmountCents,

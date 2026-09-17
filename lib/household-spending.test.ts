@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { HouseholdAccountRow, HouseholdTransactionRow } from "./household-finance";
+import { buildHouseholdFinanceData } from "./household-finance";
 import { assignCategorySlots, buildSpendingPace, buildSpendingView, foldCategories, resolveSpendingRange, withSpendingCategories } from "./household-spending";
 
 const card: HouseholdAccountRow = {
@@ -181,6 +182,13 @@ test("assigned chart accounts override bank labels and missing assignments stay 
   assert.equal(view.categories.find((c) => c.key === "groceries")?.previousAmountCents, 1500);
   assert.equal(view.categories.find((c) => c.key === "UNCATEGORIZED")?.amountCents, 4500);
   assert.equal(view.categories.find((c) => c.key === "supplies")?.label, "Household supplies");
+  const overview = buildHouseholdFinanceData({ transactions, accounts: [card], today: "2026-09-11", snapshots: [], connectionCount: 1, lastSyncedAt: null });
+  assert.equal(overview.months.at(-1)?.spendingCents, view.totalCents);
+  assert.deepEqual(overview.months.at(-1)?.categories.map((c) => [c.key, c.label, c.amountCents]), view.categories.map((c) => [c.key, c.label, c.amountCents]));
+  for (const recent of overview.recentTransactions) {
+    const category = view.categories.find((c) => c.key === recent.categoryKey);
+    assert.equal(recent.categoryLabel, category?.label);
+  }
   for (const category of view.categories) {
     assert.equal(view.transactions.filter((t) => t.categoryKey === category.key).reduce((sum, t) => sum + t.amountCents, 0), category.amountCents);
     assert.equal(category.monthly.reduce((sum, amount) => sum + amount, 0), category.amountCents);

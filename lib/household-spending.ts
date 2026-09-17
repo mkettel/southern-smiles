@@ -13,6 +13,8 @@ import {
   type HouseholdTransactionRow,
 } from "@/lib/household-finance";
 import { addDays, daysBetween, recurringStreamKey } from "@/lib/recurring-detection";
+import { categoryKeyOf } from "@/lib/household-categories";
+export { categoryKeyOf, withSpendingCategories, type SpendingChartAccount } from "@/lib/household-categories";
 
 export type SpendingRangeKey = "this_month" | "last_month" | "3_months" | "6_months" | "12_months" | "ytd";
 
@@ -290,27 +292,6 @@ export function foldCategories(categories: SpendingCategory[], limit: number): S
       merchants: [],
     },
   ];
-}
-
-export interface SpendingChartAccount {
-  id: string;
-  account_number: string | null;
-  name: string;
-}
-
-export function withSpendingCategories(transactions: HouseholdTransactionRow[], accounts: SpendingChartAccount[]): HouseholdTransactionRow[] {
-  const byId = new Map(accounts.map((account) => [account.id, account]));
-  return transactions.map((txn) => {
-    const account = txn.bookkeeping_account_id ? byId.get(txn.bookkeeping_account_id) : undefined;
-    return {
-      ...txn,
-      bookkeeping_category_label: account?.name ?? null,
-    };
-  });
-}
-
-export function categoryKeyOf(txn: Pick<HouseholdTransactionRow, "bookkeeping_account_id" | "bookkeeping_category_label">): string {
-  return txn.bookkeeping_account_id && txn.bookkeeping_category_label ? txn.bookkeeping_account_id : "UNCATEGORIZED";
 }
 
 function daysInclusive(start: string, end: string): number {

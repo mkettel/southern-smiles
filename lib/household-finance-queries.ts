@@ -2,6 +2,7 @@
 // Not a "use server" module, so these are plain functions, not actions.
 
 import type { createAdminClient } from "@/lib/supabase/admin";
+import { withSpendingCategories, type SpendingChartAccount } from "@/lib/household-categories";
 import type {
   HouseholdAccountRow,
   HouseholdSnapshotRow,
@@ -114,8 +115,21 @@ export async function getHouseholdTransactions(
         plaid_category_detailed: (row.plaid_category_detailed as string | null) ?? null,
       });
     }
-    if ((data?.length ?? 0) < pageSize) return rows;
+    if ((data?.length ?? 0) < pageSize) break;
   }
+  // Archived accounts retain their historical category assignments.
+  const chartAccounts: SpendingChartAccount[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase.from("bookkeeping_accounts")
+      .select("id, account_number, name")
+      .eq("practice_id", practiceId)
+      .order("id")
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    chartAccounts.push(...(data ?? []));
+    if ((data?.length ?? 0) < pageSize) break;
+  }
+  return withSpendingCategories(rows, chartAccounts);
 }
 
 export async function getHouseholdSnapshots(

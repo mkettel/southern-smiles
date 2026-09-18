@@ -3,6 +3,7 @@
 
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { withSpendingCategories, type SpendingChartAccount } from "@/lib/household-categories";
+import { cashTransactions } from "@/lib/household-cash";
 import type {
   HouseholdAccountRow,
   HouseholdSnapshotRow,
@@ -115,6 +116,17 @@ export async function getHouseholdTransactions(
         plaid_category_detailed: (row.plaid_category_detailed as string | null) ?? null,
       });
     }
+    if ((data?.length ?? 0) < pageSize) break;
+  }
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase.from("household_cash_expenses")
+      .select("id, expense_date, description, amount_cents, bookkeeping_account_id, version, voided")
+      .eq("practice_id", practiceId).eq("voided", false).gte("expense_date", startDate)
+      .order("id").range(from, from + pageSize - 1);
+    // Keep existing reports available while the additive migration is rolling out.
+    if (error?.code === MISSING_TABLE || error?.code === "PGRST205") break;
+    if (error) throw new Error(error.message);
+    rows.push(...cashTransactions(data ?? []));
     if ((data?.length ?? 0) < pageSize) break;
   }
   // Archived accounts retain their historical category assignments.

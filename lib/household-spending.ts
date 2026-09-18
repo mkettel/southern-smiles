@@ -255,7 +255,7 @@ export function buildSpendingView(input: {
       date: txn.transaction_date,
       description: txn.merchant_name?.trim() || txn.name,
       categoryKey: categoryKeyOf(txn),
-      accountLabel: (txn.account_id && labelsById.get(txn.account_id)) || "Unknown account",
+      accountLabel: txn.account_id === "manual-cash" ? "Manual · Cash" : (txn.account_id && labelsById.get(txn.account_id)) || "Unknown account",
       amountCents: txn.amount_cents,
     }));
 

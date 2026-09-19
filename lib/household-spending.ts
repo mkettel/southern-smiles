@@ -1,6 +1,7 @@
 // Pure spending breakdown for the household "Spending" explorer.
 // Filters a set of posted outflows by time range and account, then groups
-// by assigned chart account, merchant, and month. No DB access.
+// by category (assigned chart account, else bank category), merchant, and
+// month. No DB access.
 
 import {
   accountKind,
@@ -13,7 +14,7 @@ import {
   type HouseholdTransactionRow,
 } from "@/lib/household-finance";
 import { addDays, daysBetween, recurringStreamKey } from "@/lib/recurring-detection";
-import { categoryKeyOf } from "@/lib/household-categories";
+import { categoryKeyOf, householdCategoryLabel } from "@/lib/household-categories";
 export { categoryKeyOf, withSpendingCategories, type SpendingChartAccount } from "@/lib/household-categories";
 
 export type SpendingRangeKey = "this_month" | "last_month" | "3_months" | "6_months" | "12_months" | "ytd";
@@ -76,7 +77,19 @@ export interface SpendingView {
 
 export const SPENDING_RANGE_KEYS: SpendingRangeKey[] = ["this_month", "last_month", "3_months", "6_months", "12_months", "ytd"];
 
-export const CATEGORY_COLOR_SLOTS: Record<string, number> = {};
+/**
+ * Fixed hue slots for the bank categories almost every household has. The
+ * remaining slots go to the largest other categories across the whole
+ * dataset, assigned chart accounts included, so a filter never repaints a
+ * category.
+ */
+export const CATEGORY_COLOR_SLOTS: Record<string, number> = {
+  FOOD_AND_DRINK: 0,
+  GENERAL_MERCHANDISE: 1,
+  TRANSPORTATION: 2,
+  RENT_AND_UTILITIES: 3,
+  LOAN_PAYMENTS: 4,
+};
 
 export const CATEGORY_SLOT_COUNT = 8;
 
@@ -184,7 +197,7 @@ export function buildSpendingView(input: {
 }): SpendingView {
   const range = resolveSpendingRange(input.rangeKey, input.today);
   const labelsById = new Map(input.accounts.map((row) => [row.id, accountLabel(row)]));
-  const categoryLabels = new Map(input.transactions.map((txn) => [categoryKeyOf(txn), txn.bookkeeping_category_label]));
+  const categoryLabels = new Map(input.transactions.map((txn) => [categoryKeyOf(txn), householdCategoryLabel(txn)]));
 
   const months: { key: string; label: string }[] = [];
   for (let key = monthKeyOf(range.start); key <= monthKeyOf(range.end); key = shiftMonthKey(key, 1)) {
@@ -231,7 +244,7 @@ export function buildSpendingView(input: {
   const categories: SpendingCategory[] = [...buckets.entries()]
     .map(([key, bucket]) => ({
       key,
-      label: key === "UNCATEGORIZED" ? "Uncategorized" : categoryLabels.get(key) ?? "Uncategorized",
+      label: categoryLabels.get(key) ?? "Uncategorized",
       amountCents: bucket.amountCents,
       transactionCount: bucket.transactionCount,
       shareTenths: positiveTotal > 0 ? Math.round((Math.max(0, bucket.amountCents) / positiveTotal) * 1000) : 0,

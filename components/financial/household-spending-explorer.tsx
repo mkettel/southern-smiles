@@ -1,5 +1,9 @@
 "use client";
 
+// Shared by two household workspaces with different categorization habits;
+// see docs/household-finance.md before removing chart types or changing how
+// categories resolve. All five views stay; Pace locks the range on purpose.
+
 import { useMemo, useState } from "react";
 import { useTheme } from "next-themes";
 import {

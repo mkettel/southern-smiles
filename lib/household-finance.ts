@@ -2,6 +2,8 @@
 // No DB calls here so it can run against fixtures in tests and previews.
 import { categoryKeyOf, householdCategoryLabel } from "@/lib/household-categories";
 
+export { categoryLabel } from "@/lib/household-categories";
+
 export type HouseholdAccountKind = "checking" | "savings" | "credit" | "other";
 
 export interface HouseholdAccountRow {
@@ -130,28 +132,6 @@ export const HOUSEHOLD_MONTH_COUNT = 12;
 export const HOUSEHOLD_RECENT_LIMIT = 20;
 export const HOUSEHOLD_CATEGORY_LIMIT = 8;
 
-const CATEGORY_LABELS: Record<string, string> = {
-  INCOME: "Income",
-  TRANSFER_IN: "Transfers in",
-  TRANSFER_OUT: "Transfers out",
-  LOAN_PAYMENTS: "Loan payments",
-  LOAN_DISBURSEMENTS: "Loan disbursements",
-  BANK_FEES: "Bank fees",
-  ENTERTAINMENT: "Entertainment",
-  FOOD_AND_DRINK: "Food & drink",
-  GENERAL_MERCHANDISE: "Shopping",
-  HOME_IMPROVEMENT: "Home improvement",
-  MEDICAL: "Medical",
-  PERSONAL_CARE: "Personal care",
-  GENERAL_SERVICES: "Services",
-  GOVERNMENT_AND_NON_PROFIT: "Government & non-profit",
-  TRANSPORTATION: "Transportation",
-  TRAVEL: "Travel",
-  RENT_AND_UTILITIES: "Rent & utilities",
-  OTHER: "Other",
-  UNCATEGORIZED: "Uncategorized",
-};
-
 // Money moving between the household's own accounts, or borrowed money
 // arriving, is not income or spending. Credit card payments live under
 // TRANSFER_OUT, so excluding transfers also avoids counting card purchases
@@ -161,16 +141,6 @@ const FLOW_EXCLUDED_CATEGORIES = new Set([
   "TRANSFER_OUT",
   "LOAN_DISBURSEMENTS",
 ]);
-
-export function categoryLabel(key: string | null | undefined): string {
-  const normalized = (key ?? "").trim().toUpperCase() || "UNCATEGORIZED";
-  if (CATEGORY_LABELS[normalized]) return CATEGORY_LABELS[normalized];
-  return normalized
-    .toLowerCase()
-    .split("_")
-    .map((word) => (word ? word[0].toUpperCase() + word.slice(1) : word))
-    .join(" ");
-}
 
 export function isTransferCategory(key: string | null | undefined): boolean {
   return FLOW_EXCLUDED_CATEGORIES.has((key ?? "").toUpperCase());

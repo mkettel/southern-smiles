@@ -145,7 +145,7 @@ test("folding keeps the top categories and sums the rest into Other", () => {
   assert.equal(foldCategories(view.categories, 10).length, 5);
 });
 
-test("color slots use the largest assigned categories across the dataset", () => {
+test("color slots are fixed for core bank categories and stable for the biggest others", () => {
   const slots = assignCategorySlots([
     txn("2026-09-01", 1_000, "FOOD_AND_DRINK"),
     txn("2026-09-01", 9_000, "TRAVEL"),
@@ -155,14 +155,14 @@ test("color slots use the largest assigned categories across the dataset", () =>
     txn("2026-09-01", 50_000, "TRANSFER_OUT"),
   ]);
 
-  assert.equal(slots.get("FOOD_AND_DRINK"), 4);
-  assert.equal(slots.has("LOAN_PAYMENTS"), false);
-  assert.deepEqual([slots.get("TRAVEL"), slots.get("MEDICAL"), slots.get("ENTERTAINMENT")], [0, 1, 2]);
-  assert.equal(slots.get("PERSONAL_CARE"), 3);
+  assert.equal(slots.get("FOOD_AND_DRINK"), 0);
+  assert.equal(slots.get("LOAN_PAYMENTS"), 4);
+  assert.deepEqual([slots.get("TRAVEL"), slots.get("MEDICAL"), slots.get("ENTERTAINMENT")], [5, 6, 7]);
+  assert.equal(slots.has("PERSONAL_CARE"), false);
   assert.equal(slots.has("TRANSFER_OUT"), false);
 });
 
-test("assigned chart accounts override bank labels and missing assignments stay Uncategorized", () => {
+test("assigned chart accounts override bank labels and unassigned rows fall back to bank categories", () => {
   const transactions = withSpendingCategories([
     txn("2026-09-02", 5000, "GENERAL_MERCHANDISE", { bookkeeping_account_id: "groceries" }),
     txn("2026-09-03", 2000, "FOOD_AND_DRINK", { bookkeeping_account_id: "groceries" }),
@@ -180,7 +180,10 @@ test("assigned chart accounts override bank labels and missing assignments stay 
   assert.equal(view.categories.find((c) => c.key === "groceries")?.label, "Groceries");
   assert.equal(view.categories.find((c) => c.key === "groceries")?.amountCents, 6000);
   assert.equal(view.categories.find((c) => c.key === "groceries")?.previousAmountCents, 1500);
-  assert.equal(view.categories.find((c) => c.key === "UNCATEGORIZED")?.amountCents, 4500);
+  assert.equal(view.categories.find((c) => c.key === "FOOD_AND_DRINK")?.amountCents, 4000);
+  assert.equal(view.categories.find((c) => c.key === "FOOD_AND_DRINK")?.label, "Food & drink");
+  assert.equal(view.categories.find((c) => c.key === "SERVICES")?.amountCents, 500);
+  assert.equal(view.categories.find((c) => c.key === "UNCATEGORIZED"), undefined);
   assert.equal(view.categories.find((c) => c.key === "supplies")?.label, "Household supplies");
   const overview = buildHouseholdFinanceData({ transactions, accounts: [card], today: "2026-09-11", snapshots: [], connectionCount: 1, lastSyncedAt: null });
   assert.equal(overview.months.at(-1)?.spendingCents, view.totalCents);

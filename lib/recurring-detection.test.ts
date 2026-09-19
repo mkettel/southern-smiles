@@ -83,7 +83,8 @@ test("a fixed monthly charge is detected as an active subscription", () => {
   assert.equal(stream.lastDate, "2026-08-12");
   assert.equal(stream.nextExpectedDate, "2026-09-12");
   assert.equal(stream.status, "detected");
-  assert.equal(stream.categoryLabel, "Uncategorized");
+  assert.equal(stream.categoryKey, "ENTERTAINMENT");
+  assert.equal(stream.categoryLabel, "Entertainment");
 });
 
 test("recurring labels use assigned names while bank classification remains intact", () => {

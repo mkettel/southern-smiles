@@ -49,7 +49,7 @@ export async function getHouseholdRecurringData(): Promise<HouseholdRecurringDat
     }
   }
 
-  return detectRecurringStreams({ transactions, accounts, today, overrides });
+  return detectRecurringStreams({ transactions: transactions.filter((t) => t.account_id !== "manual-cash"), accounts, today, overrides });
 }
 
 const statusSchema = z.object({

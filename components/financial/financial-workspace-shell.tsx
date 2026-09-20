@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Plus } from "lucide-react";
 import { getWorkspaceAccess } from "@/actions/workspace-access";
 import { cn } from "@/lib/utils";
 
@@ -58,7 +59,10 @@ export async function FinancialWorkspaceShell({
   return (
     <div className="mx-auto w-full max-w-[1500px] [font-family:var(--font-geist-sans)]">
       <header className="mb-8 border-b">
-        <h1 className="px-1 text-2xl font-semibold">{isHousehold ? "Finances" : "Financial"}</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="px-1 text-2xl font-semibold">{isHousehold ? "Finances" : "Financial"}</h1>
+          {isHousehold && <Link href="/admin/financial/cash" className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent"><Plus className="h-4 w-4" aria-hidden />Add expense</Link>}
+        </div>
         <nav className="mt-5 flex gap-7 overflow-x-auto px-1" aria-label="Financial workspace">
           {visibleTabs.map((tab) => (
             <Link

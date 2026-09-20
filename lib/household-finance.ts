@@ -1,6 +1,7 @@
 // Pure aggregation for the household (personal finance) overview.
 // No DB calls here so it can run against fixtures in tests and previews.
 import { categoryKeyOf, householdCategoryLabel } from "@/lib/household-categories";
+import { CASH_ACCOUNT_ID } from "@/lib/household-cash";
 
 export { categoryLabel } from "@/lib/household-categories";
 
@@ -303,7 +304,7 @@ export function buildHouseholdFinanceData(input: {
         const row = accountsById.get(accountId);
         return {
           accountId,
-          label: row ? accountLabel(row) : "Unknown account",
+          label: accountId === CASH_ACCOUNT_ID ? "Manual · Cash" : row ? accountLabel(row) : "Unknown account",
           kind: kindById.get(accountId) ?? "other",
           amountCents,
         };
@@ -373,7 +374,7 @@ export function buildHouseholdFinanceData(input: {
         description: txn.merchant_name?.trim() || txn.name,
         categoryKey: key,
         categoryLabel: householdCategoryLabel(txn),
-        accountLabel: row ? accountLabel(row) : "Unknown account",
+        accountLabel: txn.account_id === CASH_ACCOUNT_ID ? "Manual · Cash" : row ? accountLabel(row) : "Unknown account",
         accountKind: (txn.account_id && kindById.get(txn.account_id)) || "other",
         amountCents: txn.amount_cents,
         pending: txn.pending,

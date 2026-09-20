@@ -137,6 +137,7 @@ export function HouseholdSpendingExplorer({
               className="h-9 w-full appearance-none rounded-md border bg-background pl-3 pr-9 text-sm shadow-sm"
             >
               <option value="">All accounts</option>
+              <option value="manual-cash">Cash (manual)</option>
               {accountOptions.map((option) => (
                 <option key={option.id} value={option.id}>{option.label}</option>
               ))}

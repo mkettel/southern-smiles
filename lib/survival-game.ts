@@ -10,24 +10,27 @@ export const gameSchema = z.object({
   start: date, end: date, repeat: z.boolean(), points: number.int(),
   verification: z.enum(["Trusted updates", "Manager approval", "Manager entry"]),
   archived: z.boolean(), completed: z.boolean(), sides: z.array(z.string().trim().min(1).max(80)).length(2), scores: z.array(number).length(2),
+  individualScores: z.record(z.string().uuid(), number).optional(),
 }).refine(g => !g.end || g.end >= g.start, "End date must follow start date");
 export type Game = z.infer<typeof gameSchema>;
 export type Reward = { id: string; title: string; points: number };
 export type Request = { id: string; gameId?: string; title: string; person: string; value: number; before?: number; note: string; type: "progress" | "reward"; status: "pending" | "approved" | "declined" };
-export type ProgressEvent = { gameId: string; title: string; person: string; before: number; after: number; note: string; at: string };
+export type ProgressEvent = { gameId: string; title: string; person: string; recordedBy?: string; before: number; after: number; note: string; at: string };
 export type Data = { games: Game[]; requests: Request[]; rewards: Reward[]; balances: Record<string, number>; history: string[]; updates: ProgressEvent[]; awards: Record<string, Record<string, number>> };
 export type Player = { id: string; full_name: string };
 export const emptyGameData: Data = { games: [], requests: [], rewards: [], balances: {}, history: [], updates: [], awards: {} };
 export const commandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("saveGame"), game: gameSchema }),
   z.object({ type: z.literal("archive"), id: z.string().uuid(), archived: z.boolean() }),
-  z.object({ type: z.literal("progress"), id: z.string().uuid(), before: number, value: number, note: z.string().max(500) }),
+  z.object({ type: z.literal("progress"), id: z.string().uuid(), person: z.string().uuid().optional(), before: number, value: number, note: z.string().max(500) }),
   z.object({ type: z.literal("decide"), id: z.string().uuid(), approve: z.boolean() }),
   z.object({ type: z.literal("finish"), id: z.string().uuid() }),
   z.object({ type: z.literal("saveReward"), reward: z.object({ id: z.string().uuid(), title: z.string().trim().min(1).max(100), points: number.int().positive() }) }),
   z.object({ type: z.literal("reward"), id: z.string().uuid() }),
 ]);
 export type Command = z.infer<typeof commandSchema>;
+export function isIndividualCompetition(g: Game) { return g.kind === "Compete" && g.audience === "Individual"; }
+export function playerScore(g: Game, person: string) { return isIndividualCompetition(g) ? g.individualScores?.[person] ?? 0 : g.current; }
 export function eligible(g: Game, now = new Date()) {
   return g.kind === "Stay within a limit" ? !!g.end && new Date(`${g.end}T23:59:59-07:00`) < now && g.current <= g.goal : g.kind !== "Compete" && g.current >= g.goal;
 }
@@ -52,9 +55,10 @@ export function applyGameCommand(original: Data, raw: unknown, actor: { id: stri
     log(`${g.title}: ${yes ? "goal completed; points awarded" : "goal reopened; award reversed"}`);
   };
   const progress = (g: Game, value: number, person: string, note: string) => {
-    const before = g.current;
-    g.current = value;
-    data.updates.unshift({ gameId: g.id, title: g.title, person, before, after: value, note, at: now.toISOString() });
+    const before = playerScore(g, person);
+    if (isIndividualCompetition(g)) g.individualScores = { ...g.individualScores, [person]: value };
+    else g.current = value;
+    data.updates.unshift({ gameId: g.id, title: g.title, person, recordedBy: actor.id, before, after: value, note, at: now.toISOString() });
     log(`${g.title}: ${before} to ${value}${note ? ` (${note})` : ""}`);
     if (g.kind !== "Compete") complete(g, eligible(g, now));
   };
@@ -64,13 +68,17 @@ export function applyGameCommand(original: Data, raw: unknown, actor: { id: stri
       const g = command.game;
       const ids = new Set(players.map(p => p.id));
       if (g.members.some(id => !ids.has(id))) throw new Error("Participants must be active members of this office.");
-      if (g.audience === "Individual" && g.members.length !== 1) throw new Error("Choose one participant for an individual game.");
+      if (g.audience === "Individual" && !isIndividualCompetition(g) && g.members.length !== 1) throw new Error("Choose one participant for an individual game.");
+      if (isIndividualCompetition(g) && new Set(g.members).size < 2) throw new Error("Choose at least two competitors.");
       const old = data.games.find(item => item.id === g.id);
+      if (old && (old.kind !== g.kind || old.audience !== g.audience) && data.requests.some(r => r.gameId === g.id && r.status === "pending")) throw new Error("Handle pending updates before changing the game type.");
+      // Scores are updated through progress commands, not overwritten by editing game settings.
+      g.individualScores = old?.individualScores ?? {};
       if (old?.completed && (old.points !== g.points || JSON.stringify(old.members) !== JSON.stringify(g.members))) throw new Error("Reopen the goal before changing awarded points or participants.");
       g.completed = old?.completed ?? false;
       g.members = [...new Set(g.members)];
       data.games = old ? data.games.map(item => item.id === g.id ? g : item) : [...data.games, g];
-      if (old && old.current !== g.current) {
+      if (old && old.current !== g.current && !isIndividualCompetition(g)) {
         const value = g.current; g.current = old.current;
         progress(g, value, actor.id, "Manager correction");
       }
@@ -79,13 +87,16 @@ export function applyGameCommand(original: Data, raw: unknown, actor: { id: stri
     case "archive": requireAdmin(); find(command.id).archived = command.archived; log(`${command.archived ? "Archived" : "Restored"} ${find(command.id).title}`); break;
     case "progress": {
       const g = find(command.id);
+      const person = command.person ?? actor.id;
+      if (person !== actor.id) requireAdmin();
       if (g.archived || (!admin && !g.members.includes(actor.id))) throw new Error("You cannot update this game.");
-      if (g.kind === "Compete" || g.verification === "Manager entry") requireAdmin();
-      if (g.current !== command.before) throw new Error("The count changed. Refresh and enter your update again.");
+      if ((g.kind === "Compete" && !isIndividualCompetition(g)) || g.verification === "Manager entry") requireAdmin();
+      if (isIndividualCompetition(g) && !g.members.includes(person)) throw new Error("Only participants can update their score.");
+      if (playerScore(g, person) !== command.before) throw new Error("The count changed. Refresh and enter your update again.");
       if (g.verification === "Manager approval" && !admin) {
         if (data.requests.some(r => r.gameId === g.id && r.person === actor.id && r.status === "pending")) throw new Error("An update is already waiting for approval.");
-        data.requests.push({ id: uuid(), gameId: g.id, title: g.title, person: actor.id, value: command.value, before: g.current, note: command.note, type: "progress", status: "pending" });
-      } else progress(g, command.value, actor.id, command.note);
+        data.requests.push({ id: uuid(), gameId: g.id, title: g.title, person: actor.id, value: command.value, before: playerScore(g, actor.id), note: command.note, type: "progress", status: "pending" });
+      } else progress(g, command.value, person, command.note);
       break;
     }
     case "decide": {
@@ -94,7 +105,7 @@ export function applyGameCommand(original: Data, raw: unknown, actor: { id: stri
       if (!r || r.status !== "pending") throw new Error("Request already handled.");
       if (command.approve && r.type === "progress") {
         const g = find(r.gameId!);
-        if (g.archived || g.current !== r.before) throw new Error("The game changed since submission. Decline this request and enter the correct total.");
+        if (g.archived || !g.members.includes(r.person) || playerScore(g, r.person) !== r.before) throw new Error("The game changed since submission. Decline this request and enter the correct total.");
         progress(g, r.value, r.person, r.note);
       }
       if (!command.approve && r.type === "reward") data.balances[r.person] = (data.balances[r.person] ?? 0) + r.value;

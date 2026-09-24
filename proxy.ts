@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
 export default async function proxy(request: NextRequest) {
-  if (process.env.NODE_ENV === "development" && request.nextUrl.pathname === "/individual-game-preview") {
+  if (process.env.NODE_ENV === "development" && ["/individual-game-preview", "/office-reward-preview"].includes(request.nextUrl.pathname)) {
     return NextResponse.next();
   }
   if (

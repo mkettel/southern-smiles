@@ -11,12 +11,18 @@ export const gameSchema = z.object({
   verification: z.enum(["Trusted updates", "Manager approval", "Manager entry"]),
   archived: z.boolean(), completed: z.boolean(), sides: z.array(z.string().trim().min(1).max(80)).length(2), scores: z.array(number).length(2),
   individualScores: z.record(z.string().uuid(), number).optional(),
-}).refine(g => !g.end || g.end >= g.start, "End date must follow start date");
+  officeReward: z.object({
+    poolCents: z.number().int().positive().max(100000000),
+    units: z.record(z.string().uuid(), z.number().finite().nonnegative().max(100).multipleOf(0.5)),
+  }).optional(),
+}).refine(g => !g.end || g.end >= g.start, "End date must follow start date")
+  .refine(g => !g.officeReward || (g.audience === "Office" && g.kind !== "Compete" && g.points === 0), "Office cash pools require a shared office goal and no points reward.")
+  .refine(g => !g.officeReward || (Object.keys(g.officeReward.units).every(id => g.members.includes(id)) && g.members.every(id => g.officeReward!.units[id] !== undefined) && Object.values(g.officeReward.units).some(units => units > 0)), "Set bonus units for every participant, with at least one positive allocation.");
 export type Game = z.infer<typeof gameSchema>;
 export type Reward = { id: string; title: string; points: number };
 export type Request = { id: string; gameId?: string; title: string; person: string; value: number; before?: number; note: string; type: "progress" | "reward"; status: "pending" | "approved" | "declined" };
 export type ProgressEvent = { gameId: string; title: string; person: string; recordedBy?: string; before: number; after: number; note: string; at: string };
-export type Data = { games: Game[]; requests: Request[]; rewards: Reward[]; balances: Record<string, number>; history: string[]; updates: ProgressEvent[]; awards: Record<string, Record<string, number>> };
+export type Data = { games: Game[]; requests: Request[]; rewards: Reward[]; balances: Record<string, number>; history: string[]; updates: ProgressEvent[]; awards: Record<string, Record<string, number>>; cashAwards?: Record<string, Record<string, number>> };
 export type Player = { id: string; full_name: string };
 export const emptyGameData: Data = { games: [], requests: [], rewards: [], balances: {}, history: [], updates: [], awards: {} };
 export const commandSchema = z.discriminatedUnion("type", [
@@ -31,6 +37,20 @@ export const commandSchema = z.discriminatedUnion("type", [
 export type Command = z.infer<typeof commandSchema>;
 export function isIndividualCompetition(g: Game) { return g.kind === "Compete" && g.audience === "Individual"; }
 export function playerScore(g: Game, person: string) { return isIndividualCompetition(g) ? g.individualScores?.[person] ?? 0 : g.current; }
+export function officeRewardShares(reward: NonNullable<Game["officeReward"]>): Record<string, number> {
+  const weights = Object.entries(reward.units).map(([id, units]) => ({ id, weight: Math.round(units * 2) })).filter(row => row.weight > 0);
+  const total = weights.reduce((sum, row) => sum + row.weight, 0);
+  if (!total || !Number.isSafeInteger(reward.poolCents) || reward.poolCents <= 0) return {};
+  // Allocate whole cents first, then distribute residual cents by largest remainder.
+  const shares = weights.map(row => ({ ...row, cents: Math.floor(reward.poolCents * row.weight / total), remainder: reward.poolCents * row.weight % total }));
+  let remaining = reward.poolCents - shares.reduce((sum, row) => sum + row.cents, 0);
+  shares.sort((a, b) => b.remainder - a.remainder || a.id.localeCompare(b.id));
+  for (const row of shares) if (remaining-- > 0) row.cents++;
+  return Object.fromEntries(shares.map(row => [row.id, row.cents]));
+}
+export function rewardLabel(g: Game) {
+  return g.officeReward ? `$${(g.officeReward.poolCents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} office pool` : `${g.points} pts / person`;
+}
 export function eligible(g: Game, now = new Date()) {
   return g.kind === "Stay within a limit" ? !!g.end && new Date(`${g.end}T23:59:59-07:00`) < now && g.current <= g.goal : g.kind !== "Compete" && g.current >= g.goal;
 }
@@ -43,16 +63,20 @@ export function applyGameCommand(original: Data, raw: unknown, actor: { id: stri
   const find = (id: string) => { const g = data.games.find(g => g.id === id); if (!g) throw new Error("Game not found."); return g; };
   const complete = (g: Game, yes: boolean) => {
     if (g.completed === yes) return;
-    if (yes) {
+    if (yes && g.officeReward) {
+      data.cashAwards ??= {};
+      data.cashAwards[g.id] = officeRewardShares(g.officeReward);
+    } else if (yes) {
       const award = Object.fromEntries(g.members.map(id => [id, g.points]));
       for (const [id, points] of Object.entries(award)) data.balances[id] = (data.balances[id] ?? 0) + points;
       data.awards[g.id] = award;
     } else {
       for (const [id, points] of Object.entries(data.awards[g.id] ?? {})) data.balances[id] = (data.balances[id] ?? 0) - points;
       delete data.awards[g.id];
+      if (data.cashAwards) delete data.cashAwards[g.id];
     }
     g.completed = yes;
-    log(`${g.title}: ${yes ? "goal completed; points awarded" : "goal reopened; award reversed"}`);
+    log(`${g.title}: ${g.officeReward ? yes ? "goal completed; cash shares recorded (not paid)" : "goal reopened; cash shares withdrawn" : yes ? "goal completed; points awarded" : "goal reopened; award reversed"}`);
   };
   const progress = (g: Game, value: number, person: string, note: string) => {
     const before = playerScore(g, person);
@@ -71,6 +95,7 @@ export function applyGameCommand(original: Data, raw: unknown, actor: { id: stri
       if (g.audience === "Individual" && !isIndividualCompetition(g) && g.members.length !== 1) throw new Error("Choose one participant for an individual game.");
       if (isIndividualCompetition(g) && new Set(g.members).size < 2) throw new Error("Choose at least two competitors.");
       const old = data.games.find(item => item.id === g.id);
+      if (old?.completed && (JSON.stringify(old.officeReward) !== JSON.stringify(g.officeReward) || old.kind !== g.kind || old.audience !== g.audience)) throw new Error("Reopen the goal before changing its reward or game type.");
       if (old && (old.kind !== g.kind || old.audience !== g.audience) && data.requests.some(r => r.gameId === g.id && r.status === "pending")) throw new Error("Handle pending updates before changing the game type.");
       // Scores are updated through progress commands, not overwritten by editing game settings.
       g.individualScores = old?.individualScores ?? {};

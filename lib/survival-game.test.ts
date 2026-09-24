@@ -1,12 +1,58 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyGameCommand, emptyGameData, type Game } from "./survival-game";
+import { applyGameCommand, emptyGameData, officeRewardShares, rewardLabel, type Game } from "./survival-game";
 const id = "00000000-0000-4000-8000-000000000001";
 const other = "00000000-0000-4000-8000-000000000002";
 const actor = { id, full_name: "Player", role: "employee" };
 const players = [{ id, full_name: "Player" }];
 const game: Game = { id, title: "Implants", detail: "Annual implants", audience: "Office", members: [id], kind: "Reach a goal", unit: "implants", current: 130, goal: 150, start: "2026-01-01", end: "2026-12-31", repeat: false, points: 500, verification: "Trusted updates", archived: false, completed: false, sides: ["A","B"], scores: [0,0] };
 const state = () => ({ ...structuredClone(emptyGameData), games: [structuredClone(game)] });
+const cashGame = (): Game => ({ ...game, points: 0, officeReward: { poolCents: 150000, units: { [id]: 2 } } });
+test("office pool uses 7.5 units, not a per-person reward", () => {
+  const units = { doctor: 2, a: 1, b: 1, c: 1, d: 1, e: 1, evelis: 0.5, excluded: 0 };
+  const shares = officeRewardShares({ poolCents: 150000, units });
+  assert.equal(shares.doctor, 40000);
+  assert.equal(shares.a, 20000);
+  assert.equal(shares.evelis, 10000);
+  assert.equal(shares.excluded, undefined);
+  assert.equal(Object.values(shares).reduce((a,b) => a+b, 0), 150000);
+  assert.equal(rewardLabel(cashGame()), "$1,500.00 office pool");
+});
+test("cash allocations preserve every cent deterministically", () => {
+  const reward = { poolCents: 100, units: { b: 1, a: 1, c: 1 } };
+  assert.deepEqual(officeRewardShares(reward), { a: 34, b: 33, c: 33 });
+  assert.deepEqual(officeRewardShares({ ...reward, units: { c: 1, a: 1, b: 1 } }), officeRewardShares(reward));
+  assert.deepEqual(officeRewardShares({ poolCents: 100, units: { a: 0 } }), {});
+});
+test("cash completion and correction do not create points or payments", () => {
+  const s = state(); s.games[0] = cashGame();
+  const a = applyGameCommand(s, { type: "progress", id, before: 130, value: 150, note: "" }, actor, players);
+  assert.deepEqual(a.balances, {});
+  assert.deepEqual(a.awards, {});
+  assert.deepEqual(a.cashAwards?.[id], { [id]: 150000 });
+  const b = applyGameCommand(a, { type: "progress", id, before: 150, value: 151, note: "" }, actor, players);
+  assert.deepEqual(b.cashAwards, a.cashAwards);
+  const c = applyGameCommand(b, { type: "progress", id, before: 151, value: 149, note: "Correction" }, actor, players);
+  assert.equal(c.cashAwards?.[id], undefined);
+  assert.equal(c.games[0].completed, false);
+});
+test("invalid cash allocations, mixed points, and non-office pools are rejected", () => {
+  const admin = { ...actor, role: "admin" };
+  for (const g of [
+    { ...cashGame(), points: 100 },
+    { ...cashGame(), audience: "Team" },
+    { ...cashGame(), kind: "Compete" },
+    { ...cashGame(), officeReward: { poolCents: 0, units: { [id]: 2 } } },
+    { ...cashGame(), officeReward: { poolCents: 100, units: { [id]: 0 } } },
+    { ...cashGame(), officeReward: { poolCents: 100, units: { [id]: 0.3 } } },
+    { ...cashGame(), officeReward: { poolCents: 100, units: { [other]: 1 } } },
+  ]) assert.throws(() => applyGameCommand(state(), { type: "saveGame", game: g }, admin, players));
+});
+test("completed cash pool cannot be silently changed", () => {
+  const s = state(); s.games[0] = cashGame();
+  const a = applyGameCommand(s, { type: "progress", id, before: 130, value: 150, note: "" }, actor, players);
+  assert.throws(() => applyGameCommand(a, { type: "saveGame", game: { ...a.games[0], officeReward: { poolCents: 200000, units: { [id]: 2 } } } }, { ...actor, role: "admin" }, players), /Reopen/);
+});
 test("trusted progress is attributed and awards exactly once", () => {
   const a = applyGameCommand(state(), { type: "progress", id, before: 130, value: 150, note: "Confirmed" }, actor, players);
   assert.equal(a.games[0].current, 150); assert.equal(a.updates[0].person,id); assert.equal(a.balances[id],500); assert.equal(a.requests.length,0);

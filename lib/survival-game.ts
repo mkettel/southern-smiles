@@ -22,10 +22,11 @@ export type Game = z.infer<typeof gameSchema>;
 export type Reward = { id: string; title: string; points: number };
 export type Request = { id: string; gameId?: string; title: string; person: string; value: number; before?: number; note: string; type: "progress" | "reward"; status: "pending" | "approved" | "declined" };
 export type ProgressEvent = { gameId: string; title: string; person: string; recordedBy?: string; before: number; after: number; note: string; at: string };
-export type Data = { games: Game[]; requests: Request[]; rewards: Reward[]; balances: Record<string, number>; history: string[]; updates: ProgressEvent[]; awards: Record<string, Record<string, number>>; cashAwards?: Record<string, Record<string, number>> };
+export type Data = { games: Game[]; requests: Request[]; rewards: Reward[]; balances: Record<string, number>; history: string[]; updates: ProgressEvent[]; awards: Record<string, Record<string, number>>; cashAwards?: Record<string, Record<string, number>>; guestPlayers?: Player[] };
 export type Player = { id: string; full_name: string };
 export const emptyGameData: Data = { games: [], requests: [], rewards: [], balances: {}, history: [], updates: [], awards: {} };
 export const commandSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("saveGuest"), player: z.object({ id: z.string().uuid(), full_name: z.string().trim().min(1).max(100) }) }),
   z.object({ type: z.literal("saveGame"), game: gameSchema }),
   z.object({ type: z.literal("archive"), id: z.string().uuid(), archived: z.boolean() }),
   z.object({ type: z.literal("progress"), id: z.string().uuid(), person: z.string().uuid().optional(), before: number, value: number, note: z.string().max(500) }),
@@ -87,10 +88,21 @@ export function applyGameCommand(original: Data, raw: unknown, actor: { id: stri
     if (g.kind !== "Compete") complete(g, eligible(g, now));
   };
   switch (command.type) {
+    case "saveGuest": {
+      requireAdmin();
+      const guests = data.guestPlayers ?? [];
+      if (players.some(p => p.id === command.player.id)) throw new Error("A Board account cannot be edited as a game-only participant.");
+      if ([...players, ...guests].some(p => p.id !== command.player.id && p.full_name.trim().toLocaleLowerCase() === command.player.full_name.toLocaleLowerCase())) throw new Error("A participant with that name already exists.");
+      const old = guests.find(p => p.id === command.player.id);
+      if (!old && guests.length >= 500) throw new Error("The game participant limit has been reached.");
+      data.guestPlayers = old ? guests.map(p => p.id === old.id ? command.player : p) : [...guests, command.player];
+      log(`${old ? "Renamed" : "Added"} game-only participant ${command.player.full_name}`);
+      break;
+    }
     case "saveGame": {
       requireAdmin();
       const g = command.game;
-      const ids = new Set(players.map(p => p.id));
+      const ids = new Set([...players, ...(data.guestPlayers ?? [])].map(p => p.id));
       if (g.members.some(id => !ids.has(id))) throw new Error("Participants must be active members of this office.");
       if (g.audience === "Individual" && !isIndividualCompetition(g) && g.members.length !== 1) throw new Error("Choose one participant for an individual game.");
       if (isIndividualCompetition(g) && new Set(g.members).size < 2) throw new Error("Choose at least two competitors.");

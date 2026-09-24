@@ -8,6 +8,47 @@ const players = [{ id, full_name: "Player" }];
 const game: Game = { id, title: "Implants", detail: "Annual implants", audience: "Office", members: [id], kind: "Reach a goal", unit: "implants", current: 130, goal: 150, start: "2026-01-01", end: "2026-12-31", repeat: false, points: 500, verification: "Trusted updates", archived: false, completed: false, sides: ["A","B"], scores: [0,0] };
 const state = () => ({ ...structuredClone(emptyGameData), games: [structuredClone(game)] });
 const cashGame = (): Game => ({ ...game, points: 0, officeReward: { poolCents: 150000, units: { [id]: 2 } } });
+const admin = { ...actor, role: "admin" };
+const guest = { id: other, full_name: "Irma" };
+test("admins add game-only participants without enrolling them or creating accounts", () => {
+  const a = applyGameCommand(state(), { type: "saveGuest", player: { ...guest, full_name: " Irma " } }, admin, players);
+  assert.deepEqual(a.guestPlayers, [guest]);
+  assert.deepEqual(a.games[0].members, [id]);
+  assert.equal(players.length, 1);
+  assert.match(a.history[0], /Added game-only participant Irma/);
+  assert.throws(() => applyGameCommand(state(), { type: "saveGuest", player: guest }, actor, players), /administrator/);
+});
+test("guest names and identities are validated without overwriting Board accounts", () => {
+  const a = applyGameCommand(state(), { type: "saveGuest", player: guest }, admin, players);
+  for (const player of [
+    { ...guest, full_name: " " },
+    { ...guest, id, full_name: "Irma" },
+    { ...guest, full_name: "player" },
+    { id: "00000000-0000-4000-8000-000000000003", full_name: " irMA " },
+  ]) assert.throws(() => applyGameCommand(a, { type: "saveGuest", player }, admin, players));
+});
+test("only registered guests can join games and receive office rewards", () => {
+  const g = { ...cashGame(), members: [id, other], officeReward: { poolCents: 150000, units: { [id]: 2, [other]: 1 } } };
+  assert.throws(() => applyGameCommand(state(), { type: "saveGame", game: g }, admin, players));
+  const a = applyGameCommand(state(), { type: "saveGuest", player: guest }, admin, players);
+  const b = applyGameCommand(a, { type: "saveGame", game: g }, admin, players);
+  const c = applyGameCommand(b, { type: "progress", id, before: 130, value: 150, note: "" }, admin, players);
+  assert.equal(c.cashAwards?.[id][other], 50000);
+});
+test("admin records guest scores; renaming retains membership and attribution", () => {
+  const a = applyGameCommand(state(), { type: "saveGuest", player: guest }, admin, players);
+  const b = applyGameCommand(a, { type: "saveGame", game: { ...game, audience: "Individual", kind: "Compete", members: [id, other] } }, admin, players);
+  const command = { type: "progress", id, person: other, before: 0, value: 3, note: "Irma sold three kits" };
+  assert.throws(() => applyGameCommand(b, command, actor, players), /administrator/);
+  const c = applyGameCommand(b, command, admin, players);
+  const d = applyGameCommand(c, { type: "saveGuest", player: { ...guest, full_name: "Irma Updated" } }, admin, players);
+  assert.equal(d.games[0].individualScores?.[other], 3);
+  assert.equal(d.updates[0].person, other);
+  assert.equal(d.updates[0].recordedBy, id);
+  assert.deepEqual(d.games[0].members, [id, other]);
+  assert.equal(d.guestPlayers?.length, 1);
+  assert.throws(() => applyGameCommand(d, { type: "saveGuest", player: guest }, actor, players), /administrator/);
+});
 test("office pool uses 7.5 units, not a per-person reward", () => {
   const units = { doctor: 2, a: 1, b: 1, c: 1, d: 1, e: 1, evelis: 0.5, excluded: 0 };
   const shares = officeRewardShares({ poolCents: 150000, units });

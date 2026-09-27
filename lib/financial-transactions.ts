@@ -194,6 +194,34 @@ export function normalizeVendorName(value: string) {
     .slice(0, 300);
 }
 
+type RuleTransaction = Pick<FinancialTransaction, "merchant_name" | "counterparty_name" | "name">
+  & Partial<Pick<FinancialTransaction, "original_description">>;
+
+export function transactionVendorRuleKey(transaction: RuleTransaction) {
+  const sources = [transaction.original_description, transaction.name].filter(
+    (value): value is string => Boolean(value),
+  );
+  const vendor = normalizeVendorName(transactionDisplayName(transaction));
+  if (vendor !== "zelle" && !sources.some((source) => /^\s*zelle\b/i.test(source))) {
+    return vendor;
+  }
+  // Payment rails are not vendors. Only learn a recipient when the bank identifies one.
+  const keys = sources.flatMap((source) => {
+    const match = source.match(/^\s*zelle\s+(to|from)\s+(.+?)\s+on\s+\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/i);
+    const recipient = match && normalizeVendorName(match[2]);
+    return recipient ? [`zelle ${match![1].toLowerCase()} ${recipient}`] : [];
+  });
+  return keys.length && new Set(keys).size === 1 ? keys[0] : "";
+}
+
+export function transactionRuleCandidates(transaction: RuleTransaction) {
+  const key = transactionVendorRuleKey(transaction);
+  if (!key || key.startsWith("zelle ")) return key ? [key] : [];
+  return [key, transaction.name, transaction.original_description]
+    .filter((value): value is string => Boolean(value))
+    .map(normalizeVendorName);
+}
+
 export function transactionRuleFingerprint(
   transaction: Pick<
     FinancialTransaction,
@@ -236,14 +264,14 @@ export function findMatchingBookkeepingAccountId(
   }>,
 ) {
   const exact = rules.find(
-    (rule) => rule.matchType === "exact" && rule.normalizedVendor === normalizedVendor,
+    (rule) => rule.normalizedVendor !== "zelle" && rule.matchType === "exact" && rule.normalizedVendor === normalizedVendor,
   );
   if (exact) return exact.bookkeepingAccountId;
 
   return rules
     .filter(
       (rule) =>
-        rule.matchType === "contains" && normalizedVendor.includes(rule.normalizedVendor),
+        rule.normalizedVendor !== "zelle" && rule.matchType === "contains" && normalizedVendor.includes(rule.normalizedVendor),
     )
     .sort((left, right) => right.normalizedVendor.length - left.normalizedVendor.length)[0]
     ?.bookkeepingAccountId;
@@ -259,7 +287,7 @@ export function findBestMatchingBookkeepingAccountId(
 ) {
   return rules
     .filter((rule) =>
-      normalizedCandidates.some((candidate) =>
+      rule.normalizedVendor !== "zelle" && normalizedCandidates.some((candidate) =>
         rule.matchType === "exact"
           ? candidate === rule.normalizedVendor
           : candidate.includes(rule.normalizedVendor),

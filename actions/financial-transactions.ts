@@ -6,9 +6,9 @@ import {
   calculateTransactionTotals,
   findBestMatchingBookkeepingAccountId,
   isAutoApprovalEligibleTransaction,
-  normalizeVendorName,
+  transactionVendorRuleKey,
+  transactionRuleCandidates,
   transactionRuleFingerprint,
-  transactionDisplayName,
   type FinancialTransaction,
   type FinancialTransactionDashboardData,
 } from "@/lib/financial-transactions";
@@ -329,13 +329,7 @@ export async function getFinancialTransactionDashboardData(): Promise<
     suggestedBookkeepingAccountByTransaction: Object.fromEntries(
       typedTransactions.flatMap((transaction) => {
         if (transaction.bookkeeping_account_id) return [];
-        const normalizedCandidates = [
-          transactionDisplayName(transaction),
-          transaction.name,
-          transaction.original_description,
-        ]
-          .filter((value): value is string => Boolean(value))
-          .map(normalizeVendorName);
+        const normalizedCandidates = transactionRuleCandidates(transaction);
         const suggestedAccountId = findBestMatchingBookkeepingAccountId(
           normalizedCandidates,
           activeRules,
@@ -422,12 +416,7 @@ export async function reviewFinancialTransaction(input: unknown) {
       });
   if (error) return { error: error.message };
 
-  const normalizedVendor = normalizeVendorName(
-    transactionDisplayName(transaction as Pick<
-      FinancialTransaction,
-      "merchant_name" | "counterparty_name" | "name"
-    >),
-  );
+  const normalizedVendor = transactionVendorRuleKey(transaction);
   if (
     parsed.data.status === "reviewed" &&
     parsed.data.accountId &&
@@ -531,12 +520,7 @@ export async function reviewFinancialTransactions(input: unknown) {
     const transaction = transactionById.get(transactionId);
     const requested = requestedById.get(transactionId);
     if (!transaction || !requested) return [];
-    const normalizedVendor = normalizeVendorName(
-      transactionDisplayName(transaction as Pick<
-        FinancialTransaction,
-        "merchant_name" | "counterparty_name" | "name"
-      >),
-    );
+    const normalizedVendor = transactionVendorRuleKey(transaction);
     return normalizedVendor.length >= 2
       ? [{
           practice_id: practiceId,

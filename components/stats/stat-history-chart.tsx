@@ -19,8 +19,10 @@ import type {
 } from "@/lib/types";
 import { formatStatValue } from "@/lib/utils";
 import { formatWeekLabel } from "@/lib/constants";
-import { addDays, format, startOfWeek } from "date-fns";
+import { addDays, format } from "date-fns";
 import { Activity } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { annotationWeek, inStatChartRange, statChartDomain, statChartToday, STAT_CHART_RANGES, type StatChartRange } from "@/lib/stat-chart-range";
 
 interface StatHistoryChartProps {
   entries: StatEntry[];
@@ -31,6 +33,8 @@ interface StatHistoryChartProps {
   oicEntries?: OicLogEntry[];
   comparisonSeries?: StatComparisonSeries[];
   isComparisonLoading?: boolean;
+  range?: StatChartRange;
+  onRangeChange?: (range: StatChartRange) => void;
 }
 
 const SERIES_COLORS = ["#2563eb", "#059669", "#d97706", "#dc2626"];
@@ -57,14 +61,6 @@ function calcRollingAverage(
   });
 }
 
-/** Map an OIC entry's effective_date to the Friday (last day) week label used on the chart */
-function dateToWeekLabel(dateStr: string): string {
-  const date = new Date(dateStr + "T00:00:00");
-  const monday = startOfWeek(date, { weekStartsOn: 1 });
-  const friday = addDays(monday, 4);
-  return format(friday, "MMM d");
-}
-
 interface WeekAnnotation {
   weekLabel: string;
   entries: { text: string; by: string; date: string }[];
@@ -79,7 +75,13 @@ export function StatHistoryChart({
   oicEntries = [],
   comparisonSeries = [],
   isComparisonLoading = false,
+  range: controlledRange,
+  onRangeChange,
 }: StatHistoryChartProps) {
+  const [localRange, setLocalRange] = useState<StatChartRange>(3);
+  const [startAtZero, setStartAtZero] = useState(false);
+  const range = controlledRange ?? localRange;
+  const today = statChartToday();
   const [showOic, setShowOic] = useState(false);
   const [activeAnnotation, setActiveAnnotation] = useState<string | null>(null);
 
@@ -99,7 +101,7 @@ export function StatHistoryChart({
     weekIso: e.week_start,
     value: Number(e.value),
     avg: rolling[i],
-  }));
+  })).filter(point => inStatChartRange(point.weekIso, range, today));
 
   const allSeries = useMemo(
     () => [
@@ -146,17 +148,25 @@ export function StatHistoryChart({
     });
   }, [allSeries, isComparing]);
 
-  // Group OIC entries by their corresponding chart week
-  const chartWeekLabels = useMemo(
-    () => new Set(data.map((d) => d.week)),
-    [data],
-  );
+  const visibleComparisonData = comparisonData.filter(point => inStatChartRange(String(point.weekIso), range, today));
+  const plottedData = isComparing ? visibleComparisonData : data;
+  const rawDomain = statChartDomain(isComparing
+    ? visibleComparisonData.flatMap(point => allSeries.map(series => typeof point[series.id] === "number" ? point[series.id] as number : null))
+    : data.flatMap(point => [point.value, point.avg]), startAtZero, !isComparing && statType === "percentage" ? 0.1 : 1);
+  const domain: [number, number] = !isComparing && statType === "count"
+    ? [Math.floor(rawDomain[0]), Math.ceil(rawDomain[1])]
+    : rawDomain;
+  const periodValues = data.map(point => point.value).filter(Number.isFinite);
+  const axisLabel = (value: number) => isComparing ? `${Math.round(value)} index` : formatStatValue(value, statType);
 
-  const annotations = useMemo((): WeekAnnotation[] => {
+  // Use full ISO weeks so annotations cannot collide across different years.
+  const chartWeekLabels = new Set(plottedData.map((d) => String(d.weekIso)));
+
+  const annotations = ((): WeekAnnotation[] => {
     const byWeek = new Map<string, WeekAnnotation>();
 
     for (const oic of oicEntries) {
-      const weekLabel = dateToWeekLabel(oic.effective_date);
+      const weekLabel = annotationWeek(oic.effective_date);
       if (!chartWeekLabels.has(weekLabel)) continue;
 
       if (!byWeek.has(weekLabel)) {
@@ -170,14 +180,27 @@ export function StatHistoryChart({
     }
 
     return Array.from(byWeek.values());
-  }, [oicEntries, chartWeekLabels]);
+  })();
 
   const hasAnnotations = annotations.length > 0;
 
   return (
     <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div role="group" aria-label="Time range" className="flex flex-wrap gap-1 rounded-md border p-1">
+          {STAT_CHART_RANGES.map(option => <Button key={option.value} type="button" size="sm" variant={range === option.value ? "default" : "ghost"} aria-pressed={range === option.value} onClick={() => { setLocalRange(option.value); onRangeChange?.(option.value); setActiveAnnotation(null); }}>{option.label}</Button>)}
+        </div>
+        <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={startAtZero} onChange={event => setStartAtZero(event.target.checked)} />Start scale at zero</label>
+      </div>
+      {!isComparing && periodValues.length > 0 && <dl className="grid grid-cols-3 gap-3 border-y py-3">
+        {[["Latest", periodValues.at(-1)!], ["Period low", Math.min(...periodValues)], ["Period high", Math.max(...periodValues)]].map(([label, value]) => <div key={label}><dt className="text-xs text-muted-foreground">{label}</dt><dd className="break-words text-lg font-semibold tabular-nums">{formatStatValue(Number(value), statType)}</dd></div>)}
+      </dl>}
+      {plottedData.length > 0 && <div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
+        <span>{format(new Date(`${plottedData[0].weekIso}T00:00:00`), "MMM d, yyyy")} - {format(addDays(new Date(`${plottedData.at(-1)!.weekIso}T00:00:00`), 4), "MMM d, yyyy")}</span>
+        <span aria-live="polite">Scale: {axisLabel(domain[0])} - {axisLabel(domain[1])}</span>
+      </div>}
       {/* Legend + OIC toggle */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
           {isComparing ? (
             allSeries.map((series, index) => (
@@ -221,24 +244,29 @@ export function StatHistoryChart({
       </div>
 
       {/* Chart */}
-      <div
+      {plottedData.length === 0 ? <div className="flex h-[300px] items-center justify-center text-sm text-muted-foreground">No entries in this period.</div> : <div
         className="w-full"
         style={{ minWidth: 200, minHeight: 300, height: 300 }}
       >
         <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={isComparing ? comparisonData : data}>
+          <LineChart data={plottedData}>
             <CartesianGrid
               vertical={false}
               stroke="var(--color-border, #e5e7eb)"
               strokeOpacity={0.12}
             />
             <XAxis
-              dataKey="week"
+              dataKey="weekIso"
+              minTickGap={30}
+              tickFormatter={(date) => format(addDays(new Date(`${date}T00:00:00`), 4), range === 0 ? "MMM yy" : "MMM d")}
               tick={{ fontSize: 12, fill: "var(--color-muted-foreground, #9ca3af)" }}
               axisLine={false}
               tickLine={false}
             />
             <YAxis
+              domain={domain}
+              allowDataOverflow
+              allowDecimals={isComparing || statType !== "count"}
               tick={{ fontSize: 12, fill: "var(--color-muted-foreground, #9ca3af)" }}
               axisLine={false}
               tickLine={false}
@@ -373,7 +401,7 @@ export function StatHistoryChart({
             )}
           </LineChart>
         </ResponsiveContainer>
-      </div>
+      </div>}
 
       {isComparisonLoading && (
         <div className="text-xs text-muted-foreground">Loading comparison…</div>
@@ -398,7 +426,7 @@ export function StatHistoryChart({
                 }`}
               >
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-muted-foreground" />
-                {ann.weekLabel}
+                {formatWeekLabel(ann.weekLabel)}
                 {ann.entries.length > 1 && (
                   <span className="text-[10px] opacity-70">
                     ({ann.entries.length})

@@ -34,6 +34,7 @@ import type { ConditionName } from "@/lib/conditions";
 import { BadgeDollarSign, ChevronRight, MessageSquareText, ReceiptText, Users } from "lucide-react";
 import { EntryRowActions } from "@/components/stats/entry-row-actions";
 import { ConditionPicker } from "@/components/stats/condition-picker";
+import { inStatChartRange, type StatChartRange } from "@/lib/stat-chart-range";
 
 interface StatDetailViewProps {
   statId: string;
@@ -93,6 +94,7 @@ export function StatDetailView({
   }, [entries]);
 
   const hasMultipleEmployees = employees.length > 1;
+  const [chartRange, setChartRange] = useState<StatChartRange>(3);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("all");
   const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set());
   const [expandedPlaybooks, setExpandedPlaybooks] = useState<Set<string>>(
@@ -206,6 +208,7 @@ export function StatDetailView({
   }
 
   const showingAllEmployees = selectedEmployeeId === "all";
+  const visibleWeeks = weekGroups.filter(week => inStatChartRange(week.weekStart, chartRange));
   const canEditEntryValues = isAdmin && !isCherryApprovedFinancingStat;
   const colCount = canEditEntryValues ? 7 : 6; // chevron, week, entered by, value, change, condition, [actions]
 
@@ -267,6 +270,8 @@ export function StatDetailView({
         <CardContent>
           {aggregatedChartEntries.length > 0 ? (
             <StatTrendPanel
+              range={chartRange}
+              onRangeChange={setChartRange}
               statId={statId}
               statName={statName}
               entries={aggregatedChartEntries}
@@ -284,7 +289,7 @@ export function StatDetailView({
       <Card>
         <CardHeader>
           <CardTitle className="text-base">
-            Weekly History ({weekGroups.length} weeks)
+            Weekly History ({visibleWeeks.length} weeks)
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -301,7 +306,7 @@ export function StatDetailView({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {weekGroups.map((wg) => {
+              {visibleWeeks.map((wg) => {
                 const hasMultipleContributors =
                   showingAllEmployees && wg.entries.length > 1;
                 const isWeekExpanded = expandedWeeks.has(wg.weekStart);
@@ -483,13 +488,13 @@ export function StatDetailView({
                   </Fragment>
                 );
               })}
-              {weekGroups.length === 0 && (
+              {visibleWeeks.length === 0 && (
                 <TableRow>
                   <TableCell
                     colSpan={colCount}
                     className="text-center text-muted-foreground"
                   >
-                    No entries yet.
+                    No entries in this period.
                   </TableCell>
                 </TableRow>
               )}

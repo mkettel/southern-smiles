@@ -23,6 +23,7 @@ import type {
   StatType,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import type { StatChartRange } from "@/lib/stat-chart-range";
 
 interface StatTrendPanelProps {
   statId: string;
@@ -32,6 +33,8 @@ interface StatTrendPanelProps {
   goodDirection?: "up" | "down";
   oicEntries?: OicLogEntry[];
   comparisonOptions: StatComparisonOption[];
+  range?: StatChartRange;
+  onRangeChange?: (range: StatChartRange) => void;
 }
 
 export function StatTrendPanel({
@@ -42,6 +45,8 @@ export function StatTrendPanel({
   goodDirection = "up",
   oicEntries = [],
   comparisonOptions,
+  range,
+  onRangeChange,
 }: StatTrendPanelProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [series, setSeries] = useState<StatComparisonSeries[]>([]);
@@ -187,6 +192,8 @@ export function StatTrendPanel({
       )}
 
       <StatHistoryChart
+        range={range}
+        onRangeChange={onRangeChange}
         entries={entries}
         statId={statId}
         statName={statName}

@@ -61,3 +61,6 @@ Apply `supabase/migrations/20260802224648_add_financial_connections.sql`, then
 add the redirect URI in the Plaid dashboard. Keep `PLAID_ENV=sandbox` until the
 test institution flow and daily sync are verified. Production Capital One
 connections require Plaid Production access and the same HTTPS redirect URI.
+
+For recurring-bill confirmation storage and its explicit backend permissions,
+see [Recurring-bills setup](docs/recurring-bills-setup.md).

@@ -14,6 +14,7 @@ import {
 import { formatStatValue } from "@/lib/utils";
 import { isTotalCreditCardDebtStat } from "@/lib/financial-connections";
 import { buildStatsHref } from "@/lib/stats-navigation";
+import { allowsNegativeWeeklyValue, weeklyStatValueError } from "@/lib/stat-value-validation";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -270,8 +271,9 @@ export function StatsWorkspace({
   function saveWeekly(item: WorkspaceStat) {
     const raw = weeklyValues[item.stat.id]?.trim() ?? "";
     const value = Number(raw);
-    if (raw === "" || !Number.isFinite(value) || value < 0) {
-      toast.error("Enter a weekly value of 0 or greater");
+    const valueError = raw === "" ? "Enter a weekly value" : weeklyStatValueError(item.stat, value);
+    if (valueError) {
+      toast.error(valueError);
       return;
     }
     setPendingKey(item.stat.id);
@@ -473,7 +475,7 @@ export function StatsWorkspace({
                             <div className="flex gap-2">
                               <Input
                                 type="number"
-                                min="0"
+                                min={allowsNegativeWeeklyValue(item.stat) ? undefined : 0}
                                 step={item.stat.stat_type === "count" ? "1" : "0.01"}
                                 value={weeklyValues[item.stat.id] ?? ""}
                                 onChange={(event) => setWeeklyValues((current) => ({ ...current, [item.stat.id]: event.target.value }))}

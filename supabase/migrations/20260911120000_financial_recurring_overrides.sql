@@ -16,3 +16,6 @@ CREATE TABLE IF NOT EXISTS financial_recurring_overrides (
 
 ALTER TABLE financial_recurring_overrides ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON financial_recurring_overrides FROM anon, authenticated;
+-- New Supabase tables no longer receive automatic Data API grants.
+-- Only the authorized server actions need to read/upsert/reset decisions.
+GRANT SELECT, INSERT, UPDATE, DELETE ON financial_recurring_overrides TO service_role;

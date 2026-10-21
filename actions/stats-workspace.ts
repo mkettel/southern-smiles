@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentPracticeId } from "@/lib/practice";
 import { getCurrentWeekStart } from "@/lib/constants";
 import { calculateCondition } from "@/lib/conditions";
+import { weeklyStatValueError } from "@/lib/stat-value-validation";
 import { isBillsManagedStat } from "@/lib/bills";
 import {
   calculateCollectionsPerStaffWeek,
@@ -437,11 +438,9 @@ export async function saveDailyStatInput(input: { statId: string; entryDate: str
 export async function saveWeeklyOverride(input: { statId: string; weekStart: string; value: number }) {
   const access = await canEditStat(input.statId);
   if ("error" in access) return { error: access.error };
-  if (!Number.isFinite(input.value) || input.value < 0) return { error: "Enter a value of 0 or greater" };
   const { user, stat, supabase } = access;
-  if (stat.stat_type === "percentage" && input.value > 100) {
-    return { error: "Percentage values cannot exceed 100" };
-  }
+  const valueError = weeklyStatValueError(stat, input.value);
+  if (valueError) return { error: valueError };
   const value = stat.stat_type === "count" ? Math.round(input.value) : input.value;
   const practiceId = await getCurrentPracticeId(supabase);
   const admin = createAdminClient();
@@ -455,7 +454,7 @@ export async function saveWeeklyOverride(input: { statId: string; weekStart: str
     .maybeSingle();
   const previousValue = previous?.value == null ? null : Number(previous.value);
   const condition = calculateCondition(value, previousValue, stat.good_direction);
-  await admin.from("stat_entries").upsert(
+  const { error: saveError } = await admin.from("stat_entries").upsert(
     {
       stat_id: stat.id,
       profile_id: user.id,
@@ -473,6 +472,7 @@ export async function saveWeeklyOverride(input: { statId: string; weekStart: str
     },
     { onConflict: "stat_id,week_start" },
   );
+  if (saveError) return { error: saveError.message };
   await refreshSumOfWeeklyTotalDependents(
     stat.id,
     input.weekStart,

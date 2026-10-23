@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {CareCallSyncFields} from './care-call-sync-fields';
 
 interface Props {
   mode: "daily" | "weekly";
@@ -432,7 +433,7 @@ export function StatsWorkspace({
                           </div>
                         </CardHeader>
                         <CardContent className="space-y-3">
-                          {isFinancialDebt ? (
+                          {item.careSyncDays ? <CareCallSyncFields item={item} mode={mode} dates={dates} weekStart={weekStart}/> : isFinancialDebt ? (
                             <div className="space-y-3">
                               <div>
                                 <p className="text-3xl font-semibold tabular-nums">
@@ -486,7 +487,7 @@ export function StatsWorkspace({
                               </Button>
                             </div>
                           )}
-                          {overridden && item.weeklyEntry?.calculated_value != null && (
+                          {!item.careSyncDays && overridden && item.weeklyEntry?.calculated_value != null && (
                             <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
                               <span>Calculated: {formatStatValue(Number(item.weeklyEntry.calculated_value), item.stat.stat_type)}</span>
                               <Button variant="ghost" size="sm" onClick={() => reset(item)}>
@@ -562,7 +563,7 @@ export function StatsWorkspace({
                             Staff-days missing for {missingStaffDates.map(dayLabel).join(", ")}. Weekly total will pause until filled.
                           </p>
                         )}
-                        <div className="grid gap-3 sm:grid-cols-5">
+                        {item.careSyncDays ? <CareCallSyncFields item={item} mode={mode} dates={dates} weekStart={weekStart}/> : <div className="grid gap-3 sm:grid-cols-5">
                           {dates.map((date) => {
                             const key = `${item.stat.id}:${date}`;
                             const entry = item.dailyEntries.find((row) => row.entry_date === date);
@@ -601,7 +602,7 @@ export function StatsWorkspace({
                               </div>
                             );
                           })}
-                        </div>
+                        </div>}
                       </CardContent>
                     </Card>
                   );

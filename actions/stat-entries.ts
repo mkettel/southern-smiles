@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { calculateCondition, type ConditionName } from "@/lib/conditions";
 import { refreshSumOfWeeklyTotalDependents } from "@/lib/sum-weekly-stat-sync";
 import { isTotalCreditCardDebtStat } from "@/lib/financial-connections";
+import {isCareCallSync} from '@/lib/care-call-sync';
 import type {
   Stat,
   StatComparisonOption,
@@ -38,6 +39,7 @@ export async function deleteStatEntry(entryId: string) {
     return { error: "Only admins can delete stat entries" };
   }
   if (!entry) return { error: "Entry not found" };
+  if(isCareCallSync(entry.stat_id,entry.week_start)) return {error:'Use the Care Calls override in Stats. Integrated totals cannot be deleted.'};
   const entryStat = Array.isArray(entry.stat) ? entry.stat[0] : entry.stat;
   if (
     entryStat &&
@@ -108,6 +110,7 @@ export async function updateStatEntry(entryId: string, value: number) {
     }>();
 
   if (!existing) return { error: "Entry not found" };
+  if(isCareCallSync(existing.stat_id,existing.week_start)) return {error:'Use the Care Calls override in Stats.'};
   if (existing.stat && isTotalCreditCardDebtStat(existing.stat)) {
     return { error: "Total Credit Card Debt is updated from Financial Connections" };
   }

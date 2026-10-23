@@ -21,8 +21,11 @@ import { refreshSumOfWeeklyTotalDependents } from "@/lib/sum-weekly-stat-sync";
 import { isCherryApprovedFinancingStat } from "@/lib/cherry-financing";
 import { isTotalCreditCardDebtStat } from "@/lib/financial-connections";
 import type { DailyStatEntry, Post, Profile, Stat, StatEntry } from "@/lib/types";
+import {isCareCallSync,CARE_CALL_STAT,CARE_CALL_PRACTICE,type CareSyncDay} from '@/lib/care-call-sync';
 
 export interface WorkspaceStat {
+  careSyncDays?: CareSyncDay[];
+  careOverrideReason?: string | null;
   stat: Stat;
   post: Post;
   dailyEntries: DailyStatEntry[];
@@ -168,6 +171,7 @@ async function calculateWeeklyValue(
 }
 
 async function syncWeekly(stat: Stat, weekStart: string, actorId: string, practiceId: string) {
+  if(isCareCallSync(stat.id,weekStart)) return; // Managed atomically by the dedicated RPC.
   if (stat.weekly_formula === "manual") return;
   if (!isWeeklyFormulaActive(stat.formula_effective_from, weekStart)) return;
   const admin = createAdminClient();
@@ -194,8 +198,8 @@ async function syncWeekly(stat: Stat, weekStart: string, actorId: string, practi
   }
 
   const previousValue = previous?.value == null ? null : Number(previous.value);
-  const condition = calculateCondition(calculated, previousValue, stat.good_direction);
   const value = existing?.is_manual_override ? Number(existing.value) : calculated;
+  const condition = calculateCondition(value, previousValue, stat.good_direction);
   await admin.from("stat_entries").upsert(
     {
       stat_id: stat.id,
@@ -329,6 +333,14 @@ export async function getStatsWorkspace(weekStart = getCurrentWeekStart()) {
   }
   if (dailyError) throw new Error(dailyError.message);
 
+  let careSyncDays:CareSyncDay[]|undefined;
+  if(profile.practice_id===CARE_CALL_PRACTICE && statIds.includes(CARE_CALL_STAT) && isCareCallSync(CARE_CALL_STAT,weekStart)) {
+    const end=new Date(`${weekStart}T12:00:00Z`);end.setUTCDate(end.getUTCDate()+6);
+    const {data,error}=await createAdminClient().from('care_call_sync_days').select('entry_date,vault_count,additional_count,source_revision,synced_at').gte('entry_date',weekStart).lte('entry_date',end.toISOString().slice(0,10));
+    if(error) throw new Error('Care Calls integration data unavailable');
+    careSyncDays=data??[];
+  }
+
   const visibleStats = (stats ?? []).filter(
     (stat) =>
       !isNewPatientBookingsInput(stat) &&
@@ -360,6 +372,8 @@ export async function getStatsWorkspace(weekStart = getCurrentWeekStart()) {
       const dailyInputStatId = getDailyInputStatId(typedStat);
       return {
         stat: stat as Stat,
+        careSyncDays: stat.id===CARE_CALL_STAT ? careSyncDays : undefined,
+        careOverrideReason: stat.id===CARE_CALL_STAT ? weekly?.find(entry=>entry.stat_id===stat.id)?.override_reason : undefined,
         post: stat.post as Post,
         dailyInputStatId,
         dailyInputPrompt:
@@ -374,6 +388,7 @@ export async function getStatsWorkspace(weekStart = getCurrentWeekStart()) {
 }
 
 export async function saveDailyStatInput(input: { statId: string; entryDate: string; value: number | null }) {
+  if(isCareCallSync(input.statId,input.entryDate)) return {error:'Use the Care Calls additional calls/texts field. Vault counts are read-only.'};
   const access = await canEditStat(input.statId);
   if ("error" in access) return { error: access.error };
   const { user, stat, supabase } = access;
@@ -436,6 +451,7 @@ export async function saveDailyStatInput(input: { statId: string; entryDate: str
 }
 
 export async function saveWeeklyOverride(input: { statId: string; weekStart: string; value: number }) {
+  if(isCareCallSync(input.statId,input.weekStart)) return {error:'Use the Care Calls override with a reason.'};
   const access = await canEditStat(input.statId);
   if ("error" in access) return { error: access.error };
   const { user, stat, supabase } = access;
@@ -485,6 +501,7 @@ export async function saveWeeklyOverride(input: { statId: string; weekStart: str
 }
 
 export async function resetWeeklyOverride(statId: string, weekStart: string) {
+  if(isCareCallSync(statId,weekStart)) return {error:'Use the Care Calls calculated-total reset.'};
   const access = await canEditStat(statId);
   if ("error" in access) return { error: access.error };
   const { user, stat, supabase } = access;

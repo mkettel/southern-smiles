@@ -46,6 +46,7 @@ import { suggestedLoanPayment, suggestedLoanPaymentAllocations } from "@/lib/fin
 import { cn } from "@/lib/utils";
 
 import { matchesReviewFilter, needsBookkeepingReview, type ReviewFilter as StatusFilter } from "@/lib/financial-review-status";
+import { MobileReview } from "./mobile-review";
 type ReviewMode = "category" | "transfer" | "loan";
 const SCHEDULED_LOAN_GROUP = "__scheduled_loan_group__";
 type TransferKind = "internal" | "credit_card_payment" | "line_of_credit_draw" | "loan_payment";
@@ -89,6 +90,8 @@ export function FinancialTransactionsDashboard({
   const [checkedIds, setCheckedIds] = useState<Set<string>>(() => new Set());
   const [busyId, setBusyId] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  const [mobileDetails, setMobileDetails] = useState(false);
+  const [mobileActivity, setMobileActivity] = useState(false);
   const [reviewModes, setReviewModes] = useState<Record<string, ReviewMode>>({});
   const [transferKinds, setTransferKinds] = useState<Record<string, TransferKind>>({});
   const [transferAccountIds, setTransferAccountIds] = useState<Record<string, string>>({});
@@ -277,12 +280,12 @@ export function FinancialTransactionsDashboard({
     startTransition(() => router.refresh());
   }
 
-  const review = useCallback(async (transaction: FinancialTransaction, excluded = false) => {
-    if (transaction.pending && !excluded) return;
+  const review = useCallback(async (transaction: FinancialTransaction, excluded = false, reviewNote = note) => {
+    if (transaction.pending && !excluded) return false;
     const bookkeepingAccountId = bookkeepingAccountIds[transaction.id] || null;
     if (!excluded && !bookkeepingAccountId) {
       toast.error("Choose an account before approving");
-      return;
+      return false;
     }
     const applyLocalReview = () => setTransactions((current) => current.map((item) =>
       item.id === transaction.id
@@ -290,7 +293,7 @@ export function FinancialTransactionsDashboard({
             ...item,
             bookkeeping_account_id: excluded ? null : bookkeepingAccountId,
             category_source: excluded ? null : "manual",
-            review_note: note || null,
+            review_note: reviewNote || null,
             review_status: excluded ? "excluded" : "reviewed",
           }
         : item,
@@ -300,7 +303,8 @@ export function FinancialTransactionsDashboard({
       applyLocalReview();
       setNote("");
       toast.success(excluded ? "Sample transaction excluded" : "Sample transaction reviewed");
-      return;
+      setMobileDetails(false);
+      return true;
     }
 
     setBusyId(transaction.id);
@@ -308,14 +312,16 @@ export function FinancialTransactionsDashboard({
       transactionId: transaction.id,
       accountId: bookkeepingAccountId,
       status: excluded ? "excluded" : "reviewed",
-      note: note || null,
+      note: reviewNote || null,
     });
     setBusyId(null);
-    if (result.error) return toast.error(result.error);
+    if (result.error) { toast.error(result.error); return false; }
     applyLocalReview();
     setNote("");
     toast.success(excluded ? "Transaction excluded" : "Transaction reviewed");
     startTransition(() => router.refresh());
+    setMobileDetails(false);
+    return true;
   }, [bookkeepingAccountIds, note, previewMode, router]);
 
   const confirmTransfer = useCallback(async (transaction: FinancialTransaction) => {
@@ -484,6 +490,7 @@ export function FinancialTransactionsDashboard({
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      if (window.matchMedia("(max-width: 767px)").matches) return;
       const target = event.target as HTMLElement | null;
       if (target?.matches("input, textarea, select, [contenteditable='true']")) return;
       if (event.key.toLowerCase() === "j") moveSelection(1);
@@ -533,7 +540,7 @@ export function FinancialTransactionsDashboard({
           </Button>
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span>{filtered.length} transactions in view</span>
+          <span className="hidden md:inline">{filtered.length} transactions in view</span>
           <Button size="icon-sm" variant="ghost" title="Import latest transactions" aria-label="Import latest transactions" onClick={refresh} disabled={disabled || initialData.connectionCount === 0}>
             {busyId === "refresh" ? <Loader2 className="animate-spin" /> : <RefreshCw />}
           </Button>
@@ -544,8 +551,24 @@ export function FinancialTransactionsDashboard({
         <div className="border-y border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">Import the QuickBooks chart of accounts before approving transactions.</div>
       )}
 
-      <div className="min-h-[680px] overflow-hidden rounded-md border bg-background lg:grid lg:grid-cols-[190px_minmax(0,1fr)_280px]">
-        <aside className="border-b lg:border-b-0 lg:border-r" aria-label="Bookkeeping accounts">
+      <div className={cn("md:hidden", mobileDetails && "hidden")}>
+        <div className="mb-2 flex justify-end"><Button variant="ghost" size="sm" onClick={() => { setMobileActivity(true); setMobileDetails(true); setStatus("all"); setAccountId("all"); }}>All activity <FileText/></Button></div>
+        <MobileReview
+          key={month}
+          transactions={monthTransactions}
+          accounts={initialData.bookkeepingAccounts}
+          categories={bookkeepingAccountIds}
+          disabled={disabled}
+          accountLabel={t => { const account = t.account_id ? accountById.get(t.account_id) : null; return account ? `${account.institutionName} · ${accountDisplayName(account)}${accountMaskText(account)}` : "Account unavailable"; }}
+          requiresDetails={t => (reviewModes[t.id] ?? inferReviewMode(t)) !== "category"}
+          onCategory={(id, value) => setBookkeepingAccountIds(current => ({...current, [id]: value}))}
+          onApprove={async t => { try { return await review(t, false, ""); } finally { setBusyId(null); } }}
+          onDetails={t => { setMobileActivity(false); setNote(""); setStatus("pending"); setAccountId("all"); setQuery(""); setBookkeepingAccountFilterId("all"); setSelectedId(t.id); setMobileDetails(true); }}
+        />
+      </div>
+      {mobileDetails && <Button className="md:hidden" variant="outline" onClick={() => setMobileDetails(false)} disabled={disabled}><ArrowLeft/>Back to cards</Button>}
+      <div className={cn("min-h-[680px] overflow-hidden rounded-md border bg-background md:block lg:grid lg:grid-cols-[190px_minmax(0,1fr)_280px]", !mobileDetails && "hidden")}>
+        <aside className="hidden border-b md:block lg:border-b-0 lg:border-r" aria-label="Bookkeeping accounts">
           <AccountRailItem
             label="All accounts"
             detail={`${transactions.filter((transaction) => transaction.transaction_date.startsWith(month) && needsBookkeepingReview(transaction)).length} need review`}
@@ -574,7 +597,7 @@ export function FinancialTransactionsDashboard({
           ))}
         </aside>
 
-        <main className="min-w-0 border-b lg:border-b-0 lg:border-r">
+        <main className={cn("min-w-0 border-b md:block lg:border-b-0 lg:border-r", !mobileActivity && "hidden")}>
           <section className="border-b px-5 py-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>

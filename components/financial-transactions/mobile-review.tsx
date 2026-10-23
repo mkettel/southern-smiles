@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { ArrowRight, Check, CheckCheck, Clock3, CreditCard, FileText, Loader2, Undo2 } from "lucide-react";
 import { transactionDisplayName, type FinancialTransaction, type BookkeepingAccount } from "@/lib/financial-transactions";
 import { needsBookkeepingReview } from "@/lib/financial-review-status";
@@ -21,50 +21,22 @@ type Props = {
 export function MobileReview(props: Props) {
   const [waiting, setWaiting] = useState(false);
   const [skipped, setSkipped] = useState<string[]>([]);
-  const [staged, setStaged] = useState<FinancialTransaction | null>(null);
-  const [seconds, setSeconds] = useState(5);
   const [saving, setSaving] = useState(false);
   const [drag, setDrag] = useState(0);
   const [message, setMessage] = useState("");
   const origin = useRef<{ x: number; y: number } | null>(null);
   const offset = useRef(0);
   const lock = useRef(false);
-  const approve = useRef(props.onApprove);
   const pending = props.transactions.filter(t => t.pending);
   const reviewable = props.transactions.filter(needsBookkeepingReview);
   const queue = reviewable.filter(t => !skipped.includes(t.id));
   const current = queue[0];
-  const busy = saving || props.disabled || !!staged;
+  const busy = saving || props.disabled;
   const category = current ? props.categories[current.id] : "";
   const details = current ? props.requiresDetails(current) : false;
   const currency = (t: FinancialTransaction) => new Intl.NumberFormat("en-US", { style: "currency", currency: t.currency_code || "USD" }).format(Math.abs(t.amount_cents) / 100);
 
-  // Undo cancels an unsent approval; never pretend to reverse a posted journal locally.
-  useEffect(() => {
-    if (!staged) return;
-    const viewport = window.matchMedia("(min-width: 768px)");
-    const cancelOnDesktop = () => {
-      if (viewport.matches) { clearTimeout(timer); setStaged(null); lock.current = false; }
-    };
-    const interval = setInterval(() => setSeconds(s => Math.max(0, s - 1)), 1000);
-    const timer = setTimeout(async () => {
-      setSaving(true);
-      try {
-        const saved = await approve.current(staged);
-        setMessage(saved ? `${transactionDisplayName(staged)} approved` : "Not saved. Please review and try again.");
-      } catch {
-        setMessage("Could not confirm approval. Refresh before trying again.");
-      } finally {
-        setSaving(false);
-        setStaged(null);
-        lock.current = false;
-      }
-    }, 5000);
-    viewport.addEventListener("change", cancelOnDesktop);
-    return () => { clearInterval(interval); clearTimeout(timer); viewport.removeEventListener("change", cancelOnDesktop); };
-  }, [staged]);
-
-  function act(direction: "approve" | "skip") {
+  async function act(direction: "approve" | "skip") {
     setDrag(0);
     offset.current = 0;
     if (!current || busy || lock.current) return;
@@ -75,16 +47,23 @@ export function MobileReview(props: Props) {
       props.onDetails(current);
     } else {
       lock.current = true;
-      approve.current = props.onApprove;
-      setSeconds(5);
+      setSaving(true);
       setMessage("");
-      setStaged(current);
+      try {
+        const saved = await props.onApprove(current);
+        setMessage(saved ? `${transactionDisplayName(current)} approved` : "Not saved. Please review and try again.");
+      } catch {
+        setMessage("Could not confirm approval. Refresh before trying again.");
+      } finally {
+        setSaving(false);
+        lock.current = false;
+      }
     }
   }
   function undo() {
     if (saving || props.disabled) return;
-    if (staged) { setStaged(null); lock.current = false; setMessage("Approval cancelled"); }
-    else { setSkipped(ids => ids.slice(0, -1)); setMessage("Skipped transaction restored"); }
+    setSkipped(ids => ids.slice(0, -1));
+    setMessage("Skipped transaction restored");
   }
 
   return <section className="min-w-0 md:hidden" aria-label="Swipe transaction review">
@@ -112,9 +91,9 @@ export function MobileReview(props: Props) {
             </div>
           </article>
         </div>
-        <div className="flex gap-2"><button aria-label="Undo last action" title="Undo last action" disabled={saving || props.disabled || (!staged && !skipped.length)} onClick={undo} className="grid min-h-12 w-12 shrink-0 place-items-center rounded-md border disabled:opacity-40"><Undo2 size={20}/></button><button disabled={busy} onClick={() => act("skip")} className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-md border text-sm disabled:opacity-40"><ArrowRight size={20}/>Skip</button><button disabled={busy} onClick={() => act("approve")} className="flex min-h-12 flex-[1.5] items-center justify-center gap-2 rounded-md bg-emerald-700 px-2 text-sm text-white disabled:opacity-40">{saving?<Loader2 className="animate-spin" size={20}/>:details||!category?<FileText size={20}/>:<Check size={20}/>} {details||!category?"Review":"Approve"}</button></div>
+        <div className="flex gap-2"><button aria-label="Undo last skip" title="Undo last skip" disabled={saving || props.disabled || !skipped.length} onClick={undo} className="grid min-h-12 w-12 shrink-0 place-items-center rounded-md border disabled:opacity-40"><Undo2 size={20}/></button><button disabled={busy} onClick={() => act("skip")} className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-md border text-sm disabled:opacity-40"><ArrowRight size={20}/>Skip</button><button disabled={busy} onClick={() => act("approve")} className="flex min-h-12 flex-[1.5] items-center justify-center gap-2 rounded-md bg-emerald-700 px-2 text-sm text-white disabled:opacity-40">{saving?<Loader2 className="animate-spin" size={20}/>:details||!category?<FileText size={20}/>:<Check size={20}/>} {details||!category?"Review":"Approve"}</button></div>
       </> : <div className="flex min-h-72 flex-col items-center justify-center gap-4 text-center"><CheckCheck className="text-emerald-700" size={38}/><h3 className="text-xl font-semibold">{skipped.length ? "Review round complete" : "All caught up"}</h3>{skipped.length>0 && <button className="min-h-12 rounded-md border px-5 text-sm" onClick={() => setSkipped([])}>Review skipped ({skipped.length})</button>}</div>}
-      <div className="mt-3 min-h-12 text-center text-sm" role="status">{staged ? <div className="flex items-center justify-between gap-2 rounded-md bg-emerald-50 p-3 text-emerald-900"><span>{saving?"Saving approval…":`Posting in ${seconds}s`}</span><button disabled={saving} onClick={undo} className="min-h-11 px-3 font-medium disabled:opacity-40">Undo</button></div> : message}</div>
+      <div className="mt-3 min-h-12 text-center text-sm" role="status">{saving ? "Saving approval…" : message}</div>
     </>}
   </section>;
 }

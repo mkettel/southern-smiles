@@ -45,7 +45,7 @@ import {
 import { suggestedLoanPayment, suggestedLoanPaymentAllocations } from "@/lib/financial-loans";
 import { cn } from "@/lib/utils";
 
-type StatusFilter = "all" | "pending" | "reviewed" | "excluded";
+import { matchesReviewFilter, needsBookkeepingReview, type ReviewFilter as StatusFilter } from "@/lib/financial-review-status";
 type ReviewMode = "category" | "transfer" | "loan";
 const SCHEDULED_LOAN_GROUP = "__scheduled_loan_group__";
 type TransferKind = "internal" | "credit_card_payment" | "line_of_credit_draw" | "loan_payment";
@@ -76,7 +76,7 @@ export function FinancialTransactionsDashboard({
   const [accountId, setAccountId] = useState(() => {
     const pendingByAccount = new Map<string, number>();
     for (const transaction of initialData.transactions) {
-      if (transaction.review_status === "pending" && transaction.account_id) {
+      if (needsBookkeepingReview(transaction) && transaction.account_id) {
         pendingByAccount.set(transaction.account_id, (pendingByAccount.get(transaction.account_id) ?? 0) + 1);
       }
     }
@@ -124,7 +124,7 @@ export function FinancialTransactionsDashboard({
     return transactions.filter((transaction) => {
       if (!transaction.transaction_date.startsWith(month)) return false;
       if (accountId !== "all" && transaction.account_id !== accountId) return false;
-      if (status !== "all" && transaction.review_status !== status) return false;
+      if (!matchesReviewFilter(transaction, status)) return false;
       if (bookkeepingAccountFilterId !== "all" && bookkeepingAccountIds[transaction.id] !== bookkeepingAccountFilterId) return false;
       if (!normalizedQuery) return true;
       const account = transaction.account_id ? accountById.get(transaction.account_id) : null;
@@ -231,7 +231,7 @@ export function FinancialTransactionsDashboard({
     (account) => account.id === bookkeepingAccountFilterId,
   );
   const bulkEligible = useMemo(() => filtered.filter((transaction) =>
-    transaction.review_status === "pending" &&
+    needsBookkeepingReview(transaction) &&
     Boolean(bookkeepingAccountIds[transaction.id]) &&
     (reviewModes[transaction.id] ?? inferReviewMode(transaction)) === "category"
   ).slice(0, 100), [bookkeepingAccountIds, filtered, reviewModes]);
@@ -278,6 +278,7 @@ export function FinancialTransactionsDashboard({
   }
 
   const review = useCallback(async (transaction: FinancialTransaction, excluded = false) => {
+    if (transaction.pending && !excluded) return;
     const bookkeepingAccountId = bookkeepingAccountIds[transaction.id] || null;
     if (!excluded && !bookkeepingAccountId) {
       toast.error("Choose an account before approving");
@@ -318,6 +319,7 @@ export function FinancialTransactionsDashboard({
   }, [bookkeepingAccountIds, note, previewMode, router]);
 
   const confirmTransfer = useCallback(async (transaction: FinancialTransaction) => {
+    if (transaction.pending) return;
     const otherAccountId = transferAccountIds[transaction.id] ??
       findTransferCandidates(transaction, transactions)[0]?.account_id ??
       "";
@@ -371,6 +373,7 @@ export function FinancialTransactionsDashboard({
   }, [accountById, note, previewMode, router, transactions, transferAccountIds, transferKinds]);
 
   const confirmLoanTransaction = useCallback(async (transaction: FinancialTransaction) => {
+    if (transaction.pending) return;
     const valueCents = Math.abs(transaction.amount_cents);
     const scheduled = transaction.amount_cents > 0
       ? suggestedLoanPaymentAllocations(matchingLoans(transaction, initialData.loans), valueCents, transaction.transaction_date)
@@ -426,7 +429,7 @@ export function FinancialTransactionsDashboard({
   const approveChecked = useCallback(async () => {
     const selectedTransactions = transactions.filter(
       (transaction) => checkedIds.has(transaction.id) &&
-        transaction.review_status === "pending" &&
+        needsBookkeepingReview(transaction) &&
         Boolean(bookkeepingAccountIds[transaction.id]) &&
         (reviewModes[transaction.id] ?? inferReviewMode(transaction)) === "category",
     );
@@ -485,7 +488,7 @@ export function FinancialTransactionsDashboard({
       if (target?.matches("input, textarea, select, [contenteditable='true']")) return;
       if (event.key.toLowerCase() === "j") moveSelection(1);
       if (event.key.toLowerCase() === "k") moveSelection(-1);
-      if (event.key.toLowerCase() === "a" && selected && !disabled) {
+      if (event.key.toLowerCase() === "a" && selected && !selected.pending && !disabled) {
         if (selectedReviewMode === "transfer") void confirmTransfer(selected);
         else if (selectedReviewMode === "loan") void confirmLoanTransaction(selected);
         else void review(selected);
@@ -545,7 +548,7 @@ export function FinancialTransactionsDashboard({
         <aside className="border-b lg:border-b-0 lg:border-r" aria-label="Bookkeeping accounts">
           <AccountRailItem
             label="All accounts"
-            detail={`${transactions.filter((transaction) => transaction.transaction_date.startsWith(month) && transaction.review_status === "pending").length} need review`}
+            detail={`${transactions.filter((transaction) => transaction.transaction_date.startsWith(month) && needsBookkeepingReview(transaction)).length} need review`}
             progress={overallProgress(transactions, month)}
             accent={accountAccents[0]}
             selected={accountId === "all"}
@@ -592,7 +595,7 @@ export function FinancialTransactionsDashboard({
             <div className="mt-4 grid grid-cols-3 divide-x text-sm">
               <SummaryStat label={summaryLabel} value={formatSignedCurrency(summaryValueCents)} tone={summaryValueCents > 0 && !activeAccount ? "positive" : "default"} />
               <SummaryStat label="Imported" value={String(activeStats?.totalCount ?? monthTransactions.length)} />
-              <SummaryStat label="Needs review" value={String(activeStats?.pendingCount ?? monthTransactions.filter((transaction) => transaction.review_status === "pending").length)} />
+              <SummaryStat label="Needs review" value={String(activeStats?.pendingCount ?? monthTransactions.filter(needsBookkeepingReview).length)} />
             </div>
           </section>
 
@@ -602,6 +605,7 @@ export function FinancialTransactionsDashboard({
               setCheckedIds(new Set());
             }} aria-label="Transaction status">
               <option value="pending">Needs review</option>
+              <option value="bank_pending">Waiting for bank to settle</option>
               <option value="all">All transactions</option>
               <option value="reviewed">Reviewed</option>
               <option value="excluded">Excluded</option>
@@ -892,7 +896,9 @@ export function FinancialTransactionsDashboard({
                 </InspectorField>
 
                 <div className="sticky bottom-0 -mx-4 -mb-4 space-y-2 border-t bg-background/95 p-4 backdrop-blur-sm">
-                  {selectedReviewMode === "transfer" ? (
+                  {selected.pending ? (
+                    <p role="status" className="py-2 text-center text-sm text-muted-foreground">Waiting for bank to settle</p>
+                  ) : selectedReviewMode === "transfer" ? (
                     <Button size="sm" className="w-full bg-sky-700 text-white hover:bg-sky-800" onClick={() => confirmTransfer(selected)} disabled={disabled || !transferAccountId}>{busyId === selected.id ? <Loader2 className="animate-spin" /> : <ArrowRightLeft />}Post transfer</Button>
                   ) : selectedReviewMode === "loan" ? (
                     <Button size="sm" className="w-full bg-amber-700 text-white hover:bg-amber-800" onClick={() => confirmLoanTransaction(selected)} disabled={disabled || (!usesScheduledLoanGroup && !selectedLoanId) || splitRemainingCents !== 0}>{busyId === selected.id ? <Loader2 className="animate-spin" /> : <Landmark />}{selected.amount_cents < 0 ? "Post loan draw" : usesScheduledLoanGroup ? "Post allocated payment" : "Post loan payment"}</Button>
@@ -940,7 +946,7 @@ function TransactionRow({ transaction, account, selected, checked, checkDisabled
     />
     <button type="button" onClick={onSelect} className="col-span-4 grid min-w-0 grid-cols-[48px_minmax(100px,1fr)_80px_16px] items-center py-3 text-left md:col-span-5 md:grid-cols-[48px_minmax(110px,1.2fr)_minmax(90px,1fr)_80px_16px]">
       <span className="text-muted-foreground">{formatDateOnly(transaction.transaction_date)}</span>
-      <span className="min-w-0 pr-3"><span className="block truncate font-medium">{transactionDisplayName(transaction)}</span><span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{account ? `${account.institutionName} · ${accountDisplayName(account)}${accountMaskText(account)}` : "Account unavailable"}</span></span>
+      <span className="min-w-0 pr-3"><span className="block truncate font-medium">{transactionDisplayName(transaction)}</span><span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{account ? `${account.institutionName} · ${accountDisplayName(account)}${accountMaskText(account)}` : "Account unavailable"}</span>{transaction.pending && <span className="mt-1 block text-[11px] text-muted-foreground">Waiting for bank to settle</span>}</span>
       <span className="hidden min-w-0 pr-3 md:block"><span className="block truncate text-muted-foreground">{transaction.original_description ?? formatPlaidCategory(transaction.plaid_category_detailed) ?? "Bank activity"}</span>{accountName && <span className="mt-0.5 block truncate text-[11px] text-emerald-700">{accountName}</span>}</span>
       <span className={cn("text-right font-semibold tabular-nums", transaction.amount_cents < 0 && "text-emerald-700")}>{formatSignedAmount(transaction.amount_cents)}</span>
       <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -1155,13 +1161,13 @@ function Keycap({ children }: { children: React.ReactNode }) { return <span clas
 
 function buildAccountStats(account: FinancialTransactionAccountSummary, transactions: FinancialTransaction[], month: string) {
   const items = transactions.filter((transaction) => transaction.account_id === account.id && transaction.transaction_date.startsWith(month));
-  const pendingCount = items.filter((transaction) => transaction.review_status === "pending").length;
+  const pendingCount = items.filter(needsBookkeepingReview).length;
   const reviewedCount = items.filter((transaction) => transaction.review_status === "reviewed").length;
   const denominator = pendingCount + reviewedCount;
   const movement = calculateCashMovement(items);
   return { ...account, pendingCount, totalCount: items.length, ...movement, progress: denominator ? Math.round((reviewedCount / denominator) * 100) : 100 };
 }
-function overallProgress(transactions: FinancialTransaction[], month: string) { const items = transactions.filter((transaction) => transaction.transaction_date.startsWith(month)); const pending = items.filter((item) => item.review_status === "pending").length; const reviewed = items.filter((item) => item.review_status === "reviewed").length; return pending + reviewed ? Math.round((reviewed / (pending + reviewed)) * 100) : 100; }
+function overallProgress(transactions: FinancialTransaction[], month: string) { const items = transactions.filter((transaction) => transaction.transaction_date.startsWith(month)); const pending = items.filter(needsBookkeepingReview).length; const reviewed = items.filter((item) => item.review_status === "reviewed").length; return pending + reviewed ? Math.round((reviewed / (pending + reviewed)) * 100) : 100; }
 function isCashAccount(account: FinancialTransactionAccountSummary) { return /depository/i.test(account.accountType); }
 function groupTransactionsByWeek(transactions: FinancialTransaction[]) { const groups = new Map<string, FinancialTransaction[]>(); for (const transaction of transactions) { const date = parseDate(transaction.transaction_date); const day = date.getDay(); const monday = new Date(date); monday.setDate(date.getDate() - ((day + 6) % 7)); const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6); const label = `Week of ${formatDateOnly(toDateKey(monday))} – ${formatDateOnly(toDateKey(sunday))}`; const items = groups.get(label) ?? []; items.push(transaction); groups.set(label, items); } return [...groups.entries()].map(([label, items]) => ({ label, items })); }
 function parseDate(value: string) { return new Date(`${value}T12:00:00`); }

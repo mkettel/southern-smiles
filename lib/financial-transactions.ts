@@ -249,7 +249,13 @@ export function isAutoApprovalEligibleTransaction(
 ) {
   if (transaction.pending || transaction.amount_cents <= 0) return false;
   const fingerprint = transactionRuleFingerprint(transaction);
-  if (fingerprint.length < 8 || fingerprint.split(" ").length < 3) return false;
+  // A bank-identified merchant can have a short name (for example McDonald's).
+  // Keep the stricter description-only heuristic for unidentified transactions.
+  const identifiedMerchant = transaction.merchant_name
+    ? normalizeVendorName(transaction.merchant_name)
+    : "";
+  if (fingerprint.length < 8) return false;
+  if (fingerprint.split(" ").length < 3 && identifiedMerchant !== fingerprint) return false;
   return !/(^| )(online transfer|wire transfer|credit card payment|loan payment|mortgage payment|payment thank you|epayment ach pmt|zelle|line of credit)( |$)/.test(
     fingerprint,
   );

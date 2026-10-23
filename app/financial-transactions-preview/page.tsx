@@ -46,6 +46,16 @@ const baseTransaction: Omit<FinancialTransaction, "id" | "provider_transaction_i
 const transactions: FinancialTransaction[] = [
   {
     ...baseTransaction,
+    id: "00000000-0000-4000-8000-000000000106",
+    provider_transaction_id: "sample-106",
+    merchant_name: "Pending grocery purchase",
+    name: "Pending grocery purchase",
+    amount_cents: 6984,
+    pending: true,
+    bookkeeping_account_id: "00000000-0000-4000-8000-000000000201",
+  },
+  {
+    ...baseTransaction,
     id: "00000000-0000-4000-8000-000000000101",
     provider_transaction_id: "sample-101",
     merchant_name: "Net32 Dental Supplies",

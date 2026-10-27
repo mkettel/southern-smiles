@@ -10,20 +10,24 @@ export async function refreshSumOfWeeklyTotalDependents(
   practiceId: string,
 ) {
   const admin = createAdminClient();
-  const { data: dependents } = await admin
+  const { data: dependents, error: dependentError } = await admin
     .from("stats")
     .select("*")
+    .eq("practice_id", practiceId)
     .eq("weekly_formula", "sum_of_weekly_totals")
     .contains("formula_source_stat_ids", [sourceStatId]);
+  if (dependentError) throw dependentError;
 
   for (const dependent of (dependents ?? []) as Stat[]) {
-    const { data: sourceEntries } = await admin
+    const { data: sourceEntries, error: sourceError } = await admin
       .from("stat_entries")
       .select("value")
+      .eq("practice_id", practiceId)
       .in("stat_id", dependent.formula_source_stat_ids)
       .eq("week_start", weekStart);
+    if (sourceError) throw sourceError;
     const calculated = calculateSumOfWeeklyTotals(sourceEntries ?? []);
-    const [{ data: existing }, { data: previous }] = await Promise.all([
+    const [existingResult, previousResult] = await Promise.all([
       admin
         .from("stat_entries")
         .select("*")
@@ -39,10 +43,15 @@ export async function refreshSumOfWeeklyTotalDependents(
         .limit(1)
         .maybeSingle(),
     ]);
+    if (existingResult.error) throw existingResult.error;
+    if (previousResult.error) throw previousResult.error;
+    const existing = existingResult.data;
+    const previous = previousResult.data;
 
     if (calculated === null) {
       if (existing && !existing.is_manual_override) {
-        await admin.from("stat_entries").delete().eq("id", existing.id);
+        const { error } = await admin.from("stat_entries").delete().eq("id", existing.id);
+        if (error) throw error;
       }
       continue;
     }
@@ -50,11 +59,11 @@ export async function refreshSumOfWeeklyTotalDependents(
     const typedExisting = existing as StatEntry | null;
     const previousValue = previous?.value == null ? null : Number(previous.value);
     const condition = calculateCondition(
-      calculated,
+      typedExisting?.is_manual_override ? Number(typedExisting.value) : calculated,
       previousValue,
       dependent.good_direction,
     );
-    await admin.from("stat_entries").upsert(
+    const { error } = await admin.from("stat_entries").upsert(
       {
         stat_id: dependent.id,
         profile_id: actorId,
@@ -77,5 +86,6 @@ export async function refreshSumOfWeeklyTotalDependents(
       },
       { onConflict: "stat_id,week_start" },
     );
+    if (error) throw error;
   }
 }

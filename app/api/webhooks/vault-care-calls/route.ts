@@ -1,6 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { validateCareSnapshot } from "@/lib/care-call-sync";
+import { importCareCallSnapshot } from "@/lib/care-call-import";
+import { refreshSumOfWeeklyTotalDependents } from "@/lib/sum-weekly-stat-sync";
 export const runtime = "nodejs";
 export async function POST(request: Request) {
   const secret = process.env.VAULT_CARE_SYNC_SECRET;
@@ -29,16 +31,24 @@ export async function POST(request: Request) {
   } catch {
     return Response.json({ error: "Invalid snapshot" }, { status: 400 });
   }
-  const { error } = await createAdminClient().rpc("manage_care_call_sync", {
-    p_operation: "snapshot",
-    p_date: snapshot.date,
-    p_value: snapshot.count,
-    p_revision: snapshot.revision,
-  });
-  if (error) {
-    console.error("Care Calls aggregate sync failed", error.code);
+  try {
+    await importCareCallSnapshot(
+      snapshot,
+      async (snapshot) => {
+        const { error } = await createAdminClient().rpc("manage_care_call_sync", {
+          p_operation: "snapshot",
+          p_date: snapshot.date,
+          p_value: snapshot.count,
+          p_revision: snapshot.revision,
+        });
+        if (error) throw error;
+      },
+      refreshSumOfWeeklyTotalDependents,
+    );
+  } catch {
+    console.error("Care Calls aggregate or dependent total sync failed");
     return Response.json(
-      { error: "Sync not applied; requires retry/review" },
+      { error: "Sync incomplete; requires retry/review" },
       { status: 503 },
     );
   }

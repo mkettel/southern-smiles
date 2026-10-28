@@ -1,3 +1,7 @@
+# Latest Design QA: Weekly Cash Flow
+
+The latest scoped report is in [docs/cash-flow-design-qa.md](docs/cash-flow-design-qa.md), with desktop/mobile evidence and verification limits. Final result: passed.
+
 # Prior Design QA: Org Board
 
 **Comparison Target**
@@ -289,3 +293,4 @@ No actionable P0, P1, or P2 visual differences remain for this refinement.
 - Verified the live Connections page exposes the nickname editor for every account; open and cancel behavior produced no browser warnings or errors.
 
 final result: passed
+

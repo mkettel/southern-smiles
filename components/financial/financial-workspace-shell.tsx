@@ -11,6 +11,7 @@ const tabs = [
   { id: "accounts", href: "/admin/financial/accounts" },
   { id: "loans", href: "/admin/financial/loans" },
   { id: "reports", href: "/admin/financial/reports" },
+  { id: "cash-flow", href: "/admin/financial/cash-flow" },
   { id: "connections", href: "/admin/financial-connections" },
 ] as const;
 
@@ -27,6 +28,7 @@ const TAB_LABELS: Record<"practice" | "household", Record<FinancialWorkspaceTab,
     accounts: "Chart of accounts",
     loans: "Loans",
     reports: "Reports",
+    "cash-flow": "Cash flow",
     connections: "Connections",
   },
   household: {
@@ -37,6 +39,7 @@ const TAB_LABELS: Record<"practice" | "household", Record<FinancialWorkspaceTab,
     accounts: null,
     loans: "Loans",
     reports: null,
+    "cash-flow": null,
     connections: "Connections",
   },
 };

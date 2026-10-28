@@ -1,6 +1,17 @@
 import type { BookkeepingAccount, FinancialRuleMatchType, FinancialTransaction } from "@/lib/financial-transactions";
 import { matchesReviewFilter, needsBookkeepingReview } from "@/lib/financial-review-status";
 
+export function formatWorkspaceSyncTime(value: string): string {
+  // SSR and the browser must use the same reporting zone during hydration.
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Phoenix",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
 export function summarizeWorkspaceReview(transactions: Array<Pick<FinancialTransaction, "pending" | "review_status" | "is_removed" | "plaid_category_primary">>) {
   let pendingCount = 0;
   let possibleTransferCount = 0;

@@ -1,6 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildFinancialReportsData } from "./financial-reports";
+import { formatWorkspaceSyncTime } from "./financial-workspace";
+
+test("Overview sync timestamp is identical across server and browser time zones", () => {
+  const originalTimeZone = process.env.TZ;
+  try {
+    for (const zone of ["UTC", "America/Phoenix", "America/New_York", "Asia/Tokyo"]) {
+      process.env.TZ = zone;
+      assert.equal(formatWorkspaceSyncTime("2026-10-28T13:00:00Z"), "Oct 28, 6:00 AM");
+      assert.equal(formatWorkspaceSyncTime("2026-01-01T02:00:00Z"), "Dec 31, 7:00 PM");
+    }
+  } finally {
+    if (originalTimeZone === undefined) delete process.env.TZ;
+    else process.env.TZ = originalTimeZone;
+  }
+});
 
 test("snapshot weekly totals match the monthly report including credits and other expenses", () => {
   const accounts = [{id:"i",name:"Income",accountType:"Income"},{id:"e",name:"Interest",accountType:"Other Expense"}].map(a=>({...a,accountNumber:null,detailType:null,externalSource:"manual" as const}));

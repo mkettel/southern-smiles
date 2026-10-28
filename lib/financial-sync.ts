@@ -16,6 +16,7 @@ import {
   isAutoApprovalEligibleTransaction,
   mapPlaidTransaction,
   transactionRuleFingerprint,
+  transactionAutoRuleDirection,
   type FinancialTransaction,
 } from "@/lib/financial-transactions";
 import { getPlaidApiErrorDetails, getPlaidClient } from "@/lib/plaid-client";
@@ -325,20 +326,19 @@ async function autoApproveImportedTransactions({
     .from("bookkeeping_auto_rules")
     .select("financial_account_id, transaction_fingerprint, direction, bookkeeping_account_id")
     .eq("practice_id", practiceId)
-    .eq("direction", "outflow")
     .eq("is_enabled", true)
     .in("financial_account_id", financialAccountIds);
   if (ruleError) throw new Error(ruleError.message);
 
   const accountIdByRuleKey = new Map(
     (rules ?? []).map((rule) => [
-      `${rule.financial_account_id as string}:${rule.transaction_fingerprint as string}`,
+      `${rule.financial_account_id as string}:${rule.direction as string}:${rule.transaction_fingerprint as string}`,
       rule.bookkeeping_account_id as string,
     ]),
   );
   for (const transaction of eligibleTransactions) {
     const bookkeepingAccountId = accountIdByRuleKey.get(
-      `${transaction.account_id as string}:${transactionRuleFingerprint(transaction as Pick<
+      `${transaction.account_id as string}:${transactionAutoRuleDirection(transaction)}:${transactionRuleFingerprint(transaction as Pick<
         FinancialTransaction,
         "name" | "merchant_name" | "counterparty_name" | "original_description"
       >)}`,
@@ -348,7 +348,7 @@ async function autoApproveImportedTransactions({
       p_practice_id: practiceId,
       p_transaction_id: transaction.id as string,
       p_bookkeeping_account_id: bookkeepingAccountId,
-      p_review_note: "Auto-approved after 3 matching confirmations",
+      p_review_note: "Auto-approved by enabled matching rule",
       p_reviewed_by: null,
     });
     if (error) throw new Error(error.message);

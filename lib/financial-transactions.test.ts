@@ -10,6 +10,9 @@ import {
   mapPlaidTransaction,
   normalizeVendorName,
   transactionRuleFingerprint,
+  transactionAutoRuleDirection,
+  transactionVendorRuleKey,
+  transactionRuleCandidates,
   transactionDisplayName,
   type FinancialTransaction,
 } from "@/lib/financial-transactions";
@@ -192,4 +195,71 @@ test("auto approval accepts recurring expenses but rejects transfers and loan pa
     }),
     false,
   );
+});
+
+const deposit = (description: string) => ({
+  name: description,
+  original_description: description,
+  merchant_name: null,
+  counterparty_name: null,
+  amount_cents: -123506,
+  pending: false,
+});
+
+test("Cherry settlement approvals share a stable identity across funding references", () => {
+  const first = deposit("Cherry Funding 5478807 WFBussinessChecking");
+  const second = deposit("Cherry Funding 5474325 WFBussinessChecking");
+  assert.equal(transactionVendorRuleKey(first), transactionVendorRuleKey(second));
+  assert.equal(transactionRuleFingerprint(first), "cherry funding wfbussinesschecking");
+  assert.equal(transactionRuleFingerprint(first), transactionRuleFingerprint(second));
+  assert.equal(transactionAutoRuleDirection(first), "inflow");
+  assert.equal(isAutoApprovalEligibleTransaction(first), true);
+  assert.equal(isAutoApprovalEligibleTransaction(second), true);
+});
+
+test("5/3 settlements share a stable identity across dates without merging Cherry", () => {
+  const first = deposit("5/3 BANKCARD SYS COMB. DEP. 102226 4445064128069 Worldpay COMB. DEP. TERM 4506412806");
+  const second = deposit("5/3 BANKCARD SYS COMB. DEP. 102126 4445064128069 Worldpay COMB. DEP. TERM 4506412806");
+  assert.equal(transactionRuleFingerprint(first), transactionRuleFingerprint(second));
+  assert.equal(transactionVendorRuleKey(first), transactionVendorRuleKey(second));
+  assert.notEqual(transactionRuleFingerprint(first), transactionRuleFingerprint(deposit("Cherry Funding 5478807 WFBussinessChecking")));
+  assert.equal(isAutoApprovalEligibleTransaction(first), true);
+  assert.equal(isAutoApprovalEligibleTransaction({...first, original_description: null}), true);
+});
+
+test("deposit autoapproval excludes pending deposits, reversals, and unrelated credits", () => {
+  for (const description of [
+    "MOBILE DEPOSIT : REF NUMBER :316210601631",
+    "Cherry Funding 5478807 WFBussinessChecking",
+    "5/3 BANKCARD SYS COMB. DEP. 102226 4445064128069 Worldpay COMB. DEP. TERM 4506412806",
+  ]) {
+    const transaction = deposit(description);
+    assert.equal(isAutoApprovalEligibleTransaction({...transaction, pending: true}), false);
+    assert.equal(isAutoApprovalEligibleTransaction({...transaction, amount_cents: 0}), false);
+    assert.equal(isAutoApprovalEligibleTransaction({...transaction, amount_cents: 100}), false);
+    assert.equal(transactionAutoRuleDirection({...transaction, amount_cents: 100}), "outflow");
+    assert.equal(isAutoApprovalEligibleTransaction(deposit(`${description} REVERSAL`)), false);
+    assert.equal(isAutoApprovalEligibleTransaction(deposit(`REFUND ${description}`)), false);
+  }
+  for (const description of [
+    "Cherry Rewards", "Cherry Funding FEE", "Cherry Funding 123 OTHERACCOUNT",
+    "5/3 BANKCARD SYS FEES", "Amazon refund", "MOBILE DEPOSIT RETURNED",
+    "ONLINE TRANSFER FROM CHECKING", "Fundbox loan draw",
+  ]) assert.equal(isAutoApprovalEligibleTransaction(deposit(description)), false, description);
+});
+
+test("mobile deposits share an independent rule across changing reference numbers", () => {
+  const first = deposit("MOBILE DEPOSIT : REF NUMBER :316210601631");
+  const second = deposit("MOBILE DEPOSIT : REF NUMBER :316210601109");
+  assert.equal(transactionVendorRuleKey(first), "mobile deposit ref number");
+  assert.equal(transactionVendorRuleKey(first), transactionVendorRuleKey(second));
+  assert.equal(transactionRuleFingerprint(first), transactionRuleFingerprint(second));
+  assert.equal(isAutoApprovalEligibleTransaction(first), true);
+  assert.equal(transactionAutoRuleDirection(first), "inflow");
+  assert.notEqual(transactionRuleFingerprint(first), transactionRuleFingerprint(deposit("Cherry Funding 5478807 WFBussinessChecking")));
+  assert.equal(findBestMatchingBookkeepingAccountId(transactionRuleCandidates(first), [
+    { normalizedVendor: normalizeVendorName(first.name), bookkeepingAccountId: "old-fee-for-service", matchType: "exact" },
+    { normalizedVendor: "mobile deposit ref number", bookkeepingAccountId: "insurance-income", matchType: "exact" },
+  ]), "insurance-income");
+  assert.equal(isAutoApprovalEligibleTransaction(deposit("ATM CASH DEPOSIT ON 10/11")), false);
 });

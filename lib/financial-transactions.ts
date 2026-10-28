@@ -195,9 +195,32 @@ export function normalizeVendorName(value: string) {
 }
 
 type RuleTransaction = Pick<FinancialTransaction, "merchant_name" | "counterparty_name" | "name">
-  & Partial<Pick<FinancialTransaction, "original_description">>;
+  & Partial<Pick<FinancialTransaction, "original_description" | "amount_cents">>;
+
+// Only recognize the bank's settlement formats, not arbitrary mentions of a processor.
+export function recurringDepositFingerprint(transaction: RuleTransaction) {
+  const source = (transaction.original_description ?? transaction.name).trim();
+  if (/^mobile deposit\s*:\s*ref number\s*:\s*\d+$/i.test(source)) {
+    return "mobile deposit ref number";
+  }
+  if (/^cherry funding \d+ wfbussinesschecking$/i.test(source)) {
+    return "cherry funding wfbussinesschecking";
+  }
+  if (/^5\/3 bankcard sys comb\. dep\. \d+ \d+ worldpay comb\. dep\. term \d+$/i.test(source)) {
+    return "5 3 bankcard sys comb dep worldpay comb dep term";
+  }
+  return null;
+}
+
+export function transactionAutoRuleDirection(transaction: Pick<FinancialTransaction, "amount_cents">) {
+  return transaction.amount_cents < 0 ? "inflow" : "outflow";
+}
 
 export function transactionVendorRuleKey(transaction: RuleTransaction) {
+  if (transaction.amount_cents !== undefined && transaction.amount_cents < 0) {
+    const deposit = recurringDepositFingerprint(transaction);
+    if (deposit) return deposit;
+  }
   const sources = [transaction.original_description, transaction.name].filter(
     (value): value is string => Boolean(value),
   );
@@ -216,6 +239,10 @@ export function transactionVendorRuleKey(transaction: RuleTransaction) {
 
 export function transactionRuleCandidates(transaction: RuleTransaction) {
   const key = transactionVendorRuleKey(transaction);
+  // Ignore old reference-specific categories once a shared deposit identity exists.
+  if ((transaction.amount_cents ?? 0) < 0 && recurringDepositFingerprint(transaction)) {
+    return [key];
+  }
   if (!key || key.startsWith("zelle ")) return key ? [key] : [];
   return [key, transaction.name, transaction.original_description]
     .filter((value): value is string => Boolean(value))
@@ -228,6 +255,8 @@ export function transactionRuleFingerprint(
     "name" | "merchant_name" | "counterparty_name" | "original_description"
   >,
 ) {
+  const deposit = recurringDepositFingerprint(transaction);
+  if (deposit) return deposit;
   const source = transaction.original_description ?? transaction.name;
   return normalizeVendorName(source)
     .split(" ")
@@ -247,7 +276,11 @@ export function isAutoApprovalEligibleTransaction(
     | "original_description"
   >,
 ) {
-  if (transaction.pending || transaction.amount_cents <= 0) return false;
+  if (transaction.pending || transaction.amount_cents === 0) return false;
+  const deposit = recurringDepositFingerprint(transaction);
+  if (transaction.amount_cents < 0) return deposit !== null;
+  // A reversal using the same description must not learn or use a deposit rule.
+  if (deposit) return false;
   const fingerprint = transactionRuleFingerprint(transaction);
   // A bank-identified merchant can have a short name (for example McDonald's).
   // Keep the stricter description-only heuristic for unidentified transactions.

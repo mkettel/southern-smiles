@@ -9,6 +9,7 @@ import { applyQuickBooksBaseline } from "@/lib/quickbooks-baseline";
 import {
   financialWorkspaceMonthCount,
   getFinancialWorkspaceMonthFrames,
+  summarizeWorkspaceReview,
   type FinancialWorkspaceActivity,
   type FinancialWorkspaceAutoRule,
   type FinancialWorkspaceData,
@@ -64,13 +65,10 @@ export async function getFinancialWorkspaceData(): Promise<FinancialWorkspaceDat
     if (result.error) throw new Error(result.error.message);
   }
   const includedAccountIds = (financialAccountResult.data ?? []).map((account) => account.id as string);
-  const [transactions, pendingCount, unmatchedTransferCount] = includedAccountIds.length
-    ? await Promise.all([
-        getWorkspaceTransactions(supabase, practiceId, includedAccountIds, currentFrame.end),
-        getWorkspaceTransactionCount(supabase, practiceId, includedAccountIds),
-        getWorkspaceTransactionCount(supabase, practiceId, includedAccountIds, true),
-      ])
-    : [[], 0, 0];
+  const transactions = includedAccountIds.length
+    ? await getWorkspaceTransactions(supabase, practiceId, includedAccountIds, currentFrame.end)
+    : [];
+  const { pendingCount, possibleTransferCount } = summarizeWorkspaceReview(transactions);
 
   const accounts: BookkeepingAccount[] = (accountResult.data ?? []).map((account) => ({
     id: account.id as string,
@@ -125,8 +123,9 @@ export async function getFinancialWorkspaceData(): Promise<FinancialWorkspaceDat
       label: frame.shortLabel,
       longLabel: frame.longLabel,
       dateRange: frame.dateRange,
-      ...summarizeTransactions(monthTransactions, accountById),
-      recentActivity: monthTransactions.slice(0, 8).map(toActivity),
+      ...summarizeTransactions(monthTransactions.filter((transaction) => !transaction.pending), accountById),
+      ...summarizeWorkspaceReview(monthTransactions),
+      recentActivity: monthTransactions.filter((transaction) => !transaction.pending).slice(0, 8).map(toActivity),
     };
   });
   const current = months.at(-1)!;
@@ -135,7 +134,7 @@ export async function getFinancialWorkspaceData(): Promise<FinancialWorkspaceDat
   );
   const expenseByAccount = new Map<string, number>();
   for (const transaction of currentTransactions) {
-    if (transaction.review_status !== "reviewed" || transaction.amount_cents <= 0) continue;
+    if (transaction.pending || transaction.review_status !== "reviewed" || transaction.amount_cents <= 0) continue;
     const account = transaction.bookkeeping_account_id ? accountById.get(transaction.bookkeeping_account_id) : null;
     if (!account || !isExpenseType(account.accountType)) continue;
     expenseByAccount.set(account.name, (expenseByAccount.get(account.name) ?? 0) + transaction.amount_cents);
@@ -148,7 +147,7 @@ export async function getFinancialWorkspaceData(): Promise<FinancialWorkspaceDat
     expenseCents: current.expenseCents,
     netIncomeCents: current.revenueCents - current.expenseCents,
     pendingCount,
-    unmatchedTransferCount,
+    possibleTransferCount,
     overdueBillCount: overdueResult.count ?? 0,
     connectedInstitutionCount: connectionResult.data?.length ?? 0,
     includedBankAccountCount: financialAccountResult.data?.length ?? 0,
@@ -243,7 +242,7 @@ async function getLedgerReportTransactions(
 
 type WorkspaceTransaction = Pick<FinancialTransaction,
   "id" | "transaction_date" | "merchant_name" | "counterparty_name" | "name" | "amount_cents" |
-  "review_status" | "category_source" | "bookkeeping_account_id" | "is_removed" | "pending"
+  "review_status" | "category_source" | "bookkeeping_account_id" | "is_removed" | "pending" | "plaid_category_primary"
 >;
 
 async function getWorkspaceTransactions(
@@ -256,31 +255,17 @@ async function getWorkspaceTransactions(
   const pageSize = 1000;
   for (let from = 0; ; from += pageSize) {
     const { data, error } = await supabase.from("financial_transactions")
-      .select("id, transaction_date, merchant_name, counterparty_name, name, amount_cents, review_status, category_source, bookkeeping_account_id, is_removed, pending")
-      .eq("practice_id", practiceId).eq("is_removed", false).eq("pending", false)
+      .select("id, transaction_date, merchant_name, counterparty_name, name, amount_cents, review_status, category_source, bookkeeping_account_id, is_removed, pending, plaid_category_primary")
+      .eq("practice_id", practiceId).eq("is_removed", false)
       .in("account_id", accountIds)
       .lt("transaction_date", periodEnd)
       .order("transaction_date", { ascending: false })
+      .order("id", { ascending: false })
       .range(from, from + pageSize - 1);
     if (error) throw new Error(error.message);
     rows.push(...((data ?? []) as WorkspaceTransaction[]));
     if ((data?.length ?? 0) < pageSize) return rows;
   }
-}
-
-async function getWorkspaceTransactionCount(
-  supabase: ReturnType<typeof createAdminClient>,
-  practiceId: string,
-  accountIds: string[],
-  transfersOnly = false,
-) {
-  let query = supabase.from("financial_transactions").select("id", { count: "exact", head: true })
-    .eq("practice_id", practiceId).eq("is_removed", false).eq("review_status", "pending")
-    .in("account_id", accountIds);
-  if (transfersOnly) query = query.ilike("plaid_category_primary", "TRANSFER%");
-  const { count, error } = await query;
-  if (error) throw new Error(error.message);
-  return count ?? 0;
 }
 
 async function getReportTransactions(

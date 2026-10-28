@@ -36,6 +36,7 @@ export function FinancialOverviewDashboard({ data }: { data: FinancialWorkspaceD
   const selectedIndex = Math.max(0, data.months.findIndex((month) => month.key === monthKey));
   const selectedMonth = data.months[selectedIndex] ?? data.months.at(-1)!;
   const trendMonths = data.months.slice(Math.max(0, selectedIndex - 5), selectedIndex + 1);
+  const earlierCount = data.months.slice(0, selectedIndex).reduce((sum, month) => sum + month.pendingCount, 0);
 
   return (
     <div className="space-y-6">
@@ -57,7 +58,7 @@ export function FinancialOverviewDashboard({ data }: { data: FinancialWorkspaceD
         </label>
         <Button nativeButton={false} size="lg" className="h-10 bg-emerald-700 px-4 text-white hover:bg-emerald-800" render={<Link href="/admin/financial-transactions" />}>
           <ListChecks />
-          Review {data.pendingCount.toLocaleString()} transactions
+          Review {selectedMonth.pendingCount.toLocaleString()} transactions
         </Button>
       </div>
 
@@ -88,13 +89,15 @@ export function FinancialOverviewDashboard({ data }: { data: FinancialWorkspaceD
         <section className="rounded-lg border bg-card p-5" aria-labelledby="attention-heading">
           <div className="flex items-center gap-2">
             <h2 id="attention-heading" className="font-semibold">Attention queue</h2>
-            <Badge variant="secondary">{data.pendingCount + data.overdueBillCount}</Badge>
+            <Badge variant="secondary">{selectedMonth.pendingCount}</Badge>
           </div>
           <div className="mt-4 divide-y">
-            <QueueItem icon={ListChecks} label="Uncategorized transactions" detail="Needs review and categorization" value={Math.max(0, data.pendingCount - data.unmatchedTransferCount)} href="/admin/financial-transactions" tone="orange" />
-            <QueueItem icon={Repeat2} label="Unmatched transfers" detail="Review possible internal transfers" value={data.unmatchedTransferCount} href="/admin/financial-transactions" tone="violet" />
-            <QueueItem icon={ReceiptText} label="Overdue bills" detail="Past due and needs attention" value={data.overdueBillCount} href="/admin/bills" tone="red" />
+            <QueueItem icon={ListChecks} label="Transactions needing review" detail={`${selectedMonth.longLabel} · settled, excluding possible transfers`} value={selectedMonth.pendingCount - selectedMonth.possibleTransferCount} href="/admin/financial-transactions" tone="orange" />
+            <QueueItem icon={Repeat2} label="Possible transfers" detail={`${selectedMonth.longLabel} · bank-feed suggestions, not verified matches`} value={selectedMonth.possibleTransferCount} href="/admin/financial-transactions" tone="violet" />
+            <div className="flex items-center justify-between gap-3 py-4 text-sm text-muted-foreground"><span>Waiting for bank settlement<span className="block text-xs">{selectedMonth.longLabel} · not included in review count</span></span><span className="tabular-nums">{selectedMonth.settlingCount.toLocaleString()}</span></div>
+            <QueueItem icon={ReceiptText} label="Overdue bills" detail="As of today · separate from transaction review" value={data.overdueBillCount} href="/admin/bills" tone="red" />
           </div>
+          {earlierCount > 0 && <p className="border-t pt-3 text-xs text-muted-foreground">Earlier months: {earlierCount.toLocaleString()} settled transactions still need review.</p>}
         </section>
       </div>
 

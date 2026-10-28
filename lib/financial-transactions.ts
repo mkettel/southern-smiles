@@ -257,6 +257,8 @@ export function transactionRuleFingerprint(
 ) {
   const deposit = recurringDepositFingerprint(transaction);
   if (deposit) return deposit;
+  const recipient = transactionVendorRuleKey(transaction);
+  if (recipient.startsWith("zelle ")) return recipient;
   const source = transaction.original_description ?? transaction.name;
   return normalizeVendorName(source)
     .split(" ")
@@ -281,6 +283,11 @@ export function isAutoApprovalEligibleTransaction(
   if (transaction.amount_cents < 0) return deposit !== null;
   // A reversal using the same description must not learn or use a deposit rule.
   if (deposit) return false;
+  const bankDescription = transaction.original_description ?? transaction.name;
+  if (/^BUSINESS TO BUSINESS ACH EverBank, N\.A\. EverBank /i.test(bankDescription)) return false;
+  // Only an unambiguous outgoing recipient can learn an account-scoped rule.
+  // Generic Zelle labels and incoming transfers remain in manual review.
+  if (transactionVendorRuleKey(transaction).startsWith("zelle to ")) return true;
   const fingerprint = transactionRuleFingerprint(transaction);
   // A bank-identified merchant can have a short name (for example McDonald's).
   // Keep the stricter description-only heuristic for unidentified transactions.

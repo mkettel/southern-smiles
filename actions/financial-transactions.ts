@@ -9,6 +9,7 @@ import {
   transactionVendorRuleKey,
   transactionRuleCandidates,
   transactionRuleFingerprint,
+  transactionAutoRuleDirection,
   type FinancialTransaction,
   type FinancialTransactionDashboardData,
 } from "@/lib/financial-transactions";
@@ -88,7 +89,7 @@ async function confirmAutoApprovalRule({
     p_practice_id: practiceId,
     p_financial_account_id: transaction.account_id,
     p_transaction_fingerprint: transactionRuleFingerprint(transaction),
-    p_direction: "outflow",
+    p_direction: transactionAutoRuleDirection(transaction),
     p_bookkeeping_account_id: bookkeepingAccountId,
     p_confirmed_by: userId,
   });

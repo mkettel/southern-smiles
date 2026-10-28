@@ -6,7 +6,7 @@ import ts from "typescript";
 
 const pages = [
   "financial", "financial/spending", "financial/accounts", "financial/rules",
-  "financial/reports", "financial-transactions", "financial-connections",
+  "financial/reports", "financial/cash-flow", "financial-transactions", "financial-connections",
 ];
 
 // Execute each page with isolated dependencies, without reading live financial data.

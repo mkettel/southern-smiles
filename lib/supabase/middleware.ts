@@ -2,6 +2,10 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function updateSession(request: NextRequest) {
+  // This development-only route renders synthetic fixtures and needs no database.
+  if (process.env.NODE_ENV === "development" && request.nextUrl.pathname === "/financial-cash-flow-preview") {
+    return NextResponse.next({ request });
+  }
   const isLocalPreview =
     process.env.NODE_ENV === "development" &&
     (request.nextUrl.pathname === "/action-log-preview" ||

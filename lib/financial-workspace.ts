@@ -1,4 +1,20 @@
 import type { BookkeepingAccount, FinancialRuleMatchType, FinancialTransaction } from "@/lib/financial-transactions";
+import { matchesReviewFilter, needsBookkeepingReview } from "@/lib/financial-review-status";
+
+export function summarizeWorkspaceReview(transactions: Array<Pick<FinancialTransaction, "pending" | "review_status" | "is_removed" | "plaid_category_primary">>) {
+  let pendingCount = 0;
+  let possibleTransferCount = 0;
+  let settlingCount = 0;
+  for (const transaction of transactions) {
+    if (transaction.is_removed) continue;
+    if (matchesReviewFilter(transaction, "bank_pending")) settlingCount++;
+    if (!needsBookkeepingReview(transaction)) continue;
+    pendingCount++;
+    // Plaid is a suggestion, not evidence of an unmatched journal or missing money.
+    if (/^TRANSFER/i.test(transaction.plaid_category_primary ?? "")) possibleTransferCount++;
+  }
+  return { pendingCount, possibleTransferCount, settlingCount };
+}
 
 export interface FinancialWorkspaceRule {
   id: string;
@@ -28,6 +44,9 @@ export interface FinancialWorkspaceMonth {
   revenueCents: number;
   expenseCents: number;
   recentActivity: FinancialWorkspaceActivity[];
+  pendingCount: number;
+  possibleTransferCount: number;
+  settlingCount: number;
 }
 
 export interface FinancialWorkspaceActivity {
@@ -48,7 +67,7 @@ export interface FinancialWorkspaceData {
   expenseCents: number;
   netIncomeCents: number;
   pendingCount: number;
-  unmatchedTransferCount: number;
+  possibleTransferCount: number;
   overdueBillCount: number;
   connectedInstitutionCount: number;
   includedBankAccountCount: number;

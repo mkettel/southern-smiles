@@ -216,7 +216,17 @@ export function transactionAutoRuleDirection(transaction: Pick<FinancialTransact
   return transaction.amount_cents < 0 ? "inflow" : "outflow";
 }
 
+export function dentalSupplierFingerprint(transaction: RuleTransaction) {
+  const source = (transaction.original_description || transaction.name).trim();
+  // Prefer the marketplace descriptor over bank-enriched seller names.
+  if (/^net32\s*\*/i.test(source) || /^net32(?:\.com)?$/i.test(source)) return "net32";
+  if (/^frontier dental(?:\s|$)/i.test(source)) return "frontier dental";
+  return null;
+}
+
 export function transactionVendorRuleKey(transaction: RuleTransaction) {
+  const supplier = dentalSupplierFingerprint(transaction);
+  if (supplier) return supplier;
   if (transaction.amount_cents !== undefined && transaction.amount_cents < 0) {
     const deposit = recurringDepositFingerprint(transaction);
     if (deposit) return deposit;
@@ -239,6 +249,7 @@ export function transactionVendorRuleKey(transaction: RuleTransaction) {
 
 export function transactionRuleCandidates(transaction: RuleTransaction) {
   const key = transactionVendorRuleKey(transaction);
+  if (dentalSupplierFingerprint(transaction)) return [key];
   // Ignore old reference-specific categories once a shared deposit identity exists.
   if ((transaction.amount_cents ?? 0) < 0 && recurringDepositFingerprint(transaction)) {
     return [key];
@@ -255,6 +266,8 @@ export function transactionRuleFingerprint(
     "name" | "merchant_name" | "counterparty_name" | "original_description"
   >,
 ) {
+  const supplier = dentalSupplierFingerprint(transaction);
+  if (supplier) return supplier === "net32" ? "net32 marketplace" : supplier;
   const deposit = recurringDepositFingerprint(transaction);
   if (deposit) return deposit;
   const recipient = transactionVendorRuleKey(transaction);
@@ -281,6 +294,7 @@ export function isAutoApprovalEligibleTransaction(
   if (transaction.pending || transaction.amount_cents === 0) return false;
   const deposit = recurringDepositFingerprint(transaction);
   if (transaction.amount_cents < 0) return deposit !== null;
+  if (dentalSupplierFingerprint(transaction)) return true;
   // A reversal using the same description must not learn or use a deposit rule.
   if (deposit) return false;
   const bankDescription = transaction.original_description ?? transaction.name;

@@ -437,6 +437,31 @@ export async function syncFinancialTransactions({
       if (removedError) throw new Error(removedError.message);
     }
 
+    // Also revisit settled loan backlog after opt-in; a bank cursor need not
+    // change for a previously imported installment to become eligible.
+    const { data: loanBacklog, error: loanBacklogError } = await supabase
+      .from("financial_transactions")
+      .select("id")
+      .eq("practice_id", practiceId)
+      .eq("connection_id", connectionId)
+      .eq("review_status", "pending")
+      .eq("pending", false)
+      .eq("is_removed", false)
+      .gt("amount_cents", 0)
+      .or("original_description.ilike.BUSINESS TO BUSINESS ACH EverBank%,name.ilike.BUSINESS TO BUSINESS ACH EverBank%")
+      .order("transaction_date")
+      .limit(500);
+    if (loanBacklogError) throw new Error(loanBacklogError.message);
+    for (const transaction of loanBacklog ?? []) {
+      const { error } = await supabase.rpc("auto_post_scheduled_loan_payment", {
+        p_practice_id: practiceId,
+        p_transaction_id: transaction.id,
+      });
+      // Deploying the app before its migration must not stop bank imports.
+      if (error?.code === "PGRST202") break;
+      if (error) throw new Error(error.message);
+    }
+
     const status = batch.updateStatus === "NOT_READY" ? "pending" : "ready";
     const { error: updateError } = await supabase
       .from("financial_connections")

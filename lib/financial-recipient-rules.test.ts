@@ -1,9 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { findBestMatchingBookkeepingAccountId, transactionRuleCandidates, transactionVendorRuleKey } from "./financial-transactions";
+import { findBestMatchingBookkeepingAccountId, transactionRuleCandidates, transactionVendorRuleKey, transactionRuleFingerprint, isAutoApprovalEligibleTransaction } from "./financial-transactions";
 
 const payment = (name: string, original_description: string | null = null) => ({
   name, original_description, merchant_name: "Zelle", counterparty_name: null,
+});
+
+test("autoapproval fingerprints keep recipient and direction, not references", () => {
+  const outgoing = { ...payment("Zelle", "ZELLE TO MARTA ON 10/23 REF # WFCT22SXK45Y"), amount_cents: 15000, pending: false };
+  assert.equal(transactionRuleFingerprint(outgoing), "zelle to marta");
+  assert.equal(isAutoApprovalEligibleTransaction(outgoing), true);
+  assert.equal(transactionRuleFingerprint({ ...outgoing, original_description: "ZELLE TO MARTA ON 11/01 REF # NEWREF" }), "zelle to marta");
+  assert.equal(transactionRuleFingerprint({ ...outgoing, original_description: "ZELLE TO MARIA ON 11/01 REF # NEWREF" }), "zelle to maria");
+  assert.equal(isAutoApprovalEligibleTransaction({ ...outgoing, pending: true }), false);
+  assert.equal(isAutoApprovalEligibleTransaction({ ...outgoing, amount_cents: -15000 }), false);
+  assert.equal(isAutoApprovalEligibleTransaction({ ...outgoing, original_description: "Zelle" }), false);
+  assert.equal(isAutoApprovalEligibleTransaction({ ...outgoing, original_description: "ZELLE FROM MARTA ON 10/23" }), false);
+  assert.equal(isAutoApprovalEligibleTransaction({ ...outgoing, name: "ZELLE TO MARIA ON 10/23" }), false);
+  assert.equal(isAutoApprovalEligibleTransaction({ ...outgoing, merchant_name: "EverBank", name: "EverBank", original_description: "BUSINESS TO BUSINESS ACH EverBank, N.A. EverBank 261016 AC-BUND123 TEST" }), false);
 });
 
 test("Marta rule ignores dates and references but preserves recipient and direction", () => {

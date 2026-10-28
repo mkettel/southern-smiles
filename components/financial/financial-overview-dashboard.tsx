@@ -32,6 +32,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { FinancialWorkspaceData } from "@/lib/financial-workspace";
+import { formatWorkspaceSyncTime } from "@/lib/financial-workspace";
 import { cn } from "@/lib/utils";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ChartTooltip, Legend);
@@ -167,7 +168,7 @@ export function FinancialOverviewDashboard({ data, reports, initialCash, preview
         )}
         <div className="flex items-center gap-2 border-t px-5 py-3 text-xs text-muted-foreground">
           <RefreshCw className="h-3.5 w-3.5" />
-          Last synced {data.lastSyncedAt ? formatDateTime(data.lastSyncedAt) : "not yet"}
+          Last synced {data.lastSyncedAt ? formatWorkspaceSyncTime(data.lastSyncedAt) : "not yet"}
         </div>
       </section>
     </div>
@@ -238,4 +239,3 @@ function StatusBadge({ status }: { status: FinancialWorkspaceData["recentActivit
 function formatCurrency(cents: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100); }
 function compactCurrency(cents: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 0 }).format(cents / 100); }
 function formatDate(value: string) { return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(`${value}T12:00:00`)); }
-function formatDateTime(value: string) { return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(value)); }

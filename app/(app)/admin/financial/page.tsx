@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getProfile } from "@/actions/auth";
 import { requireMemberModulePage } from "@/actions/member-module-access";
-import { getFinancialWorkspaceData } from "@/actions/financial-workspace";
+import { getFinancialWorkspaceData, getFinancialReportsData } from "@/actions/financial-workspace";
+import { getFinancialCashFlowData } from "@/actions/financial-cash-flow";
 import { getHouseholdFinanceData } from "@/actions/household-finance";
 import { getHouseholdRecurringData } from "@/actions/household-recurring";
 import { getWorkspaceAccess } from "@/actions/workspace-access";
@@ -35,6 +36,6 @@ export default async function AdminFinancialPage() {
     );
   }
 
-  const data = await getFinancialWorkspaceData();
-  return <FinancialWorkspaceShell active="overview"><FinancialOverviewDashboard data={data} /></FinancialWorkspaceShell>;
+  const [data, reports, cash] = await Promise.all([getFinancialWorkspaceData(), getFinancialReportsData(), getFinancialCashFlowData()]);
+  return <FinancialWorkspaceShell active="overview"><FinancialOverviewDashboard data={data} reports={reports} initialCash={cash} /></FinancialWorkspaceShell>;
 }

@@ -26,6 +26,7 @@ export interface FinancialReportPeriod {
   expenseCreditsCents: number;
   netIncomeCents: number;
   categories: FinancialReportCategory[];
+  weeklyTrend?: Array<{ label: string; revenueCents: number; expenseCents: number }>;
 }
 
 export interface FinancialReportsData {
@@ -111,6 +112,18 @@ export function buildFinancialReportsData({
     end: string,
   ): FinancialReportPeriod {
     const summary = summarize(start, end);
+    const weeklyTrend: FinancialReportPeriod["weeklyTrend"] = [];
+    if (key.startsWith("month:")) {
+      let cursor = start;
+      while (cursor < end) {
+        const date = new Date(`${cursor}T12:00:00Z`);
+        const nextMonday = shiftDate(cursor, 7 - ((date.getUTCDay() + 6) % 7));
+        const boundary = nextMonday < end ? nextMonday : end;
+        const cumulative = summarize(start, boundary);
+        weeklyTrend.push({ label: formatDateRange(cursor, shiftDate(boundary, -1)), revenueCents: cumulative.revenueCents, expenseCents: cumulative.expenseCents });
+        cursor = boundary;
+      }
+    }
     return {
       key,
       label,
@@ -121,6 +134,7 @@ export function buildFinancialReportsData({
       expenseCreditsCents: summary.expenseCreditsCents,
       netIncomeCents: summary.revenueCents - summary.expenseCents,
       categories: summary.categories,
+      ...(key.startsWith("month:") ? { weeklyTrend } : {}),
     };
   }
 

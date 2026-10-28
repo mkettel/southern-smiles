@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 export async function updateSession(request: NextRequest) {
   // This development-only route renders synthetic fixtures and needs no database.
-  if (process.env.NODE_ENV === "development" && request.nextUrl.pathname === "/financial-cash-flow-preview") {
+  if (process.env.NODE_ENV === "development" && ["/financial-cash-flow-preview", "/financial-overview-preview"].includes(request.nextUrl.pathname)) {
     return NextResponse.next({ request });
   }
   const isLocalPreview =

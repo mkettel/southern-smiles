@@ -56,7 +56,7 @@ export async function getFinancialWorkspaceData(): Promise<FinancialWorkspaceDat
       .select("id, transactions_last_synced_at")
       .eq("practice_id", practiceId).neq("status", "disconnected"),
     supabase.from("financial_accounts")
-      .select("id").eq("practice_id", practiceId).eq("is_active", true).eq("included_in_bookkeeping", true),
+      .select("id, name, nickname, mask").eq("practice_id", practiceId).eq("is_active", true).eq("included_in_bookkeeping", true),
     supabase.from("bills").select("id", { count: "exact", head: true })
       .eq("practice_id", practiceId).eq("status", "unpaid").lt("due_date", toPhoenixDate(today)),
   ]);
@@ -97,6 +97,7 @@ export async function getFinancialWorkspaceData(): Promise<FinancialWorkspaceDat
     updatedAt: rule.updated_at as string,
   }));
   const accountById = new Map(accounts.map((account) => [account.id, account]));
+  const bankById = new Map((financialAccountResult.data ?? []).map((account) => [account.id, `${account.nickname || account.name}${account.mask ? ` ·${account.mask}` : ""}`]));
   const monthFrames = getFinancialWorkspaceMonthFrames(
     today,
     financialWorkspaceMonthCount(transactions.at(-1)?.transaction_date, today),
@@ -109,6 +110,7 @@ export async function getFinancialWorkspaceData(): Promise<FinancialWorkspaceDat
       description: transactionDisplayName(transaction as FinancialTransaction),
       category: account?.accountType ?? "Uncategorized",
       account: account ? `${account.accountNumber ? `${account.accountNumber} ` : ""}${account.name}` : "Choose account",
+      bankAccount: bankById.get(transaction.account_id) ?? "Bank account",
       amountCents: transaction.amount_cents,
       reviewStatus: transaction.review_status,
       categorySource: transaction.category_source,
@@ -242,7 +244,7 @@ async function getLedgerReportTransactions(
 
 type WorkspaceTransaction = Pick<FinancialTransaction,
   "id" | "transaction_date" | "merchant_name" | "counterparty_name" | "name" | "amount_cents" |
-  "review_status" | "category_source" | "bookkeeping_account_id" | "is_removed" | "pending" | "plaid_category_primary"
+  "review_status" | "category_source" | "bookkeeping_account_id" | "is_removed" | "pending" | "plaid_category_primary" | "account_id"
 >;
 
 async function getWorkspaceTransactions(
@@ -255,7 +257,7 @@ async function getWorkspaceTransactions(
   const pageSize = 1000;
   for (let from = 0; ; from += pageSize) {
     const { data, error } = await supabase.from("financial_transactions")
-      .select("id, transaction_date, merchant_name, counterparty_name, name, amount_cents, review_status, category_source, bookkeeping_account_id, is_removed, pending, plaid_category_primary")
+      .select("id, account_id, transaction_date, merchant_name, counterparty_name, name, amount_cents, review_status, category_source, bookkeeping_account_id, is_removed, pending, plaid_category_primary")
       .eq("practice_id", practiceId).eq("is_removed", false)
       .in("account_id", accountIds)
       .lt("transaction_date", periodEnd)

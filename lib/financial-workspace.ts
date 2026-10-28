@@ -55,6 +55,7 @@ export interface FinancialWorkspaceActivity {
   description: string;
   category: string;
   account: string;
+  bankAccount?: string;
   amountCents: number;
   reviewStatus: FinancialTransaction["review_status"];
   categorySource: FinancialTransaction["category_source"];

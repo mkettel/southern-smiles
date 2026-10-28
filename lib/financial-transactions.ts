@@ -200,6 +200,9 @@ type RuleTransaction = Pick<FinancialTransaction, "merchant_name" | "counterpart
 // Only recognize the bank's settlement formats, not arbitrary mentions of a processor.
 export function recurringDepositFingerprint(transaction: RuleTransaction) {
   const source = (transaction.original_description ?? transaction.name).trim();
+  if (/^mobile deposit\s*:\s*ref number\s*:\s*\d+$/i.test(source)) {
+    return "mobile deposit ref number";
+  }
   if (/^cherry funding \d+ wfbussinesschecking$/i.test(source)) {
     return "cherry funding wfbussinesschecking";
   }

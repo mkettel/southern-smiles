@@ -228,6 +228,7 @@ test("5/3 settlements share a stable identity across dates without merging Cherr
 
 test("deposit autoapproval excludes pending deposits, reversals, and unrelated credits", () => {
   for (const description of [
+    "MOBILE DEPOSIT : REF NUMBER :316210601631",
     "Cherry Funding 5478807 WFBussinessChecking",
     "5/3 BANKCARD SYS COMB. DEP. 102226 4445064128069 Worldpay COMB. DEP. TERM 4506412806",
   ]) {
@@ -241,7 +242,19 @@ test("deposit autoapproval excludes pending deposits, reversals, and unrelated c
   }
   for (const description of [
     "Cherry Rewards", "Cherry Funding FEE", "Cherry Funding 123 OTHERACCOUNT",
-    "5/3 BANKCARD SYS FEES", "Amazon refund", "MOBILE DEPOSIT : REF NUMBER :316210601631",
+    "5/3 BANKCARD SYS FEES", "Amazon refund", "MOBILE DEPOSIT RETURNED",
     "ONLINE TRANSFER FROM CHECKING", "Fundbox loan draw",
   ]) assert.equal(isAutoApprovalEligibleTransaction(deposit(description)), false, description);
+});
+
+test("mobile deposits share an independent rule across changing reference numbers", () => {
+  const first = deposit("MOBILE DEPOSIT : REF NUMBER :316210601631");
+  const second = deposit("MOBILE DEPOSIT : REF NUMBER :316210601109");
+  assert.equal(transactionVendorRuleKey(first), "mobile deposit ref number");
+  assert.equal(transactionVendorRuleKey(first), transactionVendorRuleKey(second));
+  assert.equal(transactionRuleFingerprint(first), transactionRuleFingerprint(second));
+  assert.equal(isAutoApprovalEligibleTransaction(first), true);
+  assert.equal(transactionAutoRuleDirection(first), "inflow");
+  assert.notEqual(transactionRuleFingerprint(first), transactionRuleFingerprint(deposit("Cherry Funding 5478807 WFBussinessChecking")));
+  assert.equal(isAutoApprovalEligibleTransaction(deposit("ATM CASH DEPOSIT ON 10/11")), false);
 });

@@ -12,6 +12,7 @@ import {
   transactionRuleFingerprint,
   transactionAutoRuleDirection,
   transactionVendorRuleKey,
+  transactionRuleCandidates,
   transactionDisplayName,
   type FinancialTransaction,
 } from "@/lib/financial-transactions";
@@ -256,5 +257,9 @@ test("mobile deposits share an independent rule across changing reference number
   assert.equal(isAutoApprovalEligibleTransaction(first), true);
   assert.equal(transactionAutoRuleDirection(first), "inflow");
   assert.notEqual(transactionRuleFingerprint(first), transactionRuleFingerprint(deposit("Cherry Funding 5478807 WFBussinessChecking")));
+  assert.equal(findBestMatchingBookkeepingAccountId(transactionRuleCandidates(first), [
+    { normalizedVendor: normalizeVendorName(first.name), bookkeepingAccountId: "old-fee-for-service", matchType: "exact" },
+    { normalizedVendor: "mobile deposit ref number", bookkeepingAccountId: "insurance-income", matchType: "exact" },
+  ]), "insurance-income");
   assert.equal(isAutoApprovalEligibleTransaction(deposit("ATM CASH DEPOSIT ON 10/11")), false);
 });

@@ -239,6 +239,10 @@ export function transactionVendorRuleKey(transaction: RuleTransaction) {
 
 export function transactionRuleCandidates(transaction: RuleTransaction) {
   const key = transactionVendorRuleKey(transaction);
+  // Ignore old reference-specific categories once a shared deposit identity exists.
+  if ((transaction.amount_cents ?? 0) < 0 && recurringDepositFingerprint(transaction)) {
+    return [key];
+  }
   if (!key || key.startsWith("zelle ")) return key ? [key] : [];
   return [key, transaction.name, transaction.original_description]
     .filter((value): value is string => Boolean(value))

@@ -171,7 +171,7 @@ test("transaction fingerprints remove changing dates and reference numbers", () 
 
 test("Walmart order references and Netflix domains retain stable eligible identities", () => {
   for (const [merchant, descriptions, expected] of [
-    ["Walmart", ["Walmart200015157203932", "Walmart200015305668825", "WM SUPERCENTER #0363", "Walmart"], "walmart purchases"],
+    ["Walmart", ["Walmart200015157203932", "Walmart200015305668825", "WM SUPERCENTER #0363", "Walmart", "WALMART.COM"], "walmart purchases"],
     ["Netflix", ["Netflix.com", "NETFLIX"], "netflix subscription"],
   ] as const) {
     for (const description of descriptions) {

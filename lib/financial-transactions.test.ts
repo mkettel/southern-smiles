@@ -169,6 +169,28 @@ test("transaction fingerprints remove changing dates and reference numbers", () 
   );
 });
 
+test("Walmart order references and Netflix domains retain stable eligible identities", () => {
+  for (const [merchant, descriptions, expected] of [
+    ["Walmart", ["Walmart200015157203932", "Walmart200015305668825", "WM SUPERCENTER #0363", "Walmart"], "walmart purchases"],
+    ["Netflix", ["Netflix.com", "NETFLIX"], "netflix subscription"],
+  ] as const) {
+    for (const description of descriptions) {
+      const transaction = {
+        name: merchant, merchant_name: merchant, counterparty_name: null,
+        original_description: description, amount_cents: 2159, pending: false,
+      };
+      assert.equal(transactionRuleFingerprint(transaction), expected);
+      assert.equal(isAutoApprovalEligibleTransaction(transaction), true);
+      assert.equal(isAutoApprovalEligibleTransaction({ ...transaction, pending: true }), false);
+      assert.equal(isAutoApprovalEligibleTransaction({ ...transaction, amount_cents: -2159 }), false);
+      assert.equal(isAutoApprovalEligibleTransaction({ ...transaction, amount_cents: 0 }), false);
+      assert.notEqual(transactionRuleFingerprint({ ...transaction, merchant_name: "Other" }), expected);
+      assert.notEqual(transactionRuleFingerprint({ ...transaction, original_description: `${description} REFUND` }), expected);
+      assert.equal(isAutoApprovalEligibleTransaction({ ...transaction, original_description: "ONLINE TRANSFER TO NETFLIX" }), false);
+    }
+  }
+});
+
 test("auto approval accepts recurring expenses but rejects transfers and loan payments", () => {
   const recurringExpense = {
     amount_cents: 14183,

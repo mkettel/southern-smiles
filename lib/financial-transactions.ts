@@ -264,7 +264,7 @@ function retailMerchantFingerprint(transaction: RuleTransaction) {
   const source = (transaction.original_description ?? transaction.name).trim();
   const merchant = normalizeVendorName(transaction.merchant_name ?? "");
   // Match known purchase descriptors before numeric-reference stripping loses the vendor.
-  if (merchant === "walmart" && /^(?:walmart\s*\d*|wm supercenter(?:\s*#?\d+)?)$/i.test(source)) {
+  if (merchant === "walmart" && /^(?:walmart(?:\.com)?\s*\d*|wm supercenter(?:\s*#?\d+)?)$/i.test(source)) {
     return "walmart purchases";
   }
   if (merchant === "netflix" && /^netflix(?:\.com)?$/i.test(source)) {

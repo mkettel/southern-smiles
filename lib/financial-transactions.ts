@@ -260,12 +260,27 @@ export function transactionRuleCandidates(transaction: RuleTransaction) {
     .map(normalizeVendorName);
 }
 
+function retailMerchantFingerprint(transaction: RuleTransaction) {
+  const source = (transaction.original_description ?? transaction.name).trim();
+  const merchant = normalizeVendorName(transaction.merchant_name ?? "");
+  // Match known purchase descriptors before numeric-reference stripping loses the vendor.
+  if (merchant === "walmart" && /^(?:walmart\s*\d*|wm supercenter(?:\s*#?\d+)?)$/i.test(source)) {
+    return "walmart purchases";
+  }
+  if (merchant === "netflix" && /^netflix(?:\.com)?$/i.test(source)) {
+    return "netflix subscription";
+  }
+  return null;
+}
+
 export function transactionRuleFingerprint(
   transaction: Pick<
     FinancialTransaction,
     "name" | "merchant_name" | "counterparty_name" | "original_description"
   >,
 ) {
+  const retail = retailMerchantFingerprint(transaction);
+  if (retail) return retail;
   const supplier = dentalSupplierFingerprint(transaction);
   if (supplier) return supplier === "net32" ? "net32 marketplace" : supplier;
   const deposit = recurringDepositFingerprint(transaction);
@@ -294,6 +309,7 @@ export function isAutoApprovalEligibleTransaction(
   if (transaction.pending || transaction.amount_cents === 0) return false;
   const deposit = recurringDepositFingerprint(transaction);
   if (transaction.amount_cents < 0) return deposit !== null;
+  if (retailMerchantFingerprint(transaction)) return true;
   if (dentalSupplierFingerprint(transaction)) return true;
   // A reversal using the same description must not learn or use a deposit rule.
   if (deposit) return false;

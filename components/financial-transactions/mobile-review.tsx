@@ -5,10 +5,13 @@ import { ArrowRight, Check, CheckCheck, Clock3, CreditCard, FileText, Loader2, U
 import { transactionDisplayName, type FinancialTransaction, type BookkeepingAccount } from "@/lib/financial-transactions";
 import { needsBookkeepingReview } from "@/lib/financial-review-status";
 import { cn } from "@/lib/utils";
+import { HouseholdCategoryPicker } from "./household-category-picker";
 
 type Props = {
   transactions: FinancialTransaction[];
   accounts: BookkeepingAccount[];
+  isHousehold?: boolean;
+  categoryHistory?: FinancialTransaction[];
   categories: Record<string, string>;
   disabled: boolean;
   accountLabel: (transaction: FinancialTransaction) => string;
@@ -87,7 +90,7 @@ export function MobileReview(props: Props) {
             <p className="my-3 break-all text-center text-4xl font-semibold tabular-nums">{current.amount_cents < 0 ? "+" : "−"}{currency(current)}</p>
             <p className="text-center text-xs text-muted-foreground">{props.accountLabel(current)}</p>
             <div className="mt-6 border-t pt-4"><label htmlFor="mobile-category" className="text-xs text-muted-foreground">{details ? "Transaction type" : "Category"}</label>
-              {details ? <button disabled={busy} onClick={() => props.onDetails(current)} className="mt-2 flex min-h-12 w-full items-center justify-between rounded-md border p-3 text-sm">Review transfer or loan <ArrowRight size={17}/></button> : <select id="mobile-category" aria-label="Mobile category" disabled={busy} className="mt-2 min-h-12 w-full min-w-0 rounded-md border bg-muted/20 px-3 text-sm" value={category || ""} onChange={e => props.onCategory(current.id,e.target.value)}><option value="">Choose a category</option>{props.accounts.map(a => <option key={a.id} value={a.id}>{a.accountNumber} {a.name}</option>)}</select>}
+              {details ? <button disabled={busy} onClick={() => props.onDetails(current)} className="mt-2 flex min-h-12 w-full items-center justify-between rounded-md border p-3 text-sm">Review transfer or loan <ArrowRight size={17}/></button> : props.isHousehold ? <HouseholdCategoryPicker accounts={props.accounts} transactions={props.categoryHistory ?? props.transactions} value={category || ""} disabled={busy} onChange={value => props.onCategory(current.id, value)} /> : <select id="mobile-category" aria-label="Mobile category" disabled={busy} className="mt-2 min-h-12 w-full min-w-0 rounded-md border bg-muted/20 px-3 text-sm" value={category || ""} onChange={e => props.onCategory(current.id,e.target.value)}><option value="">Choose a category</option>{props.accounts.map(a => <option key={a.id} value={a.id}>{a.accountNumber} {a.name}</option>)}</select>}
             </div>
           </article>
         </div>

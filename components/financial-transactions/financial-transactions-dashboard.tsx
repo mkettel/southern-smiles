@@ -47,18 +47,23 @@ import { cn } from "@/lib/utils";
 
 import { matchesReviewFilter, needsBookkeepingReview, type ReviewFilter as StatusFilter } from "@/lib/financial-review-status";
 import { MobileReview } from "./mobile-review";
+import { HouseholdCategoryPicker } from "./household-category-picker";
+import { householdCategoryName } from "@/lib/household-category-picker";
 type ReviewMode = "category" | "transfer" | "loan";
 const SCHEDULED_LOAN_GROUP = "__scheduled_loan_group__";
 type TransferKind = "internal" | "credit_card_payment" | "line_of_credit_draw" | "loan_payment";
 
 export function FinancialTransactionsDashboard({
-  initialData,
+  initialData: sourceData,
+  isHousehold = false,
   previewMode = false,
 }: {
   initialData: FinancialTransactionDashboardData;
+  isHousehold?: boolean;
   previewMode?: boolean;
 }) {
   const router = useRouter();
+  const initialData = useMemo(() => isHousehold ? { ...sourceData, bookkeepingAccounts: sourceData.bookkeepingAccounts.map(account => ({ ...account, accountNumber: null, name: householdCategoryName(account) })) } : sourceData, [sourceData, isHousehold]);
   const [isPending, startTransition] = useTransition();
   const [transactions, setTransactions] = useState(initialData.transactions);
   const accountById = useMemo(
@@ -557,6 +562,8 @@ export function FinancialTransactionsDashboard({
           key={month}
           transactions={monthTransactions}
           accounts={initialData.bookkeepingAccounts}
+          isHousehold={isHousehold}
+          categoryHistory={transactions}
           categories={bookkeepingAccountIds}
           disabled={disabled}
           accountLabel={t => { const account = t.account_id ? accountById.get(t.account_id) : null; return account ? `${account.institutionName} · ${accountDisplayName(account)}${accountMaskText(account)}` : "Account unavailable"; }}
@@ -794,15 +801,15 @@ export function FinancialTransactionsDashboard({
 
                 {selectedReviewMode === "category" ? (
                   <>
-                    <InspectorField label="Chart of account">
-                      <BookkeepingAccountCombobox
+                    <InspectorField label={isHousehold ? "Category" : "Chart of account"}>
+                      {isHousehold ? <HouseholdCategoryPicker accounts={initialData.bookkeepingAccounts} transactions={transactions} value={bookkeepingAccountIds[selected.id] ?? ""} onChange={value => setBookkeepingAccountIds(current => ({ ...current, [selected.id]: value }))} /> : <BookkeepingAccountCombobox
                         accountsByType={bookkeepingAccountsByType}
                         value={bookkeepingAccountIds[selected.id] ?? ""}
                         onValueChange={(value) => setBookkeepingAccountIds((current) => ({
                           ...current,
                           [selected.id]: value,
                         }))}
-                      />
+                      />}
                     </InspectorField>
 
                     {initialData.suggestedBookkeepingAccountByTransaction[selected.id] && !selected.bookkeeping_account_id && (

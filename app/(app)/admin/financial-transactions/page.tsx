@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { DatabaseZap } from "lucide-react";
 import { getProfile } from "@/actions/auth";
+import { getWorkspaceAccess } from "@/actions/workspace-access";
 import { requireMemberModulePage } from "@/actions/member-module-access";
 import { getFinancialTransactionDashboardData } from "@/actions/financial-transactions";
 import { FinancialWorkspaceShell } from "@/components/financial/financial-workspace-shell";
@@ -10,13 +11,14 @@ export default async function AdminFinancialTransactionsPage() {
   const profile = await getProfile();
   if (!profile) redirect("/login");
   await requireMemberModulePage("financial");
+  const access = await getWorkspaceAccess();
 
   const data = await getFinancialTransactionDashboardData().catch(() => null);
 
   return (
     <FinancialWorkspaceShell active="bookkeeping">
       <div className="mb-5"><h2 className="text-lg font-semibold">Bookkeeping</h2><p className="mt-1 text-sm text-muted-foreground">Reconcile each connected account and review imported activity before it becomes trusted bookkeeping data.</p></div>
-      {data ? <FinancialTransactionsDashboard initialData={data} /> : <SchemaSetupNotice />}
+      {data ? <FinancialTransactionsDashboard initialData={data} isHousehold={access.workspaceType === "household"} /> : <SchemaSetupNotice />}
     </FinancialWorkspaceShell>
   );
 }

@@ -1,4 +1,6 @@
 export const CARE_CALL_START = "2026-10-26";
+export const NEW_REACH_START = "2026-11-16";
+export const NEW_REACH_STAT = "b0000011-0000-0000-0000-000000000011";
 export const CARE_CALL_STAT = "3b8ff011-e57d-4be7-89d2-d98b9070da0f";
 export const CARE_CALL_PRACTICE = "4410400a-84eb-4984-a7f9-68661bdb5213";
 export const CARE_CALL_ACTOR = "d6c19e94-7cce-41c7-be32-e21eaeedc0a7";
@@ -20,8 +22,8 @@ export function validateCareSnapshot(body: unknown, now = new Date()) {
   if (
     Object.keys(v).sort().join(",") !==
       "count,date,metric,revision,startDate" ||
-    v.metric !== "care-call-attempts-v1" ||
-    v.startDate !== CARE_CALL_START
+    !((v.metric === "care-call-attempts-v1" && v.startDate === CARE_CALL_START) ||
+      (v.metric === "new-reaches-v1" && v.startDate === NEW_REACH_START))
   )
     throw new Error("Invalid metric");
   if (
@@ -29,10 +31,10 @@ export function validateCareSnapshot(body: unknown, now = new Date()) {
     !/^\d{4}-\d{2}-\d{2}$/.test(v.date) ||
     !Number.isFinite(Date.parse(v.date)) ||
     new Date(v.date).toISOString().slice(0, 10) !== v.date ||
-    v.date < CARE_CALL_START ||
-    v.date >= phoenixDay(now)
+    v.date < (v.metric === "new-reaches-v1" ? NEW_REACH_START : CARE_CALL_START) ||
+    v.date > phoenixDay(now)
   )
-    throw new Error("Only completed days from October 26 are accepted");
+    throw new Error("Date outside metric reporting window");
   if (
     typeof v.count !== "number" ||
     !Number.isSafeInteger(v.count) ||
@@ -47,7 +49,7 @@ export function validateCareSnapshot(body: unknown, now = new Date()) {
     v.revision > now.getTime() + 300000
   )
     throw new Error("Invalid revision");
-  return { date: v.date, count: v.count, revision: v.revision };
+  return { metric: v.metric, date: v.date, count: v.count, revision: v.revision };
 }
 export interface CareSyncDay {
   entry_date: string;

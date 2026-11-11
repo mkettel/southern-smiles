@@ -122,6 +122,28 @@ test("aggregate sync is atomic, preserves history and manual amounts, and enforc
     await db.exec("reset role;set role authenticated");
     await assert.rejects(run("snapshot", "2026-10-26", 22, 110));
     await assert.rejects(db.query("select * from care_call_sync_days"));
+    await db.exec("reset role; alter table stats add formula_denominator_stat_id uuid, add formula_source_stat_id uuid, add formula_effective_from date");
+    const reach = "b0000011-0000-0000-0000-000000000011";
+    const bookings = "e8e5a233-35cc-403e-a356-941e30a29668";
+    const rate = "bc02918c-29ef-408c-b7ae-8d0b02d1351d";
+    await db.exec(`insert into stats(id,practice_id,stat_type,weekly_formula,good_direction) values('${reach}','${tenant}','count','sum','up');
+      insert into stats(id,practice_id,weekly_formula,formula_source_stat_id,formula_denominator_stat_id) values('${rate}','${tenant}','ratio_of_sums','${bookings}','${reach}');
+      insert into daily_stat_entries(stat_id,entry_date,week_start,value) values('${reach}','2026-11-13','2026-11-09',5),('${bookings}','2026-11-16','2026-11-16',1)`);
+    const migration = await readFile(new URL("../supabase/migrations/20261110120000_vault_reporting_schedule.sql", import.meta.url), "utf8");
+    await db.exec(migration.replaceAll("now()", "'2026-11-16T23:45Z'::timestamptz"));
+    await db.exec("set role service_role");
+    const send=(date:string,count:number,rev:number)=>db.query("select sync_vault_new_reaches($1,$2,$3)",[date,count,rev]);
+    await assert.rejects(send("2026-11-15",100,1));
+    await assert.rejects(send("2026-11-17",100,1));
+    await run("snapshot","2026-11-16",3,1);
+    await send("2026-11-16",4,1);
+    await send("2026-11-16",2,2);
+    await send("2026-11-16",4,1);
+    assert.equal(Number((await db.query<{value:number}>(`select value from stat_entries where stat_id='${reach}' and week_start='2026-11-16'`)).rows[0].value),2);
+    assert.equal(Number((await db.query<{value:number}>(`select value from stat_entries where stat_id='${rate}' and week_start='2026-11-16'`)).rows[0].value),50);
+    assert.equal(Number((await db.query<{value:number}>(`select value from daily_stat_entries where stat_id='${reach}' and entry_date='2026-11-13'`)).rows[0].value),5);
+    await db.exec("reset role;set role authenticated");
+    await assert.rejects(send("2026-11-16",10,3));
   } finally {
     await db.close();
   }

@@ -17,7 +17,7 @@ test("receiver only accepts post-cutover completed Phoenix days and aggregate sh
   assert.equal(validateCareSnapshot(v, now).count, 18);
   for (const change of [
     { date: "2026-10-25" },
-    { date: "2026-10-27" },
+    { date: "2026-10-28" },
     { date: "2026-02-30" },
     { count: -1 },
     { count: 1.5 },
@@ -28,4 +28,8 @@ test("receiver only accepts post-cutover completed Phoenix days and aggregate sh
   ])
     assert.throws(() => validateCareSnapshot({ ...v, ...change }, now));
   assert.equal(phoenixDay(new Date("2026-10-26T06:59:59Z")), "2026-10-25");
+  const reach = {...v, metric:"new-reaches-v1", startDate:"2026-11-16",date:"2026-11-16"};
+  assert.throws(()=>validateCareSnapshot(reach,now));
+  assert.throws(()=>validateCareSnapshot({...reach,date:"2026-11-15"},new Date("2026-11-16T23:45Z")));
+  assert.equal(validateCareSnapshot(reach,new Date("2026-11-16T23:45Z")).metric,reach.metric);
 });

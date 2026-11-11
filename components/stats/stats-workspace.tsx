@@ -1,4 +1,5 @@
 "use client";
+import { NEW_REACH_START, NEW_REACH_STAT } from "@/lib/care-call-sync";
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
@@ -567,6 +568,9 @@ export function StatsWorkspace({
                           {dates.map((date) => {
                             const key = `${item.stat.id}:${date}`;
                             const entry = item.dailyEntries.find((row) => row.entry_date === date);
+                            if (item.dailyInputStatId === NEW_REACH_STAT && date >= NEW_REACH_START) {
+                              return <div key={date}><p className="text-xs text-muted-foreground">{dayLabel(date)} · Vault</p><p>{entry?.value ?? "Awaiting sync"}</p></div>;
+                            }
                             const derived = item.stat.weekly_formula === "collections_per_staff";
                             return (
                               <div key={date} className="space-y-1.5">

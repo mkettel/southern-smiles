@@ -450,3 +450,28 @@ export const patientFiltersSchema = z.object({
   newWithinMonths: z.number().int().min(0).max(120).optional(),
   repeatOnly: z.boolean().optional(),
 });
+
+// Password reset. Length limits mirror changePassword / setTemporaryPassword
+// (bcrypt, which Supabase uses, ignores anything past 72 bytes).
+export const passwordResetRequestSchema = z.object({
+  identifier: z
+    .string()
+    .trim()
+    .min(1, "Username or email is required")
+    .max(254, "That username or email is too long"),
+});
+
+export const emailAddressSchema = z.email("Enter a valid email address");
+
+export const newPasswordSchema = z
+  .object({
+    password: z
+      .string()
+      .min(8, "Password must be at least 8 characters")
+      .max(72, "Password must be 72 characters or less"),
+    confirmPassword: z.string(),
+  })
+  .refine((value) => value.password === value.confirmPassword, {
+    message: "Passwords don't match",
+    path: ["confirmPassword"],
+  });

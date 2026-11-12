@@ -1,11 +1,22 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { RESET_UPDATE_PATH, isMisroutedRecoveryLink } from "@/lib/password-reset";
 
 export async function updateSession(request: NextRequest) {
   // This development-only route renders synthetic fixtures and needs no database.
   if (process.env.NODE_ENV === "development" && ["/financial-cash-flow-preview", "/financial-overview-preview"].includes(request.nextUrl.pathname)) {
     return NextResponse.next({ request });
   }
+
+  // A password reset link whose host isn't on Supabase's redirect allow list
+  // arrives at the site root instead of the reset page. Send it where it
+  // belongs (query string intact) before any auth redirect can drop the token.
+  if (isMisroutedRecoveryLink(request.nextUrl.pathname, request.nextUrl.searchParams)) {
+    const url = request.nextUrl.clone();
+    url.pathname = RESET_UPDATE_PATH;
+    return NextResponse.redirect(url);
+  }
+
   const isLocalPreview =
     process.env.NODE_ENV === "development" &&
     (request.nextUrl.pathname === "/action-log-preview" ||

@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { BarElement, CategoryScale, Chart as ChartJS, Legend, LinearScale, Tooltip as ChartTooltip } from "chart.js";
-import { CalendarDays, ChevronDown, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { Bar as ChartBar } from "react-chartjs-2";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { FinancialReportPeriodKey, FinancialReportsData } from "@/lib/financial-reports";
+import { FinancialPeriodSelector } from "./financial-period-selector";
 import { cn } from "@/lib/utils";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip, Legend);
@@ -32,49 +33,14 @@ export function FinancialReportsDashboard({ data }: { data: FinancialReportsData
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">Profit and loss (P&amp;L)</h2>
           <p className="mt-1 text-sm text-muted-foreground">{data.baselinePeriod
             ? `QuickBooks baseline: ${data.baselinePeriod.from} through ${data.baselinePeriod.through}. Later activity: Board ledger.`
             : "Posted and reviewed bookkeeping activity."}</p>
         </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-          <label className="relative block min-w-48">
-            <span className="sr-only">Report month</span>
-            <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <select
-              aria-label="Report month"
-              value={period.key.startsWith("month:") ? period.key : ""}
-              onChange={(event) => setPeriodKey(event.target.value as FinancialReportPeriodKey)}
-              className={cn(
-                "h-9 w-full appearance-none rounded-md border bg-background pl-9 pr-8 text-sm font-medium",
-                !period.key.startsWith("month:") && "text-muted-foreground",
-              )}
-            >
-              {!period.key.startsWith("month:") && <option value="">Select month</option>}
-              {monthPeriods.map((entry) => <option key={entry.key} value={entry.key}>{entry.label}</option>)}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          </label>
-          <div className="grid grid-cols-3 rounded-lg border bg-muted/35 p-0.5" role="tablist" aria-label="Reporting period">
-            {aggregatePeriods.map((entry) => (
-              <button
-                key={entry.key}
-                type="button"
-                role="tab"
-                aria-selected={period.key === entry.key}
-                className={cn(
-                  "h-8 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors",
-                  period.key === entry.key && "bg-background text-foreground shadow-sm",
-                )}
-                onClick={() => setPeriodKey(entry.key)}
-              >
-                {entry.label}
-              </button>
-            ))}
-          </div>
-        </div>
+        <FinancialPeriodSelector months={monthPeriods} presets={aggregatePeriods} value={period.key} onChange={setPeriodKey} />
       </div>
 
       <div>

@@ -6,6 +6,7 @@ import { Bar } from "react-chartjs-2";
 import { ChevronLeft, ChevronRight, Download, Info, LoaderCircle } from "lucide-react";
 import { getFinancialCashFlowData } from "@/actions/financial-cash-flow";
 import { cashFlowCsv, cashFlowDateLabel, cashFlowPresets, type CashFlowData } from "@/lib/financial-cash-flow";
+import { FinancialPeriodSelector } from "./financial-period-selector";
 import { cn } from "@/lib/utils";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip, Legend);
@@ -22,7 +23,6 @@ export function FinancialCashFlowDashboard({ initialData, previewMonths }: { ini
   const [pending, startTransition] = useTransition();
   const report = data.report;
   const week = report.weeks[Math.min(weekIndex, report.weeks.length - 1)];
-  const monthIndex = data.months.findIndex((m) => m.key === report.month);
   const activity = week.activity.filter((a) => direction === "payments" ? a.amountCents < 0 : a.amountCents > 0);
 
   function changeMonth(month: string) {
@@ -52,13 +52,7 @@ export function FinancialCashFlowDashboard({ initialData, previewMonths }: { ini
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h2 className="text-lg font-semibold">Cash flow</h2><p className="mt-1 text-sm text-muted-foreground">Posted bank activity · {cashFlowDateLabel(report.weeks[0].start)}, {report.weeks[0].start.slice(0, 4)} – {cashFlowDateLabel(report.through)}, {report.through.slice(0, 4)}{previewMonths ? " · Illustrative data" : ""}</p></div>
       <div className="flex max-w-full flex-wrap items-center gap-2">
-        <button type="button" title="Previous month" aria-label="Previous month" disabled={pending || monthIndex < 0 || monthIndex >= data.months.length - 1} onClick={() => changeMonth(data.months[monthIndex + 1].key)} className="flex size-9 shrink-0 items-center justify-center rounded-md border hover:bg-accent disabled:opacity-30"><ChevronLeft className="size-4" /></button>
-        <select aria-label="Cash-flow month" value={monthIndex < 0 ? "" : report.month} disabled={pending} onChange={(e) => changeMonth(e.target.value)} className="h-9 min-w-0 rounded-md border bg-background px-3 text-sm">{monthIndex < 0 && <option value="" disabled>Select month</option>}{data.months.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}</select>
-        <button type="button" title="Next month" aria-label="Next month" disabled={pending || monthIndex <= 0} onClick={() => changeMonth(data.months[monthIndex - 1].key)} className="flex size-9 shrink-0 items-center justify-center rounded-md border hover:bg-accent disabled:opacity-30"><ChevronRight className="size-4" /></button>
-        {!previewMonths && <div role="group" aria-label="Cash-flow period" className="flex flex-wrap rounded-md border p-0.5">
-          {data.months[1] && <button type="button" disabled={pending} aria-pressed={report.month === data.months[1].key} onClick={() => changeMonth(data.months[1].key)} className="rounded px-3 py-1.5 text-sm hover:bg-accent">Last month</button>}
-          {Object.entries(cashFlowPresets).map(([key, label]) => <button type="button" key={key} disabled={pending} aria-pressed={report.month === key} onClick={() => changeMonth(key)} className={cn("rounded px-3 py-1.5 text-sm", report.month === key ? "bg-muted font-medium" : "text-muted-foreground hover:bg-accent")}>{label}</button>)}
-        </div>}
+        <FinancialPeriodSelector months={data.months} presets={previewMonths ? [] : Object.entries(cashFlowPresets).map(([key, label]) => ({ key, label }))} value={report.month} onChange={changeMonth} disabled={pending} />
         <button type="button" title="Download weekly CSV" aria-label="Download weekly CSV" disabled={pending} onClick={download} className="flex size-9 shrink-0 items-center justify-center rounded-md border hover:bg-accent"><Download className="size-4" /></button>
       </div>
     </div>

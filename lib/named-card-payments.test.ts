@@ -37,6 +37,7 @@ test("named card payment uses the real transfer journal, or leaves both imports 
         (${id(6)},${id(1)},${id(2)},'ONLINE TRANSFER REF #ABC122 TO BUSINESSLINE LINE OF CREDIT XXXXXXXXXXXX5483 ON 11/06/26',50000,'2026-11-06',NULL);
     `);
     await db.exec(sql("20261113045926_auto_post_named_card_payments.sql"));
+    await db.exec(sql("20261113053000_reference_transfers.sql"));
     const debit = ` WHERE id=${id(4)}`;
     const receipt = ` WHERE id=${id(5)}`;
     const update = "UPDATE financial_transactions SET ";
@@ -83,5 +84,22 @@ test("named card payment uses the real transfer journal, or leaves both imports 
     assert.equal((await db.query("SELECT * FROM accounting_transaction_links")).rows.length, 2);
     assert.deepEqual((await db.query("SELECT debit_cents::int AS dr, credit_cents::int AS cr FROM accounting_journal_lines ORDER BY financial_account_id")).rows,
       [{ dr: 0, cr: 50000 }, { dr: 50000, cr: 0 }]);
+    await db.exec(`
+      INSERT INTO financial_accounts VALUES
+        (${id(11)},${id(1)},'Business Profit',NULL,'6791','depository','savings',true,true);
+      INSERT INTO financial_transactions(id,practice_id,account_id,name,amount_cents,transaction_date)
+      VALUES (${id(12)},${id(1)},${id(2)},'ONLINE TRANSFER TO DR. MONZER SHAKALLY, DDS LLC BUSINESS MARKET RATE SAVINGS XXXXXX6791 REF #IB03ZLS7F6 ON 11/09/26',10000,'2026-11-09'),
+        (${id(13)},${id(1)},${id(11)},'ONLINE TRANSFER FROM DR. MONZER SHAKALLY, DDS LLC BUSINESS CHECKING XXXXXX2625 REF #IB03ZLS7F6 ON 11/09/26',-10000,'2026-11-09');
+    `);
+    for (const setup of [duplicate(12), update+"pending=true WHERE id="+id(12),
+      update+"name=replace(name,'2625','2222') WHERE id="+id(13),
+      "UPDATE financial_accounts SET included_in_bookkeeping=false WHERE id="+id(11)]) {
+      await db.exec("BEGIN");
+      try { await db.exec(setup); assert.equal(await run(db), 0); }
+      finally { await db.exec("ROLLBACK"); }
+    }
+    assert.equal(await run(db), 1);
+    assert.equal(await run(db), 0);
+    assert.equal((await db.query("SELECT FROM accounting_journal_entries WHERE transfer_kind='internal'")).rows.length, 1);
   } finally { await db.close(); }
 });

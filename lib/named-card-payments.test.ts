@@ -38,6 +38,11 @@ test("named card payment uses the real transfer journal, or leaves both imports 
     `);
     await db.exec(sql("20261113045926_auto_post_named_card_payments.sql"));
     await db.exec(sql("20261113053000_reference_transfers.sql"));
+    await db.exec(`CREATE TABLE financial_connections(id uuid PRIMARY KEY, practice_id uuid, institution_name text);
+      ALTER TABLE financial_accounts ADD COLUMN connection_id uuid;
+      INSERT INTO financial_connections VALUES (${id(30)},${id(1)},'U.S. Bank');
+      UPDATE financial_accounts SET connection_id=${id(30)};`);
+    await db.exec(sql("20261113060000_us_bank_card_payments.sql"));
     const debit = ` WHERE id=${id(4)}`;
     const receipt = ` WHERE id=${id(5)}`;
     const update = "UPDATE financial_transactions SET ";
@@ -75,6 +80,16 @@ test("named card payment uses the real transfer journal, or leaves both imports 
         finally { await db.exec("ROLLBACK"); }
       });
     }
+    await db.exec("BEGIN");
+    try {
+      await db.exec(`UPDATE financial_accounts SET mask='7672' WHERE id=${id(3)};
+        UPDATE financial_transactions SET original_description='BUSINESS TO BUSINESS ACH U.S. BANK WEB PYMT 261103 ***********7672 SHAKALLY,MONZER 75' WHERE id=${id(4)};
+        UPDATE financial_connections SET institution_name='Other Bank';`);
+      assert.equal(await run(db), 0);
+      await db.exec("UPDATE financial_connections SET institution_name='U.S. Bank'");
+      assert.equal(await run(db), 1);
+      assert.equal(await run(db), 0);
+    } finally { await db.exec("ROLLBACK"); }
     assert.equal(await run(db), 1);
     assert.equal(await run(db), 0);
     assert.deepEqual((await db.query("SELECT transfer_kind FROM accounting_journal_entries")).rows,

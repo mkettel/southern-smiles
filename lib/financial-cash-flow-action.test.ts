@@ -36,7 +36,12 @@ async function runReport(month: string, document?: baseline.QuickBooksBaseline) 
 test("verified historical cash ties to the five August trial balances without counting Board duplicates", {skip: !process.env.CASH_BASELINE_FIXTURE}, async () => {
   const document = JSON.parse(readFileSync(process.env.CASH_BASELINE_FIXTURE!, "utf8"));
   const { result, queries } = await runReport("all", document);
-  assert.equal(result.report.netCents, 695878);
+  // Both private snapshots have independent opening/closing trial balance controls.
+  const expected = new Map([
+    ["c53e863cac6b161bf59777c3393dbce51634349f307eacba5896c58b6c2b7954", 695878],
+    ["05efe4cacde621daaa6f7b19431e71b8d690b4f9a6e1b3650365bf4a00164bbf", 696078],
+  ]);
+  assert.equal(result.report.netCents, expected.get(document.sourceSha256));
   for (const table of ["financial_transactions","accounting_journal_lines"]) {
     assert.ok(queries.filter(q=>q.table===table).every(q=>q.calls.some(c=>c[0]==="gte" && c[2]==="2026-09-01")));
   }

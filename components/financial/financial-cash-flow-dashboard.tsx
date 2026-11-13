@@ -49,7 +49,7 @@ export function FinancialCashFlowDashboard({ initialData, previewMonths }: { ini
   }
 
   return <div className="min-w-0 space-y-5" aria-busy={pending}>
-    <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="flex flex-col items-start gap-3">
       <div><h2 className="text-lg font-semibold">Cash flow</h2><p className="mt-1 text-sm text-muted-foreground">Posted bank activity · {cashFlowDateLabel(report.weeks[0].start)}, {report.weeks[0].start.slice(0, 4)} – {cashFlowDateLabel(report.through)}, {report.through.slice(0, 4)}{previewMonths ? " · Illustrative data" : ""}</p></div>
       <div className="flex max-w-full flex-wrap items-center gap-2">
         <FinancialPeriodSelector months={data.months} presets={previewMonths ? [] : Object.entries(cashFlowPresets).map(([key, label]) => ({ key, label }))} value={report.month} onChange={changeMonth} disabled={pending} />
@@ -61,6 +61,8 @@ export function FinancialCashFlowDashboard({ initialData, previewMonths }: { ini
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-y py-3 text-xs text-muted-foreground">
       <span title={data.accountNames.join("\n")} className="flex items-center gap-1.5"><Info className="size-3.5" />{data.accountNames.length} included bank accounts · USD</span>
       <span>Internal bank transfers excluded</span>
+      {data.baselinePeriod && <span>QuickBooks: {data.baselinePeriod.from} through {data.baselinePeriod.through}</span>}
+      <span>Not reconciled to bank statements</span>
       {(data.unpostedCount > 0 || data.settlingCount > 0) && <a href="/admin/financial-transactions" className="text-amber-700 underline underline-offset-4 dark:text-amber-400">{data.unpostedCount} awaiting posting · {data.settlingCount} waiting for settlement</a>}
       {data.unsupportedCurrencyCount > 0 && <span className="text-amber-700 dark:text-amber-400">{data.unsupportedCurrencyCount} non-USD accounts excluded</span>}
     </div>
@@ -90,6 +92,6 @@ export function FinancialCashFlowDashboard({ initialData, previewMonths }: { ini
         </div>
       </section>
     </div>}
-    <p className="border-t pt-4 text-xs text-muted-foreground">Board ledger · Posted entries only · QuickBooks P&L baseline not included · Not a reconciled bank statement</p>
+    <p className="border-t pt-4 text-xs text-muted-foreground">Posted bank activity only · Net change is not the ending bank balance</p>
   </div>;
 }

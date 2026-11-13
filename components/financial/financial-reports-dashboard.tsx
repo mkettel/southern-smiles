@@ -33,7 +33,7 @@ export function FinancialReportsDashboard({ data }: { data: FinancialReportsData
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col items-start gap-3">
         <div>
           <h2 className="text-lg font-semibold">Profit and loss (P&amp;L)</h2>
           <p className="mt-1 text-sm text-muted-foreground">{data.baselinePeriod

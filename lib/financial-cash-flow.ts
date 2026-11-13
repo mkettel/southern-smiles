@@ -39,6 +39,7 @@ export interface CashFlowReport {
 }
 
 export interface CashFlowData {
+  baselinePeriod?: { from: string; through: string };
   report: CashFlowReport;
   months: Array<{ key: string; label: string }>;
   accountNames: string[];

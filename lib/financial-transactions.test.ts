@@ -270,6 +270,20 @@ test("deposit autoapproval excludes pending deposits, reversals, and unrelated c
   ]) assert.equal(isAutoApprovalEligibleTransaction(deposit(description)), false, description);
 });
 
+test("ATM cash deposits match independently of location and receipt", () => {
+  for (const description of [
+    "ATM CASH DEPOSIT ON 11/01 8423 E McDonald Dr Scottsdale AZ 0004360 ATM ID 2201D CARD 0371",
+    "ATM CASH DEPOSIT ON 12/15 Main St Phoenix AZ 0007999 ATM ID 45AB CARD 1234",
+  ]) {
+    const row = deposit(description);
+    assert.equal(transactionRuleFingerprint(row), "atm cash deposit");
+    assert.equal(isAutoApprovalEligibleTransaction(row), true);
+    assert.equal(isAutoApprovalEligibleTransaction({ ...row, pending: true }), false);
+    assert.equal(isAutoApprovalEligibleTransaction({ ...row, amount_cents: 100 }), false);
+    assert.equal(isAutoApprovalEligibleTransaction(deposit(description + " REVERSAL")), false);
+  }
+});
+
 test("mobile deposits share an independent rule across changing reference numbers", () => {
   const first = deposit("MOBILE DEPOSIT : REF NUMBER :316210601631");
   const second = deposit("MOBILE DEPOSIT : REF NUMBER :316210601109");

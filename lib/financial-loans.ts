@@ -36,6 +36,12 @@ export interface FinancialLoan {
   availableCreditCents: number | null;
   currentBalanceCents: number;
   balanceAsOfDate: string;
+  syncedCredit?: {
+    currentBalanceCents: number;
+    availableCreditCents: number | null;
+    creditLimitCents: number | null;
+    balanceAsOfDate: string;
+  };
   pastDueCents: number | null;
   daysPastDue: number | null;
   scheduledPaymentCents: number | null;

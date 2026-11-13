@@ -417,13 +417,6 @@ export async function syncFinancialTransactions({
         .from("financial_transactions")
         .upsert(rows, { onConflict: "connection_id,provider_transaction_id" });
       if (upsertError) throw new Error(upsertError.message);
-
-      await autoApproveImportedTransactions({
-        supabase,
-        practiceId,
-        connectionId,
-        providerTransactionIds: changedTransactions.map((transaction) => transaction.transaction_id),
-      });
     }
 
     const removedIds = [...new Set(batch.removedIds)];
@@ -436,6 +429,19 @@ export async function syncFinancialTransactions({
         .in("provider_transaction_id", removedIds);
       if (removedError) throw new Error(removedError.message);
     }
+
+    // The other leg may be from a different connection or an earlier import.
+    // Run only after the batch's removals and before ordinary category rules.
+    const { error: cardError } = await supabase.rpc("auto_post_named_card_payments", {
+      p_practice_id: practiceId,
+    });
+    if (cardError && cardError.code !== "PGRST202") throw new Error(cardError.message);
+    await autoApproveImportedTransactions({
+      supabase,
+      practiceId,
+      connectionId,
+      providerTransactionIds: changedTransactions.map((transaction) => transaction.transaction_id),
+    });
 
     // Also revisit settled loan backlog after opt-in; a bank cursor need not
     // change for a previously imported installment to become eligible.

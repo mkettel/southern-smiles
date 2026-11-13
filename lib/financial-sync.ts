@@ -21,6 +21,7 @@ import {
 } from "@/lib/financial-transactions";
 import { getPlaidApiErrorDetails, getPlaidClient } from "@/lib/plaid-client";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { runCardMatcher } from "@/lib/run-card-matcher";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -432,10 +433,9 @@ export async function syncFinancialTransactions({
 
     // The other leg may be from a different connection or an earlier import.
     // Run only after the batch's removals and before ordinary category rules.
-    const { error: cardError } = await supabase.rpc("auto_post_named_card_payments", {
+    await runCardMatcher(() => supabase.rpc("auto_post_named_card_payments", {
       p_practice_id: practiceId,
-    });
-    if (cardError && cardError.code !== "PGRST202") throw new Error(cardError.message);
+    }));
     await autoApproveImportedTransactions({
       supabase,
       practiceId,

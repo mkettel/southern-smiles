@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import { validateQuickBooksBaseline } from "../lib/quickbooks-baseline";
 
 async function main() {
-  const [file, practiceId] = process.argv.slice(2);
+  const [file, practiceId, previousHash] = process.argv.slice(2);
   if (!file || !practiceId) throw new Error("Usage: stage-quickbooks-baseline.ts FILE PRACTICE_ID");
   const original = JSON.parse(await readFile(file, "utf8"));
   validateQuickBooksBaseline(original, practiceId);
@@ -12,7 +12,15 @@ async function main() {
   if (!base || !key) throw new Error("Missing server-only database credentials");
   const headers = { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
   const table = `${base}/rest/v1/accounting_source_baselines`;
-  const url = `${table}?${new URLSearchParams({practice_id:`eq.${practiceId}`,select:"document,is_active"})}`;
+  const scope = {practice_id:`eq.${practiceId}`};
+  if (previousHash) {
+    if (!/^[a-f0-9]{64}$/.test(previousHash) || previousHash === original.sourceSha256) throw new Error("Invalid previous hash");
+    const r = await fetch(`${table}?${new URLSearchParams({...scope,is_active:"eq.true",select:"source_sha256"})}`, {headers});
+    if (!r.ok) throw new Error(`Active baseline check failed: HTTP ${r.status}`);
+    const active = await r.json();
+    if (active.length !== 1 || active[0].source_sha256 !== previousHash) throw new Error("Unexpected active baseline");
+  }
+  const url = `${table}?${new URLSearchParams({...scope,...(previousHash ? {source_sha256:`eq.${original.sourceSha256}`} : {}),select:"document,is_active"})}`;
   const read = async () => {
     const response = await fetch(url, {headers, signal:AbortSignal.timeout(30000)});
     if (!response.ok) throw new Error(`Read failed: HTTP ${response.status}`);

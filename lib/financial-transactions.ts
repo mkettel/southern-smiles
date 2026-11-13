@@ -307,13 +307,15 @@ export function isAutoApprovalEligibleTransaction(
   >,
 ) {
   if (transaction.pending || transaction.amount_cents === 0) return false;
+  const bankDescription = transaction.original_description ?? transaction.name;
+  // Even an unmatched card transfer is not a merchant expense.
+  if (/^\s*(?:online transfer|(?:online )?payment to)\b.*\bcard\b/i.test(bankDescription)) return false;
   const deposit = recurringDepositFingerprint(transaction);
   if (transaction.amount_cents < 0) return deposit !== null;
   if (retailMerchantFingerprint(transaction)) return true;
   if (dentalSupplierFingerprint(transaction)) return true;
   // A reversal using the same description must not learn or use a deposit rule.
   if (deposit) return false;
-  const bankDescription = transaction.original_description ?? transaction.name;
   if (/^BUSINESS TO BUSINESS ACH EverBank, N\.A\. EverBank /i.test(bankDescription)) return false;
   // Only an unambiguous outgoing recipient can learn an account-scoped rule.
   // Generic Zelle labels and incoming transfers remain in manual review.

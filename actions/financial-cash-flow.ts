@@ -1,6 +1,7 @@
 "use server";
 
 import { requireMemberModuleAccess } from "@/actions/member-module-access";
+import { validateQuickBooksBaseline } from "@/lib/quickbooks-baseline";
 import { buildCashFlowReport, cashFlowPresets, cashFlowStart, cashFlowMonthEnd, cashFlowToday, type CashFlowData, type CashFlowLine } from "@/lib/financial-cash-flow";
 import { financialWorkspaceMonthCount, getFinancialWorkspaceMonthFrames } from "@/lib/financial-workspace";
 
@@ -24,17 +25,41 @@ export async function getFinancialCashFlowData(requestedMonth?: string): Promise
     .select("entry_date").eq("practice_id", practiceId).eq("status", "posted").lte("entry_date", today)
     .order("entry_date").limit(1).maybeSingle();
   if (firstError) throw new Error(firstError.message);
-  const frames = getFinancialWorkspaceMonthFrames(now, financialWorkspaceMonthCount(firstEntry?.entry_date, now));
-  const start = cashFlowStart(month, today, firstEntry?.entry_date);
+  const { data: source, error: sourceError } = await supabase.from("accounting_source_baselines")
+    .select("document").eq("practice_id", practiceId).eq("is_active", true).maybeSingle();
+  if (sourceError) throw new Error(sourceError.message);
+  const baseline = source ? validateQuickBooksBaseline(source.document, practiceId).baseline : null;
+  const firstDate = baseline?.from ?? firstEntry?.entry_date;
+  const frames = getFinancialWorkspaceMonthFrames(now, financialWorkspaceMonthCount(firstDate, now));
+  const start = cashFlowStart(month, today, firstDate);
   if (!preset && !frames.some((f) => f.key === month)) throw new Error("Month outside posted history");
   const lines: CashFlowLine[] = [];
-  if (ids.length) {
+  const boardStart = baseline && start <= baseline.through
+    ? new Date(Date.parse(baseline.through + "T00:00:00Z") + 86400000).toISOString().slice(0, 10) : start;
+  const useBaseline = baseline && start <= baseline.through && through >= baseline.from;
+  if (useBaseline) {
+    const mapped = new Map<string, string>();
+    for (const account of cashAccounts) {
+      const matches = baseline.bookkeepingAccounts.filter(a => a.account_type === "Bank" && a.name.match(/\((\d{4})\)/)?.[1] === account.mask);
+      if (!account.mask || matches.length !== 1 || mapped.has(matches[0].id)) throw new Error("Historical bank account mapping needs review");
+      mapped.set(matches[0].id, names.get(account.id)!);
+    }
+    const entries = new Map(baseline.entries.map(e => [e.id, e]));
+    for (const line of baseline.lines) {
+      const account = mapped.get(line.bookkeeping_account_id ?? "");
+      const e = entries.get(line.journal_entry_id)!;
+      if (!account || e.entry_date < baseline.from || e.entry_date < start || e.entry_date > through) continue;
+      lines.push({ id: line.id, entryId: e.id, date: e.entry_date, account, description: e.description ?? "QuickBooks journal",
+        sourceType: e.source_type, status: e.status, debitCents: line.debit_cents, creditCents: line.credit_cents });
+    }
+  }
+  if (ids.length && boardStart <= through) {
     for (let offset = 0; ; offset += 1000) {
       const { data, error } = await supabase.from("accounting_journal_lines")
         .select("id, journal_entry_id, financial_account_id, debit_cents, credit_cents, accounting_journal_entries!inner(entry_date, description, source_type, status)")
         .eq("practice_id", practiceId).eq("accounting_journal_entries.practice_id", practiceId)
         .in("financial_account_id", ids).eq("accounting_journal_entries.status", "posted")
-        .gte("accounting_journal_entries.entry_date", start).lte("accounting_journal_entries.entry_date", through)
+        .gte("accounting_journal_entries.entry_date", boardStart).lte("accounting_journal_entries.entry_date", through)
         .order("id").range(offset, offset + 999);
       if (error) throw new Error(error.message);
       for (const row of data ?? []) {
@@ -46,13 +71,13 @@ export async function getFinancialCashFlowData(requestedMonth?: string): Promise
     }
   }
   const count = async (pending: boolean) => {
-    if (!ids.length) return 0;
+    if (!ids.length || boardStart > through) return 0;
     const { count, error } = await supabase.from("financial_transactions").select("id", { count: "exact", head: true })
       .eq("practice_id", practiceId).in("account_id", ids).eq("is_removed", false).eq("pending", pending)
-      .eq("review_status", "pending").gte("transaction_date", start).lte("transaction_date", through);
+      .eq("review_status", "pending").gte("transaction_date", boardStart).lte("transaction_date", through);
     if (error) throw new Error(error.message);
     return count ?? 0;
   };
   const [unpostedCount, settlingCount] = await Promise.all([count(false), count(true)]);
-  return { report: buildCashFlowReport(month, lines, today, firstEntry?.entry_date), months: frames.reverse().map((f) => ({ key: f.key, label: f.longLabel })), accountNames: [...names.values()], unpostedCount, settlingCount, unsupportedCurrencyCount: (accounts?.length ?? 0) - ids.length };
+  return { report: buildCashFlowReport(month, lines, today, firstDate), baselinePeriod: useBaseline ? { from: baseline.from, through: baseline.through } : undefined, months: frames.reverse().map((f) => ({ key: f.key, label: f.longLabel })), accountNames: [...names.values()], unpostedCount, settlingCount, unsupportedCurrencyCount: (accounts?.length ?? 0) - ids.length };
 }

@@ -34,7 +34,7 @@ export function FinancialReportsDashboard({ data }: { data: FinancialReportsData
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Financial reports</h2>
+          <h2 className="text-lg font-semibold">Profit and loss (P&amp;L)</h2>
           <p className="mt-1 text-sm text-muted-foreground">{data.baselinePeriod
             ? `QuickBooks baseline: ${data.baselinePeriod.from} through ${data.baselinePeriod.through}. Later activity: Board ledger.`
             : "Posted and reviewed bookkeeping activity."}</p>

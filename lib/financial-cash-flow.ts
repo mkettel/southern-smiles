@@ -61,10 +61,26 @@ export function cashFlowDateLabel(date: string) {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`));
 }
 
-export function buildCashFlowReport(month: string, lines: CashFlowLine[], today: string): CashFlowReport {
-  const end = cashFlowMonthEnd(month);
+export const cashFlowPresets = { six_months: "Last 6 months", year: "This year", all: "All time" } as const;
+
+export function cashFlowStart(period: string, today: string, firstDate?: string) {
+  if (period === "all") return firstDate ?? today;
+  if (period === "year") return today.slice(0, 4) + "-01-01";
+  if (period === "six_months") {
+    const d = new Date(today + "T12:00:00Z");
+    d.setUTCDate(1);
+    d.setUTCMonth(d.getUTCMonth() - 5);
+    return d.toISOString().slice(0, 10);
+  }
+  cashFlowMonthEnd(period);
+  return period + "-01";
+}
+
+export function buildCashFlowReport(month: string, lines: CashFlowLine[], today: string, firstDate?: string): CashFlowReport {
+  const preset = Object.hasOwn(cashFlowPresets, month);
+  const end = preset ? today : cashFlowMonthEnd(month);
   const through = end < today ? end : today;
-  const start = `${month}-01`;
+  const start = cashFlowStart(month, today, firstDate);
   if (start > today) throw new Error("Future cash-flow month");
   const weeks: CashFlowWeek[] = [];
   let cursor = start;
@@ -106,7 +122,7 @@ export function buildCashFlowReport(month: string, lines: CashFlowLine[], today:
   const inflowCents = weeks.reduce((sum, w) => sum + w.inflowCents, 0);
   const outflowCents = weeks.reduce((sum, w) => sum + w.outflowCents, 0);
   if (![inflowCents, outflowCents].every(Number.isSafeInteger)) throw new Error("Cash-flow total exceeds safe range");
-  return { month, through, label: new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${start}T12:00:00Z`)), weeks, inflowCents, outflowCents, netCents: inflowCents - outflowCents };
+  return { month, through, label: preset ? cashFlowPresets[month as keyof typeof cashFlowPresets] : new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${start}T12:00:00Z`)), weeks, inflowCents, outflowCents, netCents: inflowCents - outflowCents };
 }
 
 export function cashFlowCsv(report: CashFlowReport) {

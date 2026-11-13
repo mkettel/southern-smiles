@@ -1,7 +1,7 @@
 "use server";
 
 import { requireMemberModuleAccess } from "@/actions/member-module-access";
-import { buildCashFlowReport, cashFlowMonthEnd, cashFlowToday, type CashFlowData, type CashFlowLine } from "@/lib/financial-cash-flow";
+import { buildCashFlowReport, cashFlowPresets, cashFlowStart, cashFlowMonthEnd, cashFlowToday, type CashFlowData, type CashFlowLine } from "@/lib/financial-cash-flow";
 import { financialWorkspaceMonthCount, getFinancialWorkspaceMonthFrames } from "@/lib/financial-workspace";
 
 export async function getFinancialCashFlowData(requestedMonth?: string): Promise<CashFlowData> {
@@ -9,8 +9,9 @@ export async function getFinancialCashFlowData(requestedMonth?: string): Promise
   const now = new Date();
   const today = cashFlowToday(now);
   const month = requestedMonth ?? today.slice(0, 7);
-  const end = cashFlowMonthEnd(month);
-  if (month > today.slice(0, 7)) throw new Error("Future cash-flow month");
+  const preset = Object.hasOwn(cashFlowPresets, month);
+  const end = preset ? today : cashFlowMonthEnd(month);
+  if (!preset && month > today.slice(0, 7)) throw new Error("Future cash-flow month");
   const through = end < today ? end : today;
   const { data: accounts, error: accountsError } = await supabase.from("financial_accounts")
     .select("id, name, nickname, mask, currency_code")
@@ -24,7 +25,8 @@ export async function getFinancialCashFlowData(requestedMonth?: string): Promise
     .order("entry_date").limit(1).maybeSingle();
   if (firstError) throw new Error(firstError.message);
   const frames = getFinancialWorkspaceMonthFrames(now, financialWorkspaceMonthCount(firstEntry?.entry_date, now));
-  if (!frames.some((f) => f.key === month)) throw new Error("Month outside posted history");
+  const start = cashFlowStart(month, today, firstEntry?.entry_date);
+  if (!preset && !frames.some((f) => f.key === month)) throw new Error("Month outside posted history");
   const lines: CashFlowLine[] = [];
   if (ids.length) {
     for (let offset = 0; ; offset += 1000) {
@@ -32,7 +34,7 @@ export async function getFinancialCashFlowData(requestedMonth?: string): Promise
         .select("id, journal_entry_id, financial_account_id, debit_cents, credit_cents, accounting_journal_entries!inner(entry_date, description, source_type, status)")
         .eq("practice_id", practiceId).eq("accounting_journal_entries.practice_id", practiceId)
         .in("financial_account_id", ids).eq("accounting_journal_entries.status", "posted")
-        .gte("accounting_journal_entries.entry_date", `${month}-01`).lte("accounting_journal_entries.entry_date", through)
+        .gte("accounting_journal_entries.entry_date", start).lte("accounting_journal_entries.entry_date", through)
         .order("id").range(offset, offset + 999);
       if (error) throw new Error(error.message);
       for (const row of data ?? []) {
@@ -47,10 +49,10 @@ export async function getFinancialCashFlowData(requestedMonth?: string): Promise
     if (!ids.length) return 0;
     const { count, error } = await supabase.from("financial_transactions").select("id", { count: "exact", head: true })
       .eq("practice_id", practiceId).in("account_id", ids).eq("is_removed", false).eq("pending", pending)
-      .eq("review_status", "pending").gte("transaction_date", `${month}-01`).lte("transaction_date", through);
+      .eq("review_status", "pending").gte("transaction_date", start).lte("transaction_date", through);
     if (error) throw new Error(error.message);
     return count ?? 0;
   };
   const [unpostedCount, settlingCount] = await Promise.all([count(false), count(true)]);
-  return { report: buildCashFlowReport(month, lines, today), months: frames.reverse().map((f) => ({ key: f.key, label: f.longLabel })), accountNames: [...names.values()], unpostedCount, settlingCount, unsupportedCurrencyCount: (accounts?.length ?? 0) - ids.length };
+  return { report: buildCashFlowReport(month, lines, today, firstEntry?.entry_date), months: frames.reverse().map((f) => ({ key: f.key, label: f.longLabel })), accountNames: [...names.values()], unpostedCount, settlingCount, unsupportedCurrencyCount: (accounts?.length ?? 0) - ids.length };
 }

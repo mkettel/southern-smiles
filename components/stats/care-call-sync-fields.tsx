@@ -5,7 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { saveCareCallAdjustment } from "@/actions/care-call-sync";
 import type { WorkspaceStat } from "@/actions/stats-workspace";
-import { phoenixDay } from "@/lib/care-call-sync";
+import { phoenixDay, NEW_REACH_STAT } from "@/lib/care-call-sync";
 import { buildStatsHref } from "@/lib/stats-navigation";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,8 @@ export function CareCallSyncFields({
   weekStart: string;
 }) {
   const router = useRouter();
+  const reaches = item.stat.id === NEW_REACH_STAT;
+  const additionLabel = reaches ? "Additional new reaches" : "Additional calls/texts";
   const [pending, start] = useTransition();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState(false);
@@ -53,10 +55,10 @@ export function CareCallSyncFields({
   ) {
     start(async () => {
       try {
-        const result = await saveCareCallAdjustment(input);
+        const result = await saveCareCallAdjustment({...input, statId:item.stat.id});
         if (result.error) toast.error(result.error);
         else {
-          toast.success("Care Calls saved");
+          toast.success(`${item.stat.name} saved`);
           done?.();
           router.refresh();
         }
@@ -92,7 +94,7 @@ export function CareCallSyncFields({
                   />
                 </label>
                 <label className="block text-xs text-muted-foreground">
-                  Additional calls/texts
+                  {additionLabel}
                   <Input
                     className="mt-1"
                     type="number"
@@ -100,7 +102,7 @@ export function CareCallSyncFields({
                     step={1}
                     value={draft}
                     disabled={pending || date > today}
-                    aria-label={`Additional calls ${date}`}
+                    aria-label={`${additionLabel} ${date}`}
                     onChange={(e) =>
                       setDrafts((old) => ({ ...old, [date]: e.target.value }))
                     }
@@ -136,9 +138,9 @@ export function CareCallSyncFields({
           })}
         </div>
         <p className="text-xs text-muted-foreground">
-          Add only calls/texts not already in Vault. Automatic counts arrive
-          after each day ends, Arizona time. Weekend attempts are included in
-          the weekly total.
+          Add only {reaches ? "new reaches" : "calls/texts"} not already in Vault.
+          Sync: Mon–Thu 4:45 p.m.; Friday 3:45 p.m. and 8 p.m., Arizona time.
+          Weekend activity is included in the next sync.
         </p>
       </div>
     );
@@ -155,7 +157,7 @@ export function CareCallSyncFields({
         </div>
         <div>
           <p className="text-xs text-muted-foreground">
-            Additional calls/texts
+            {additionLabel}
           </p>
           <div className="mt-1 rounded-md border bg-muted/40 px-3 py-2">
             {additional}
@@ -283,7 +285,7 @@ export function CareCallSyncFields({
       <p className="text-xs text-muted-foreground">
         {lastSync
           ? `Last sync: ${new Date(lastSync).toLocaleString("en-US", { timeZone: "America/Phoenix" })} Arizona time`
-          : "Automatic reporting starts October 26, 2026. No earlier numbers are imported."}
+          : `Automatic reporting starts ${reaches ? "November 16" : "October 26"}, 2026. No earlier numbers are imported.`}
       </p>
     </div>
   );

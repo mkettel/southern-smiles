@@ -4,8 +4,9 @@ export const NEW_REACH_STAT = "b0000011-0000-0000-0000-000000000011";
 export const CARE_CALL_STAT = "3b8ff011-e57d-4be7-89d2-d98b9070da0f";
 export const CARE_CALL_PRACTICE = "4410400a-84eb-4984-a7f9-68661bdb5213";
 export const CARE_CALL_ACTOR = "d6c19e94-7cce-41c7-be32-e21eaeedc0a7";
-export function isCareCallSync(statId: string, date: string) {
-  return statId === CARE_CALL_STAT && date >= CARE_CALL_START;
+export function isVaultSyncedStat(statId: string, date: string) {
+  return (statId === CARE_CALL_STAT && date >= CARE_CALL_START) ||
+    (statId === NEW_REACH_STAT && date >= NEW_REACH_START);
 }
 export function phoenixDay(now = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {

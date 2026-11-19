@@ -32,6 +32,13 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid snapshot" }, { status: 400 });
   }
   try {
+    if (snapshot.metric === "new-reaches-v1") {
+      const {error} = await createAdminClient().rpc("sync_vault_new_reaches", {
+        p_date: snapshot.date, p_count: snapshot.count, p_revision: snapshot.revision,
+      });
+      if (error) throw error;
+      return Response.json({ok:true});
+    }
     await importCareCallSnapshot(
       snapshot,
       async (snapshot) => {

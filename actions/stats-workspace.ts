@@ -21,7 +21,7 @@ import { refreshSumOfWeeklyTotalDependents } from "@/lib/sum-weekly-stat-sync";
 import { isCherryApprovedFinancingStat } from "@/lib/cherry-financing";
 import { isTotalCreditCardDebtStat } from "@/lib/financial-connections";
 import type { DailyStatEntry, Post, Profile, Stat, StatEntry } from "@/lib/types";
-import {isCareCallSync,CARE_CALL_STAT,CARE_CALL_PRACTICE,type CareSyncDay} from '@/lib/care-call-sync';
+import {isVaultSyncedStat,CARE_CALL_STAT,NEW_REACH_STAT,CARE_CALL_PRACTICE,type CareSyncDay} from '@/lib/care-call-sync';
 
 export interface WorkspaceStat {
   careSyncDays?: CareSyncDay[];
@@ -137,6 +137,12 @@ async function calculateWeeklyValue(
         .eq("stat_id", stat.formula_denominator_stat_id)
         .eq("week_start", weekStart),
     ]);
+    if (stat.formula_denominator_stat_id === NEW_REACH_STAT && isVaultSyncedStat(NEW_REACH_STAT, weekStart)) {
+      const {data: reported, error} = await admin.from("stat_entries").select("value,is_manual_override")
+        .eq("stat_id", NEW_REACH_STAT).eq("week_start", weekStart).maybeSingle();
+      if (error) throw new Error("New Reaches total unavailable");
+      if (reported?.is_manual_override) return calculateRatioOfSumsWeek(numeratorEntries ?? [], [{value:reported.value}]);
+    }
     return calculateRatioOfSumsWeek(numeratorEntries ?? [], denominatorEntries ?? []);
   }
 
@@ -171,7 +177,7 @@ async function calculateWeeklyValue(
 }
 
 async function syncWeekly(stat: Stat, weekStart: string, actorId: string, practiceId: string) {
-  if(isCareCallSync(stat.id,weekStart)) return; // Managed atomically by the dedicated RPC.
+  if(isVaultSyncedStat(stat.id,weekStart)) return; // Managed atomically by the dedicated RPC.
   if (stat.weekly_formula === "manual") return;
   if (!isWeeklyFormulaActive(stat.formula_effective_from, weekStart)) return;
   const admin = createAdminClient();
@@ -334,7 +340,14 @@ export async function getStatsWorkspace(weekStart = getCurrentWeekStart()) {
   if (dailyError) throw new Error(dailyError.message);
 
   let careSyncDays:CareSyncDay[]|undefined;
-  if(profile.practice_id===CARE_CALL_PRACTICE && statIds.includes(CARE_CALL_STAT) && isCareCallSync(CARE_CALL_STAT,weekStart)) {
+  let reachSyncDays:CareSyncDay[]|undefined;
+  if(profile.practice_id===CARE_CALL_PRACTICE && statIds.includes(NEW_REACH_STAT) && isVaultSyncedStat(NEW_REACH_STAT,weekStart)) {
+    const end=new Date(`${weekStart}T12:00:00Z`);end.setUTCDate(end.getUTCDate()+6);
+    const {data,error}=await createAdminClient().from('new_reach_sync_days').select('entry_date,vault_count,additional_count,source_revision,synced_at').gte('entry_date',weekStart).lte('entry_date',end.toISOString().slice(0,10));
+    if(error) throw new Error('New Reaches integration data unavailable');
+    reachSyncDays=data??[];
+  }
+  if(profile.practice_id===CARE_CALL_PRACTICE && statIds.includes(CARE_CALL_STAT) && isVaultSyncedStat(CARE_CALL_STAT,weekStart)) {
     const end=new Date(`${weekStart}T12:00:00Z`);end.setUTCDate(end.getUTCDate()+6);
     const {data,error}=await createAdminClient().from('care_call_sync_days').select('entry_date,vault_count,additional_count,source_revision,synced_at').gte('entry_date',weekStart).lte('entry_date',end.toISOString().slice(0,10));
     if(error) throw new Error('Care Calls integration data unavailable');
@@ -372,8 +385,8 @@ export async function getStatsWorkspace(weekStart = getCurrentWeekStart()) {
       const dailyInputStatId = getDailyInputStatId(typedStat);
       return {
         stat: stat as Stat,
-        careSyncDays: stat.id===CARE_CALL_STAT ? careSyncDays : undefined,
-        careOverrideReason: stat.id===CARE_CALL_STAT ? weekly?.find(entry=>entry.stat_id===stat.id)?.override_reason : undefined,
+        careSyncDays: stat.id===CARE_CALL_STAT ? careSyncDays : stat.id===NEW_REACH_STAT ? reachSyncDays : undefined,
+        careOverrideReason: isVaultSyncedStat(stat.id,weekStart) ? weekly?.find(entry=>entry.stat_id===stat.id)?.override_reason : undefined,
         post: stat.post as Post,
         dailyInputStatId,
         dailyInputPrompt:
@@ -388,7 +401,7 @@ export async function getStatsWorkspace(weekStart = getCurrentWeekStart()) {
 }
 
 export async function saveDailyStatInput(input: { statId: string; entryDate: string; value: number | null }) {
-  if(isCareCallSync(input.statId,input.entryDate)) return {error:'Use the Care Calls additional calls/texts field. Vault counts are read-only.'};
+  if(isVaultSyncedStat(input.statId,input.entryDate)) return {error:'Use the Vault-synced stat additional calls/texts field. Vault counts are read-only.'};
   const access = await canEditStat(input.statId);
   if ("error" in access) return { error: access.error };
   const { user, stat, supabase } = access;
@@ -451,7 +464,7 @@ export async function saveDailyStatInput(input: { statId: string; entryDate: str
 }
 
 export async function saveWeeklyOverride(input: { statId: string; weekStart: string; value: number }) {
-  if(isCareCallSync(input.statId,input.weekStart)) return {error:'Use the Care Calls override with a reason.'};
+  if(isVaultSyncedStat(input.statId,input.weekStart)) return {error:'Use the Vault-synced stat override with a reason.'};
   const access = await canEditStat(input.statId);
   if ("error" in access) return { error: access.error };
   const { user, stat, supabase } = access;
@@ -501,7 +514,7 @@ export async function saveWeeklyOverride(input: { statId: string; weekStart: str
 }
 
 export async function resetWeeklyOverride(statId: string, weekStart: string) {
-  if(isCareCallSync(statId,weekStart)) return {error:'Use the Care Calls calculated-total reset.'};
+  if(isVaultSyncedStat(statId,weekStart)) return {error:'Use the Vault-synced stat calculated-total reset.'};
   const access = await canEditStat(statId);
   if ("error" in access) return { error: access.error };
   const { user, stat, supabase } = access;

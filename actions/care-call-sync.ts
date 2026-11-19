@@ -6,9 +6,12 @@ import {
   CARE_CALL_PRACTICE,
   CARE_CALL_STAT,
   CARE_CALL_START,
+  NEW_REACH_STAT,
+  NEW_REACH_START,
   phoenixDay,
 } from "@/lib/care-call-sync";
 export async function saveCareCallAdjustment(input: {
+  statId?: string;
   operation: "additional" | "override" | "reset";
   date: string;
   value?: number;
@@ -26,10 +29,12 @@ export async function saveCareCallAdjustment(input: {
     .single();
   if (profile?.practice_id !== CARE_CALL_PRACTICE)
     return { error: "Unauthorized" };
+  const statId = input.statId ?? CARE_CALL_STAT;
+  if (![CARE_CALL_STAT, NEW_REACH_STAT].includes(statId)) return {error:"Invalid stat"};
   if (
     !["additional", "override", "reset"].includes(input.operation) ||
     !/^\d{4}-\d{2}-\d{2}$/.test(input.date) ||
-    input.date < CARE_CALL_START ||
+    input.date < (statId === NEW_REACH_STAT ? NEW_REACH_START : CARE_CALL_START) ||
     input.date > phoenixDay()
   )
     return { error: "Invalid date or operation" };
@@ -45,7 +50,7 @@ export async function saveCareCallAdjustment(input: {
     (!input.reason?.trim() || input.reason.length > 200)
   )
     return { error: "Enter a reason (up to 200 characters)" };
-  const { error } = await createAdminClient().rpc("manage_care_call_sync", {
+  const { error } = await createAdminClient().rpc(statId === NEW_REACH_STAT ? "manage_new_reach_sync" : "manage_care_call_sync", {
     p_operation: input.operation,
     p_date: input.date,
     p_value: input.value ?? null,
@@ -60,6 +65,6 @@ export async function saveCareCallAdjustment(input: {
     };
   revalidatePath("/stats");
   revalidatePath("/dashboard");
-  revalidatePath(`/stats/${CARE_CALL_STAT}`);
+  revalidatePath(`/stats/${statId}`);
   return { success: true };
 }

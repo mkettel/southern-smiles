@@ -3,8 +3,12 @@
 Approved cutover: **2026-10-26 America/Phoenix**. No imports/backfill before this
 date. Existing daily and weekly rows are not changed by the migration.
 
-The Vault sends one office-wide aggregate for each completed day at 00:10 Phoenix
-time (07:10 UTC). First eligible report: October 27, covering October 26. It uses
+The original overnight sync first reported October 26 on October 27. The updated
+schedule is 16:45 Monday–Thursday, 15:45 Friday and 20:00 Friday, Phoenix time.
+It reconciles through today. Starting November 16 it also reports each day's
+office-wide first qualifying NP Call Log inquiries (New Reaches), never earlier
+Board entries. New Reaches accepts downward corrections and recalculates the
+weekly conversion rate. Care Calls uses
 the same attempt-counting function as the Vault's Calls made summary: each
 recorded outcome counts once, including repeated no answer. No patient names,
 phone numbers, staff identities, or outcomes leave the Vault.
@@ -55,7 +59,7 @@ practice and assignment, repeated in the database.
    A pre-cutover manual invocation is a no-op. Never insert fake production
    counts just to test. On October 27 compare Monday's aggregate to the Vault.
 
-Every nightly run replays completed days since cutover to recover missed runs.
+Every scheduled run replays days since each metric's cutover to recover missed runs.
 Missing data shows Awaiting sync/partial, not a fabricated zero. A full successful
 Vault read with no attempts does send a legitimate zero. Failures throw for AWS
 retries and the dedicated CloudWatch error alarm; no patient data is logged.

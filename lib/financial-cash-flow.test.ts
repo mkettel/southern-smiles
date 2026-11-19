@@ -17,6 +17,15 @@ test("excludes opening balances, voids, and dates outside the reporting window",
   assert.equal(r.through, "2026-09-21");
   assert.equal(r.weeks.at(-1)?.end, "2026-09-21");
 });
+test("long periods include only posted activity within their own bounds", () => {
+  const lines = [line("old", 10, {date:"2025-01-31"}), line("spring", 20, {date:"2026-05-31"}), line("summer", 30), line("future", 40, {date:"2026-11-13"})];
+  for (const [period, start, net] of [["six_months","2026-06-01",30],["year","2026-01-01",50],["all","2025-01-31",60]] as const) {
+    const report = buildCashFlowReport(period, lines, "2026-11-12", "2025-01-31");
+    assert.equal(report.weeks[0].start, start);
+    assert.equal(report.weeks.at(-1)?.end, "2026-11-12");
+    assert.equal(report.netCents, net);
+  }
+});
 test("weeks are Monday-Sunday clipped to month boundaries", () => {
   const r = buildCashFlowReport("2026-09", [], "2026-10-27");
   assert.deepEqual(r.weeks.map(w => [w.start,w.end]), [["2026-09-01","2026-09-06"],["2026-09-07","2026-09-13"],["2026-09-14","2026-09-20"],["2026-09-21","2026-09-27"],["2026-09-28","2026-09-30"]]);

@@ -90,9 +90,8 @@ Multi-tenant SaaS application for dental practices using the Hubbard Management 
 - Invite link sharing — generate a link to copy/paste (for practices that prefer Slack/text)
 
 ### Password Reset Flow
-- `/reset-password` page exists but isn't built
-- Standard flow: enter email → receive link → set new password
-- Custom branded email template
+- Built: enter username/email → receive link → set new password (see `docs/password-reset.md`)
+- Still open: custom branded email template (practice logo, name, colors)
 
 ### Goal Setting & Targets
 - Admin sets a weekly target per stat (e.g., Collections goal: $25,000)

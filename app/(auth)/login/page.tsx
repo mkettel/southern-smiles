@@ -7,7 +7,7 @@ import { getPracticeSettings } from "@/actions/settings";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ identifier?: string }>;
+  searchParams?: Promise<{ identifier?: string; reset?: string }>;
 }) {
   const params = await searchParams;
   const headerStore = await headers();
@@ -49,6 +49,11 @@ export default async function LoginPage({
   return (
     <LoginForm
       defaultIdentifier={params?.identifier ?? ""}
+      notice={
+        params?.reset === "success"
+          ? "Your password was updated. Sign in with your new password."
+          : undefined
+      }
       organizationSlug={organizationSlug}
       showOrganization={showOrganization}
       practiceName={practiceName}

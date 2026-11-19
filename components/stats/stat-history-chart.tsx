@@ -111,6 +111,7 @@ export function StatHistoryChart({
     [comparisonSeries, entries, statId, statName, statType],
   );
   const isComparing = comparisonSeries.length > 0;
+  const splitPlots = comparisonSeries.length === 1;
 
   const comparisonData = useMemo(() => {
     if (!isComparing) return [];
@@ -197,7 +198,7 @@ export function StatHistoryChart({
       </dl>}
       {plottedData.length > 0 && <div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground">
         <span>{format(new Date(`${plottedData[0].weekIso}T00:00:00`), "MMM d, yyyy")} - {format(addDays(new Date(`${plottedData.at(-1)!.weekIso}T00:00:00`), 4), "MMM d, yyyy")}</span>
-        <span aria-live="polite">Scale: {axisLabel(domain[0])} - {axisLabel(domain[1])}</span>
+        <span aria-live="polite">{splitPlots ? "Independent scales" : `Scale: ${axisLabel(domain[0])} - ${axisLabel(domain[1])}`}</span>
       </div>}
       {/* Legend + OIC toggle */}
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -244,7 +245,23 @@ export function StatHistoryChart({
       </div>
 
       {/* Chart */}
-      {plottedData.length === 0 ? <div className="flex h-[300px] items-center justify-center text-sm text-muted-foreground">No entries in this period.</div> : <div
+      {plottedData.length === 0 ? <div className="flex h-[300px] items-center justify-center text-sm text-muted-foreground">No entries in this period.</div> : splitPlots ? allSeries.map((series, i) => {
+        const key = series.id + "Actual";
+        const bounds = statChartDomain(visibleComparisonData.map(p => typeof p[key] === "number" ? p[key] as number : null), startAtZero, series.statType === "percentage" ? 0.1 : 1);
+        return <div key={series.id} className="w-full">
+          <div className="text-xs text-muted-foreground">{series.name}</div>
+          <ResponsiveContainer width="100%" height={150}>
+            <LineChart data={visibleComparisonData} syncId={statId + "-weekly"} syncMethod="value">
+              <CartesianGrid vertical={false} stroke="var(--color-border)" strokeOpacity={0.12}/>
+              <XAxis dataKey="weekIso" hide={i === 0} minTickGap={30} tickFormatter={iso => format(addDays(new Date(iso + "T00:00:00"), 4), range === 0 ? "MMM yy" : "MMM d")} tick={{fontSize:12}} axisLine={false} tickLine={false}/>
+              <YAxis width={74} domain={bounds} allowDecimals={series.statType !== "count"} tickFormatter={v => formatStatValue(v, series.statType)} tick={{fontSize:12}} axisLine={false} tickLine={false}/>
+              <Tooltip labelFormatter={(iso, payload) => payload?.[0]?.payload?.weekIso ? formatWeekLabel(payload[0].payload.weekIso) : iso} formatter={v => formatStatValue(Number(v), series.statType)} contentStyle={{backgroundColor:"var(--background)",borderRadius:8,fontSize:13}}/>
+              {showOic && annotations.map(a => <ReferenceLine key={a.weekLabel} x={a.weekLabel} stroke="#9ca3af" strokeOpacity={0.5}/>)}
+              <Line type="monotone" dataKey={key} name={series.name} stroke={SERIES_COLORS[i]} strokeWidth={2.5} dot={{r:2.5}}/>
+            </LineChart>
+          </ResponsiveContainer>
+        </div>;
+      }) : <div
         className="w-full"
         style={{ minWidth: 200, minHeight: 300, height: 300 }}
       >

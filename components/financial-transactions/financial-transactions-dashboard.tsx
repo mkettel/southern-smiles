@@ -51,7 +51,7 @@ import { HouseholdCategoryPicker } from "./household-category-picker";
 import { householdCategoryName } from "@/lib/household-category-picker";
 type ReviewMode = "category" | "transfer" | "loan";
 const SCHEDULED_LOAN_GROUP = "__scheduled_loan_group__";
-type TransferKind = "internal" | "credit_card_payment" | "line_of_credit_draw" | "loan_payment";
+type TransferKind = "internal" | "credit_card_payment" | "line_of_credit_draw";
 
 export function FinancialTransactionsDashboard({
   initialData: sourceData,
@@ -831,7 +831,6 @@ export function FinancialTransactionsDashboard({
                         <option value="internal">Between accounts</option>
                         <option value="credit_card_payment">Credit-card payment</option>
                         <option value="line_of_credit_draw">Line-of-credit draw</option>
-                        <option value="loan_payment">Loan payment</option>
                       </select>
                     </InspectorField>
 
@@ -1107,7 +1106,6 @@ function inferTransferKind(
     otherAccount?.accountSubtype,
   ].filter(Boolean).join(" ").toLowerCase();
   if (/line of credit|line_of_credit|loc\b/.test(text)) return "line_of_credit_draw";
-  if (/loan/.test(text)) return "loan_payment";
   if (/credit_card|credit card|mastercard|visa|amex|capital one|payment thank you/.test(text)) {
     return "credit_card_payment";
   }
@@ -1143,7 +1141,7 @@ function transferMovementAccounts(
   otherAccount: FinancialTransactionAccountSummary | null | undefined,
   amountCents: number,
 ) {
-  if (kind === "credit_card_payment" || kind === "loan_payment") {
+  if (kind === "credit_card_payment") {
     const selectedIsLiability = isLiabilityAccount(selectedAccount);
     return selectedIsLiability
       ? { from: otherAccount, to: selectedAccount }

@@ -5,7 +5,8 @@ import { BarElement, CategoryScale, Chart as ChartJS, Legend, LinearScale, Toolt
 import { Bar } from "react-chartjs-2";
 import { ChevronLeft, ChevronRight, Download, Info, LoaderCircle } from "lucide-react";
 import { getFinancialCashFlowData } from "@/actions/financial-cash-flow";
-import { cashFlowCsv, cashFlowDateLabel, type CashFlowData } from "@/lib/financial-cash-flow";
+import { cashFlowCsv, cashFlowDateLabel, cashFlowPresets, type CashFlowData } from "@/lib/financial-cash-flow";
+import { FinancialPeriodSelector } from "./financial-period-selector";
 import { cn } from "@/lib/utils";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip, Legend);
@@ -22,7 +23,6 @@ export function FinancialCashFlowDashboard({ initialData, previewMonths }: { ini
   const [pending, startTransition] = useTransition();
   const report = data.report;
   const week = report.weeks[Math.min(weekIndex, report.weeks.length - 1)];
-  const monthIndex = data.months.findIndex((m) => m.key === report.month);
   const activity = week.activity.filter((a) => direction === "payments" ? a.amountCents < 0 : a.amountCents > 0);
 
   function changeMonth(month: string) {
@@ -49,12 +49,10 @@ export function FinancialCashFlowDashboard({ initialData, previewMonths }: { ini
   }
 
   return <div className="min-w-0 space-y-5" aria-busy={pending}>
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h2 className="text-lg font-semibold">Cash flow</h2><p className="mt-1 text-sm text-muted-foreground">Posted bank activity · Through {cashFlowDateLabel(report.through)}, {report.through.slice(0, 4)}{previewMonths ? " · Illustrative data" : ""}</p></div>
-      <div className="flex max-w-full items-center gap-2">
-        <button type="button" title="Previous month" aria-label="Previous month" disabled={pending || monthIndex >= data.months.length - 1} onClick={() => changeMonth(data.months[monthIndex + 1].key)} className="flex size-9 shrink-0 items-center justify-center rounded-md border hover:bg-accent disabled:opacity-30"><ChevronLeft className="size-4" /></button>
-        <select aria-label="Cash-flow month" value={report.month} disabled={pending} onChange={(e) => changeMonth(e.target.value)} className="h-9 min-w-0 rounded-md border bg-background px-3 text-sm">{data.months.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}</select>
-        <button type="button" title="Next month" aria-label="Next month" disabled={pending || monthIndex <= 0} onClick={() => changeMonth(data.months[monthIndex - 1].key)} className="flex size-9 shrink-0 items-center justify-center rounded-md border hover:bg-accent disabled:opacity-30"><ChevronRight className="size-4" /></button>
+    <div className="flex flex-col items-start gap-3">
+      <div><h2 className="text-lg font-semibold">Cash flow</h2><p className="mt-1 text-sm text-muted-foreground">Posted bank activity · {cashFlowDateLabel(report.weeks[0].start)}, {report.weeks[0].start.slice(0, 4)} – {cashFlowDateLabel(report.through)}, {report.through.slice(0, 4)}{previewMonths ? " · Illustrative data" : ""}</p></div>
+      <div className="flex max-w-full flex-wrap items-center gap-2">
+        <FinancialPeriodSelector months={data.months} presets={previewMonths ? [] : Object.entries(cashFlowPresets).map(([key, label]) => ({ key, label }))} value={report.month} onChange={changeMonth} disabled={pending} />
         <button type="button" title="Download weekly CSV" aria-label="Download weekly CSV" disabled={pending} onClick={download} className="flex size-9 shrink-0 items-center justify-center rounded-md border hover:bg-accent"><Download className="size-4" /></button>
       </div>
     </div>
@@ -63,6 +61,8 @@ export function FinancialCashFlowDashboard({ initialData, previewMonths }: { ini
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-y py-3 text-xs text-muted-foreground">
       <span title={data.accountNames.join("\n")} className="flex items-center gap-1.5"><Info className="size-3.5" />{data.accountNames.length} included bank accounts · USD</span>
       <span>Internal bank transfers excluded</span>
+      {data.baselinePeriod && <span>QuickBooks: {data.baselinePeriod.from} through {data.baselinePeriod.through}</span>}
+      <span>Not reconciled to bank statements</span>
       {(data.unpostedCount > 0 || data.settlingCount > 0) && <a href="/admin/financial-transactions" className="text-amber-700 underline underline-offset-4 dark:text-amber-400">{data.unpostedCount} awaiting posting · {data.settlingCount} waiting for settlement</a>}
       {data.unsupportedCurrencyCount > 0 && <span className="text-amber-700 dark:text-amber-400">{data.unsupportedCurrencyCount} non-USD accounts excluded</span>}
     </div>
@@ -84,7 +84,7 @@ export function FinancialCashFlowDashboard({ initialData, previewMonths }: { ini
         </div>
       </section>
       <section className="min-w-0 border-t pt-5 xl:border-l xl:border-t-0 xl:pl-6 xl:pt-0" aria-label="Selected week activity">
-        <div className="flex items-start justify-between gap-2"><div><h3 className="font-semibold">Week {report.weeks.indexOf(week) + 1}</h3><p className="mt-1 text-sm text-muted-foreground">{week.label}, {report.month.slice(0, 4)}</p></div><div className="flex"><button aria-label="Previous week" title="Previous week" disabled={weekIndex <= 0} onClick={() => setWeekIndex(weekIndex - 1)} className="flex size-9 items-center justify-center rounded-md hover:bg-accent disabled:opacity-30"><ChevronLeft className="size-4" /></button><button aria-label="Next week" title="Next week" disabled={weekIndex >= report.weeks.length - 1} onClick={() => setWeekIndex(weekIndex + 1)} className="flex size-9 items-center justify-center rounded-md hover:bg-accent disabled:opacity-30"><ChevronRight className="size-4" /></button></div></div>
+        <div className="flex items-start justify-between gap-2"><div><h3 className="font-semibold">Week {report.weeks.indexOf(week) + 1}</h3><p className="mt-1 text-sm text-muted-foreground">{week.label}, {week.end.slice(0, 4)}</p></div><div className="flex"><button aria-label="Previous week" title="Previous week" disabled={weekIndex <= 0} onClick={() => setWeekIndex(weekIndex - 1)} className="flex size-9 items-center justify-center rounded-md hover:bg-accent disabled:opacity-30"><ChevronLeft className="size-4" /></button><button aria-label="Next week" title="Next week" disabled={weekIndex >= report.weeks.length - 1} onClick={() => setWeekIndex(weekIndex + 1)} className="flex size-9 items-center justify-center rounded-md hover:bg-accent disabled:opacity-30"><ChevronRight className="size-4" /></button></div></div>
         <dl className="my-5 space-y-3 text-sm tabular-nums">{[{ label: "Cash in", value: week.inflowCents }, { label: "Cash out", value: -week.outflowCents }, { label: "Net cash", value: week.netCents }].map((v) => <div key={v.label} className="flex justify-between gap-2"><dt>{v.label}</dt><dd className={v.value >= 0 ? positive : negative}>{signed(v.value)}</dd></div>)}</dl>
         <div role="tablist" aria-label="Cash direction" className="flex border-b">{(["payments", "receipts"] as const).map((value) => <button key={value} role="tab" aria-selected={direction === value} onClick={() => setDirection(value)} className={cn("min-h-11 flex-1 border-b-2 text-sm capitalize", direction === value ? "border-emerald-600 font-medium" : "border-transparent text-muted-foreground")}>{value}</button>)}</div>
         <div role="tabpanel" aria-label={direction} className="max-h-[440px] overflow-y-auto">
@@ -92,6 +92,6 @@ export function FinancialCashFlowDashboard({ initialData, previewMonths }: { ini
         </div>
       </section>
     </div>}
-    <p className="border-t pt-4 text-xs text-muted-foreground">Board ledger · Posted entries only · Not a reconciled bank statement</p>
+    <p className="border-t pt-4 text-xs text-muted-foreground">Posted bank activity only · Net change is not the ending bank balance</p>
   </div>;
 }

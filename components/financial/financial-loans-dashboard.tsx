@@ -17,7 +17,7 @@ export function FinancialLoansDashboard({ initialData }: { initialData: Financia
   const activeLoans = initialData.loans.filter((loan) => loan.status === "active");
   const [selectedId, setSelectedId] = useState(activeLoans[0]?.id ?? initialData.loans[0]?.id ?? null);
   const selected = initialData.loans.find((loan) => loan.id === selectedId) ?? null;
-  const totalDebt = activeLoans.reduce((sum, loan) => sum + loan.currentBalanceCents, 0);
+  const totalDebt = activeLoans.reduce((sum, loan) => sum + (loan.syncedCredit ?? loan).currentBalanceCents, 0);
   const monthlyDebtService = activeLoans.reduce((sum, loan) => sum + monthlyPaymentEquivalent(loan), 0);
   const incomplete = activeLoans.filter((loan) => loan.termsStatus !== "verified").length;
 
@@ -45,7 +45,8 @@ export function FinancialLoansDashboard({ initialData }: { initialData: Financia
               <tr><th className="px-4 py-3 font-medium">Loan or credit</th><th className="px-3 py-3 font-medium">Payment</th><th className="px-3 py-3 text-right font-medium">{initialData.loans.some(isLineOfCredit) ? "Balance / drawn" : "Balance"}</th><th className="px-4 py-3 font-medium">Progress / utilization</th></tr>
             </thead>
             <tbody>
-              {initialData.loans.map((loan) => {
+              {initialData.loans.map((record) => {
+                const loan = { ...record, ...record.syncedCredit };
                 const revolving = isLineOfCredit(loan);
                 const progress = revolving ? creditUtilization(loan) : loanProgress(loan);
                 return (
@@ -70,7 +71,8 @@ export function FinancialLoansDashboard({ initialData }: { initialData: Financia
   );
 }
 
-function LoanDetail({ loan, accounts }: { loan: FinancialLoan; accounts: FinancialLoansData["liabilityAccounts"] }) {
+function LoanDetail({ loan: record, accounts }: { loan: FinancialLoan; accounts: FinancialLoansData["liabilityAccounts"] }) {
+  const loan = { ...record, ...record.syncedCredit };
   const lastPayment = loan.payments[0];
   const today = new Date().toISOString().slice(0, 10);
   const upcoming = loan.schedule.filter((entry) => entry.dueDate >= today).slice(0, 3);
@@ -79,7 +81,8 @@ function LoanDetail({ loan, accounts }: { loan: FinancialLoan; accounts: Financi
   const utilization = creditUtilization(loan);
   const available = availableCredit(loan);
   return <div className="space-y-5">
-    <div className="flex items-start justify-between gap-3"><div><p className="text-xs text-muted-foreground">{loan.lenderName}</p><h3 className="mt-1 text-lg font-semibold">{loan.name}</h3></div><LoanEditor loan={loan} accounts={accounts} /></div>
+    <div className="flex items-start justify-between gap-3"><div><p className="text-xs text-muted-foreground">{loan.lenderName}</p><h3 className="mt-1 text-lg font-semibold">{loan.name}</h3></div><LoanEditor loan={record} accounts={accounts} /></div>
+    {record.syncedCredit && <p className="text-xs text-muted-foreground">Balance from linked {loan.lenderName} account {loan.accountReference}. Recorded balance: {money(record.currentBalanceCents)} as of {dateLabel(record.balanceAsOfDate)}.</p>}
     <div><p className="text-xs text-muted-foreground">{revolving ? "Outstanding balance" : "Current balance"}</p><p className="mt-1 text-2xl font-semibold tabular-nums">{money(loan.currentBalanceCents)}</p><p className="mt-1 text-xs text-muted-foreground">As of {dateLabel(loan.balanceAsOfDate)}</p></div>
     <div className="flex flex-wrap gap-2">{Boolean(loan.pastDueCents) && <Badge variant="destructive"><AlertTriangle />{loan.daysPastDue ? `${loan.daysPastDue} days past due` : "Past due"}</Badge>}<Badge variant={loan.termsStatus === "verified" ? "secondary" : "outline"}>{loan.termsStatus === "verified" ? <CheckCircle2 /> : <AlertTriangle />}{termsLabel(loan.termsStatus)}</Badge>{loan.isPersonal && <Badge variant="outline">Personal</Badge>}<Badge variant="outline">{loan.source === "quickbooks_browser" ? "QuickBooks verified" : "Manual"}</Badge></div>
     <dl className="space-y-2 border-y py-4 text-xs">{Boolean(loan.pastDueCents) && <Detail label="Past due" value={money(loan.pastDueCents ?? 0)} />}{revolving ? <><Detail label="Credit limit" value={loan.creditLimitCents === null ? "Needed" : money(loan.creditLimitCents)} /><Detail label="Available credit" value={available === null ? "Enter credit limit" : money(available)} /><Detail label="Utilization" value={utilization === null ? "Enter credit limit" : `${utilization}%`} /><Detail label="Minimum payment" value={loan.scheduledPaymentCents === null ? "Needed" : `${money(loan.scheduledPaymentCents)} ${frequencyLabel(loan.paymentFrequency)}`} /><Detail label="APR" value={loan.annualInterestRate === null ? "Needed" : `${loan.annualInterestRate}%`} /></> : <><Detail label="Original principal" value={loan.originalPrincipalCents === null ? "Needed" : money(loan.originalPrincipalCents)} /><Detail label="Scheduled payment" value={loan.scheduledPaymentCents === null ? "Needed" : `${money(loan.scheduledPaymentCents)} ${frequencyLabel(loan.paymentFrequency)}`} /><Detail label="Interest method" value={loan.interestMethod.replace("_", " ")} /><Detail label="APR" value={loan.annualInterestRate === null ? "Needed" : `${loan.annualInterestRate}%`} /><Detail label="Maturity" value={loan.maturityDate ? dateLabel(loan.maturityDate) : "Needed"} /></>}</dl>

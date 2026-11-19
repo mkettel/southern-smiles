@@ -31,7 +31,7 @@ const loanSchema = z.object({
 
 export async function getFinancialLoansData(): Promise<FinancialLoansData> {
   const { supabase, practiceId } = await requireMemberModuleAccess("financial");
-  const [loanResult, paymentResult, scheduleResult, accountResult] = await Promise.all([
+  const [loanResult, paymentResult, scheduleResult, accountResult, feedResult] = await Promise.all([
     supabase.from("financial_loans").select("*").eq("practice_id", practiceId)
       .neq("status", "archived").order("status").order("lender_name").order("name"),
     supabase.from("financial_loan_payments").select("id, loan_id, payment_date, total_cents, principal_cents, interest_cents, fee_cents, balance_after_cents, activity_kind, source")
@@ -40,11 +40,15 @@ export async function getFinancialLoansData(): Promise<FinancialLoansData> {
       .eq("practice_id", practiceId).order("due_date", { ascending: true }),
     supabase.from("bookkeeping_accounts").select("id, account_number, name, account_type")
       .eq("practice_id", practiceId).eq("is_active", true).order("name"),
+    supabase.from("financial_accounts").select("id,current_balance_cents,available_balance_cents,credit_limit_cents,balance_updated_at")
+      .eq("practice_id", practiceId).eq("is_active", true),
   ]);
   if (loanResult.error) throw new Error(loanResult.error.message);
   if (paymentResult.error) throw new Error(paymentResult.error.message);
   if (scheduleResult.error) throw new Error(scheduleResult.error.message);
   if (accountResult.error) throw new Error(accountResult.error.message);
+  if (feedResult.error) throw new Error(feedResult.error.message);
+  const feeds = new Map(feedResult.data.map(feed => [feed.id, feed]));
 
   const paymentsByLoan = new Map<string, FinancialLoan["payments"]>();
   for (const row of paymentResult.data ?? []) {
@@ -80,7 +84,19 @@ export async function getFinancialLoansData(): Promise<FinancialLoansData> {
   }
 
   return {
-    loans: (loanResult.data ?? []).map((row) => ({
+    loans: (loanResult.data ?? []).map((row) => {
+      const feed = feeds.get(row.linked_financial_account_id);
+      const syncedDate = feed?.balance_updated_at?.slice(0, 10);
+      const syncedCredit = row.status === "active" && row.loan_type === "line_of_credit"
+        && feed?.current_balance_cents != null && syncedDate && syncedDate >= row.balance_as_of_date
+        ? {
+          currentBalanceCents: Math.max(0, Number(feed.current_balance_cents)),
+          availableCreditCents: feed.available_balance_cents,
+          creditLimitCents: feed.credit_limit_cents ?? row.credit_limit_cents,
+          balanceAsOfDate: syncedDate,
+        } : undefined;
+      return {
+      syncedCredit,
       id: row.id as string,
       bookkeepingAccountId: row.bookkeeping_account_id as string,
       name: row.name as string,
@@ -108,7 +124,8 @@ export async function getFinancialLoansData(): Promise<FinancialLoansData> {
       notes: row.notes as string | null,
       payments: paymentsByLoan.get(row.id as string) ?? [],
       schedule: scheduleByLoan.get(row.id as string) ?? [],
-    })),
+      };
+    }),
     liabilityAccounts: (accountResult.data ?? [])
       .filter((row) => /(liabil|credit card)/i.test(row.account_type as string))
       .map((row) => ({

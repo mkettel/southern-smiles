@@ -107,7 +107,7 @@ export function StatTrendPanel({
         <div>
           <h2 className="text-base font-semibold">Trend</h2>
           {selectedIds.length > 0 && (
-            <p className="text-xs text-muted-foreground">Relative trend</p>
+            <p className="text-xs text-muted-foreground">{selectedIds.length === 1 ? "Weekly comparison" : "Relative trend"}</p>
           )}
         </div>
         <Dialog>

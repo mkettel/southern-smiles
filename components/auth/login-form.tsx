@@ -27,6 +27,8 @@ interface LoginFormProps {
   organizationSlug?: string;
   showOrganization?: boolean;
   practiceName: string;
+  /** Informational message shown above the form (e.g. after a password reset). */
+  notice?: string;
 }
 
 export function LoginForm({
@@ -34,6 +36,7 @@ export function LoginForm({
   organizationSlug = "",
   showOrganization = false,
   practiceName,
+  notice,
 }: LoginFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -91,6 +94,11 @@ export function LoginForm({
       </CardHeader>
       <CardContent>
         <form action={handleSubmit} className="space-y-4">
+          {notice && (
+            <p role="status" className="rounded-md bg-muted px-3 py-2 text-sm">
+              {notice}
+            </p>
+          )}
           {showOrganization && (
             <div className="space-y-2">
               <Label htmlFor="organization">Organization</Label>
@@ -142,6 +150,15 @@ export function LoginForm({
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
+            </div>
+            {/* After the field, so Tab goes username -> password -> here. */}
+            <div className="flex justify-end">
+              <Link
+                href="/reset-password"
+                className="text-sm font-medium text-primary hover:underline"
+              >
+                Forgot password?
+              </Link>
             </div>
           </div>
           {error && (
